@@ -4,7 +4,7 @@ load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
 from flask_cors import CORS
 from services import Universal, Logger, Encryption
-from database import DI, Ref, DIError, JSONRes, ResType
+from database import DI, Ref, DIError, JSONRes, ResType, FireConn, FireRTDB
 
 app = Flask(__name__)
 CORS(app)
@@ -23,6 +23,15 @@ if __name__ == "__main__":
     print(f"MAIN BOOT: Starting ArchAIve v{ver}...")
     
     # Initialise database system
+    if FireConn.checkPermissions():
+        try:
+            res = FireConn.connect()
+            if res != True:
+                raise Exception(res)
+        except Exception as e:
+            print(f"MAIN BOOT: Error during FireConn setup: {e}")
+            sys.exit(1)
+    
     try:
         res = DI.setup()
         if isinstance(res, DIError):
