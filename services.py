@@ -177,7 +177,7 @@ class Universal:
         if Universal.version != None:
             return Universal.version
         if not os.path.isfile(os.path.join(os.getcwd(), 'version.txt')):
-            return "Version File Not Found"
+            return None
         else:
             with open('version.txt', 'r') as f:
                 fileData = f.read()

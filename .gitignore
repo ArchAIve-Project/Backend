@@ -5,3 +5,4 @@ __pycache__/
 virt/
 serviceAccountKey.json
 database.json
+logs.txt

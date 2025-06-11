@@ -1,4 +1,5 @@
 from typing import List, Dict, Any
+from flask import jsonify
 
 class Ref:
     def __init__(self, *subscripts: tuple[str]) -> None:
@@ -24,3 +25,27 @@ class DIError:
         
     def __str__(self) -> str:
         return self.message
+
+class ResType:
+    success = "SUCCESS"
+    error = "ERROR"
+    userError = "UERROR"
+
+class JSONRes:
+    @staticmethod
+    def new(code: int, msgType: str, msg: str, serialise: bool=True, serialiser: Any | None=None, **kwargs: Any) -> tuple:
+        payload = {
+            "type": msgType,
+            "message": msg
+        }
+        
+        if kwargs:
+            payload.update(kwargs)
+        
+        if serialise and serialiser is None:
+            serialiser = jsonify
+        
+        if serialiser:
+            payload = serialiser(payload)
+        
+        return payload, code
