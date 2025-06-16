@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
 from flask_cors import CORS
+from emailer import Emailer
 from services import Universal, Logger, Encryption
 from database import DI, Ref, DIError, JSONRes, ResType, FireConn, FireRTDB
 
@@ -39,6 +40,10 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"MAIN BOOT: Error during DI setup: {e}")
         sys.exit(1)
+    
+    # Check Emailer context
+    Emailer.checkContext()
+    print("EMAILER: Context checked. Services enabled:", Emailer.servicesEnabled)
     
     # Logger service
     Logger.setup()
