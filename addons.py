@@ -152,7 +152,7 @@ class ModelStore:
         
         ModelStore.saveContext()
         
-        print("MODELSTORE: Setup complete. {} models loaded.".format(len(ModelStore.context)))
+        print("MODELSTORE: Setup complete. {} model(s) loaded.".format(len(ModelStore.context)))
     
     @staticmethod
     def getModel(name: str) -> Model | None:
