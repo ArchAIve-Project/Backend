@@ -118,6 +118,67 @@ class AsyncProcessor:
             
         return job.id
 
+class ThreadManager:
+    data = {}
+    
+    @staticmethod
+    def list() -> list[str]:
+        return list(ThreadManager.data.keys())
+    
+    @staticmethod
+    def new(name: str, source: str, paused: bool=False, logging: bool=True) -> AsyncProcessor | str:
+        if name in ThreadManager.data:
+            return "ERROR: A thread with that name already exists. Name must be unique."
+        
+        processor = AsyncProcessor(paused=paused, logging=logging)
+        ThreadManager.data[name] = {
+            "processor": processor,
+            "name": name,
+            "source": source,
+            "created": Universal.utcNowString()
+        }
+        
+        Logger.log("THREADMANAGER NEW: New thread with name '{}' created.".format(name))
+        
+        return processor
+
+    @staticmethod
+    def info(name: str) -> dict | None:
+        return ThreadManager.data.get(name)
+    
+    @staticmethod
+    def getProcessorWithName(name: str) -> AsyncProcessor | None:
+        if name in ThreadManager.data:
+            return ThreadManager.data[name]["processor"]
+        else:
+            return None
+    
+    @staticmethod
+    def getProcessorWithID(id: str) -> AsyncProcessor | None:
+        for threadName in ThreadManager.list():
+            if ThreadManager.data[threadName]["processor"].id == id:
+                return ThreadManager.data[threadName]["processor"]
+        return None
+    
+    @staticmethod
+    def closeThread(name: str) -> bool:
+        processor = ThreadManager.getProcessorWithName(name)
+        if processor == None:
+            return False
+
+        processor.shutdown()
+        del ThreadManager.data[name]
+        Logger.log("THREADMANAGER CLOSETHREAD: Thread '{}' closed successfully.".format(name))
+        return True
+    
+    @staticmethod
+    def shutdown() -> bool:
+        for thread in ThreadManager.list():
+            ThreadManager.closeThread(thread)
+        
+        Logger.log("THREADMANAGER SHUTDOWN: Shutdown complete.")
+        return True
+
 class Encryption:
     @staticmethod
     def encodeToB64(inputString):
@@ -165,12 +226,7 @@ class Universal:
     systemWideStringDatetimeFormat = "%Y-%m-%d %H:%M:%S"
     copyright = "© 2025 The ArchAIve Team. All Rights Reserved."
     version = None
-    asyncProcessor: AsyncProcessor = None
     store = {}
-    
-    @staticmethod
-    def initAsync():
-        Universal.asyncProcessor = AsyncProcessor()
     
     @staticmethod
     def getVersion():
@@ -185,12 +241,15 @@ class Universal:
                 return fileData
 
     @staticmethod
-    def generateUniqueID(customLength=None):
+    def generateUniqueID(customLength=None, notIn=[]):
         if customLength == None:
             return uuid.uuid4().hex
         else:
-            source = list("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-            return ''.join(random.choices(source, k=customLength))
+            out = None
+            while out in notIn:
+                source = list("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+                out = ''.join(random.choices(source, k=customLength))
+            return out
     
     @staticmethod
     def utcNow():
