@@ -1,5 +1,8 @@
 import os, sys, json, datetime, copy, uuid, re
+from typing import List, Dict, Any, Union
 from firebase_admin import db, storage, credentials, initialize_app
+from google.cloud.storage.blob import Blob
+from google.api_core.page_iterator import HTTPIterator
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -40,7 +43,8 @@ class FireConn:
                 cred_obj = credentials.Certificate(os.path.join(os.getcwd(), "serviceAccountKey.json"))
                 default_app = initialize_app(cred_obj, {
                     'databaseURL': os.environ["RTDB_URL"],
-                    'httpTimeout': 5
+                    'storageBucket': os.environ["STORAGE_URL"],
+                    'httpTimeout': 10
                 })
                 FireConn.connected = True
             except Exception as e:
@@ -203,3 +207,225 @@ class FireRTDB:
         tempData = FireRTDB.recursiveReplacement(obj=tempData, purpose='cloud')
 
         return tempData
+
+class FireStorage:
+    '''A class to upload and download files to and from Firebase Storage.
+    
+    Explicit permission has to be granted by setting `FireStorageEnabled` to `True` in the .env file. `STORAGE_URL` variable must be set in .env file. Obtain one by copying the bucket URL in Storage on the Firebase Console.
+
+    Usage:
+    ```
+    response = FireStorage.uploadFile(localFilePath="test.txt", filename="test.txt")
+    if response != True:
+        print("Error in uploading file; error: " + response)
+        sys.exit(1)
+
+    response = FireStorage.downloadFile(localFilePath="downloadedTest.txt", filename="test.txt")
+    if response != True:
+        print("Error in downloading file; error: " + response)
+        sys.exit(1)
+    ```
+    
+    Methods:
+    - `checkPermissions()`: Returns True if permission is granted, otherwise returns False.
+    - `listFiles(filenamesOnly: bool=False)`: Returns a list of filenames in the Firebase Storage bucket. If `filenamesOnly` is True, returns a list of filenames only. (`List[str]`). If not, returns a `google.api_core.page_iterator.HTTPIterator` of `Blob` objects.
+    - `clearStorage()`: Deletes all files in the Firebase Storage bucket. Returns True upon successful deletion.
+    - `getFileInfo(filename: str, metadataOnly=True)`: Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead.
+    - `getFileSignedURL(filename: str, expiration: datetime.timedelta=None, allowCache: bool=True, updateCache: bool=True)`: Returns the signed URL of a file in Firebase Storage. If `allowCache` is True, caches the URL for 1 hour by default. If `updateCache` is True, updates the cache with the new URL.
+    - `getFilePublicURL(filename: str)`: Returns the public URL of a file in Firebase Storage.
+    - `changeFileACL(filename: str, private: bool=True)`: Changes the ACL of a file in Firebase Storage to private or public. Returns True upon successful change.
+    - `uploadFile(localFilePath, filename=None)`: Uploads a file to Firebase Storage. Returns True upon successful upload.
+    - `downloadFile(localFilePath, filename=None)`: Downloads a file from Firebase Storage. Returns True upon successful download.
+    - `deleteFile(filename)`: Deletes a file from Firebase Storage. Returns True upon successful deletion.
+    - `deleteFiles(filenames: List[str])`: Deletes multiple files from Firebase Storage. Returns True upon successful deletion.
+
+    NOTE: This class is not meant to be instantiated. `FireConn.connect()` method must be executed before executing any other methods in this class.
+    '''
+    
+    signedURLCache: Dict[str, Dict[str, Any]] = {}
+
+    @staticmethod
+    def checkPermissions():
+        '''Returns True if permission is granted, otherwise returns False.'''
+        return ('FireStorageEnabled' in os.environ and os.environ['FireStorageEnabled'] == 'True')
+    
+    @staticmethod
+    def listFiles(filenamesOnly: bool=False) -> List[Blob] | List[str]:
+        '''Returns a list of filenames in the Firebase Storage bucket.
+        
+        If `filenamesOnly` is True, returns a list of filenames only. (`List[str]`)
+        If not, though the type hint is `List[Blob]`, a `google.api_core.page_iterator.HTTPIterator` of `Blob` objects is returned, which can be iterated over to get the `Blob` objects.
+        '''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        try:
+            bucket = storage.bucket()
+            blobs: List[Blob] = bucket.list_blobs()
+            if filenamesOnly:
+                return [blob.name for blob in blobs]
+            else:
+                return blobs
+        except Exception as e:
+            return "ERROR: Error occurred in listing files in cloud storage; error: {}".format(e)
+    
+    @staticmethod
+    def clearStorage():
+        '''Deletes all files in the Firebase Storage bucket. Returns True upon successful deletion.'''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        try:
+            bucket = storage.bucket()
+            blobs: List[Blob] = bucket.list_blobs()
+            for blob in blobs:
+                blob.delete()
+        except Exception as e:
+            return "ERROR: Error occurred in clearing cloud storage; error: {}".format(e)
+        return True
+    
+    @staticmethod
+    def getFileInfo(filename: str, metadataOnly=True) -> dict | Blob:
+        '''Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead.'''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        try:
+            bucket = storage.bucket()
+            blob = bucket.blob(filename)
+            if metadataOnly:
+                return {
+                    "id": blob.id,
+                    "name": blob.name,
+                    "path": blob.path,
+                    "owner": blob.owner,
+                    "publicURL": blob.public_url,
+                    "contentType": blob.content_type,
+                    "contentDisposition": blob.content_disposition,
+                    "contentEncoding": blob.content_encoding,
+                    "created": blob.time_created,
+                    "updated": blob.updated,
+                    "size": blob.size,
+                    "metadata": blob.metadata
+                }
+            else:
+                return blob
+        except Exception as e:
+            return "ERROR: Error occurred in getting file info from cloud storage; error: {}".format(e)
+    
+    @staticmethod
+    def getFileSignedURL(filename: str, expiration: datetime.timedelta=None, allowCache: bool=True, updateCache: bool=True) -> str:
+        if expiration is None:
+            expiration = datetime.timedelta(hours=1)
+        '''Returns the signed URL of a file in Firebase Storage.'''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        
+        if FireStorage.signedURLCache.get(filename) != None and allowCache:
+            cachedData = FireStorage.signedURLCache[filename]
+            if datetime.datetime.fromisoformat(cachedData['expiration']) > datetime.datetime.now(datetime.timezone.utc):
+                return cachedData['url']
+            else:
+                del FireStorage.signedURLCache[filename]  # Remove expired cache entry
+        
+        try:
+            bucket = storage.bucket()
+            blob = bucket.blob(filename)
+            
+            expirationDatetime = datetime.datetime.now(tz=datetime.timezone.utc) + expiration
+            
+            url = blob.generate_signed_url(
+                version="v4",
+                expiration=expirationDatetime,
+                method="GET"
+            )
+            
+            if updateCache:
+                FireStorage.signedURLCache[filename] = {
+                    "url": url,
+                    "expiration": expirationDatetime.isoformat()
+                }
+            
+            return url
+        except Exception as e:
+            return "ERROR: Error occurred in getting file URL from cloud storage; error: {}".format(e)
+    
+    @staticmethod
+    def getFilePublicURL(filename: str) -> str:
+        '''Returns the public URL of a file in Firebase Storage.'''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        try:
+            bucket = storage.bucket()
+            blob = bucket.blob(filename)
+            return blob.public_url
+        except Exception as e:
+            return "ERROR: Error occurred in getting file public URL from cloud storage; error: {}".format(e)
+    
+    @staticmethod
+    def changeFileACL(filename: str, private: bool=True):
+        '''Changes the ACL of a file in Firebase Storage to private or public. Returns True upon successful change.'''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        try:
+            bucket = storage.bucket()
+            blob = bucket.blob(filename)
+            if private:
+                blob.make_private()
+            else:
+                blob.make_public()
+        except Exception as e:
+            return "ERROR: Error occurred in changing file ACL in cloud storage; error: {}".format(e)
+        return True
+
+    @staticmethod
+    def uploadFile(localFilePath, filename=None):
+        '''Returns True upon successful upload.'''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        if filename == None:
+            filename = os.path.basename(localFilePath)
+        try:
+            bucket = storage.bucket()
+            blob = bucket.blob(filename)
+            blob.upload_from_filename(localFilePath)
+        except Exception as e:
+            return "ERROR: Error occurred in uploading file to cloud storage; error: {}".format(e)
+        return True
+
+    @staticmethod
+    def downloadFile(localFilePath, filename=None):
+        '''Returns True upon successful download.'''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        if filename == None:
+            filename = os.path.basename(localFilePath)
+        try:
+            bucket = storage.bucket()
+            blob = bucket.blob(filename)
+            blob.download_to_filename(localFilePath)
+        except Exception as e:
+            return "ERROR: Error occurred in downloading file from cloud storage; error: {}".format(e)
+        return True
+    
+    @staticmethod
+    def deleteFile(filename):
+        '''Returns True upon successful deletion.'''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        try:
+            bucket = storage.bucket()
+            blob = bucket.blob(filename)
+            blob.delete()
+        except Exception as e:
+            return "ERROR: Error occurred in deleting file from cloud storage; error: {}".format(e)
+        return True
+    
+    @staticmethod
+    def deleteFiles(filenames: List[str]):
+        '''Deletes multiple files from Firebase Storage. Returns True upon successful deletion.'''
+        if not FireStorage.checkPermissions():
+            return "ERROR: FireStorage service operation permission denied."
+        try:
+            bucket = storage.bucket()
+            bucket.delete_blobs(filenames)
+        except Exception as e:
+            return "ERROR: Error occurred in deleting files from cloud storage; error: {}".format(e)
+        return True
