@@ -119,14 +119,55 @@ class AsyncProcessor:
         return job.id
 
 class ThreadManager:
+    '''Manage multiple `AsyncProcessor` threads with this class.
+    
+    Spin up new threads easily and track information about them, including the name, source, creation time, and the processor itself.
+    
+    **Example Usage:**
+    ```python
+    import time
+    from services import ThreadManager, AsyncProcessor, Trigger
+    
+    # Spinning up a thread and adding jobs
+    processor = ThreadManager.new(name="newThread", source="example.py") # Returns an `AsyncProcessor` instance. `name` must be unique.
+    processor.addJob(lambda: print("Hello from the new thread!"), trigger=Trigger(type='interval', seconds=5))
+    
+    print("Current threads:", ThreadManager.list())
+    print("Thread info:", ThreadManager.info("newThread"))
+    
+    time.sleep(10)
+    
+    processor2 = ThreadManager.getProcessorWithName("newThread") # Get the processor for the `newThread`
+    processor2.addJob(lambda: print("This is another job in the same thread!"), trigger=Trigger(type='interval', seconds=10))
+    
+    time.sleep(25)
+    
+    ThreadManager.closeThread("newThread") # Close the thread
+    # ThreadManager.shutdown() # Shutdown all threads
+    ```
+    
+    Methods:
+    - `list()`: Returns a list of all thread names.
+    - `new(name: str, source: str, paused: bool=False, logging: bool=True)`: Creates a new thread with the given name and source. Returns an `AsyncProcessor` instance or an error message if the name is not unique.
+    - `info(name: str)`: Returns information about the thread with the given name, including the processor, name, source, and creation time.
+    - `getProcessorWithName(name: str)`: Returns the `AsyncProcessor` instance for the thread with the given name, or `None` if it does not exist.
+    - `getProcessorWithID(id: str)`: Returns the `AsyncProcessor` instance for the thread with the given ID, or `None` if it does not exist.
+    - `closeThread(name: str)`: Closes the thread with the given name and returns `True` if successful, or `False` if the thread does not exist.
+    - `shutdown()`: Shuts down all threads and returns `True` if successful.
+    
+    Note: Be careful when using this class. It is very powerful and creates multiple real background threads. Close threads properly when no longer needed.
+    '''
+    
     data = {}
     
     @staticmethod
     def list() -> list[str]:
+        '''Returns a list of all thread names managed by the ThreadManager.'''
         return list(ThreadManager.data.keys())
     
     @staticmethod
     def new(name: str, source: str, paused: bool=False, logging: bool=True) -> AsyncProcessor | str:
+        '''Creates a new thread with the given name and source. Returns an `AsyncProcessor` instance or an error message if the name is not unique.'''
         if name in ThreadManager.data:
             return "ERROR: A thread with that name already exists. Name must be unique."
         
@@ -144,10 +185,12 @@ class ThreadManager:
 
     @staticmethod
     def info(name: str) -> dict | None:
+        '''Returns information about the thread with the given name, including the processor, name, source, and creation time. Returns `None` if the thread does not exist.'''
         return ThreadManager.data.get(name)
     
     @staticmethod
     def getProcessorWithName(name: str) -> AsyncProcessor | None:
+        '''Returns the `AsyncProcessor` instance for the thread with the given name, or `None` if it does not exist.'''
         if name in ThreadManager.data:
             return ThreadManager.data[name]["processor"]
         else:
@@ -155,6 +198,7 @@ class ThreadManager:
     
     @staticmethod
     def getProcessorWithID(id: str) -> AsyncProcessor | None:
+        '''Returns the `AsyncProcessor` instance for the thread with the given ID, or `None` if it does not exist.'''
         for threadName in ThreadManager.list():
             if ThreadManager.data[threadName]["processor"].id == id:
                 return ThreadManager.data[threadName]["processor"]
@@ -162,6 +206,7 @@ class ThreadManager:
     
     @staticmethod
     def closeThread(name: str) -> bool:
+        '''Closes the thread with the given name and returns `True` if successful, or `False` if the thread does not exist.'''
         processor = ThreadManager.getProcessorWithName(name)
         if processor == None:
             return False
@@ -173,6 +218,7 @@ class ThreadManager:
     
     @staticmethod
     def shutdown() -> bool:
+        '''Shuts down all threads and returns `True` if successful.'''
         for thread in ThreadManager.list():
             ThreadManager.closeThread(thread)
         

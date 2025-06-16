@@ -5,7 +5,50 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Model:
+    '''Represents a machine learning model with metadata and methods for downloading and managing the model file.
+    
+    Attributes:
+        name (str): The name of the model.
+        filename (str): The filename of the model file.
+        driveID (str | None): The Google Drive ID for downloading the model file, if applicable.
+        
+    Methods:
+        driveDownloadURL() -> str: Returns the download URL for the model file from Google Drive.
+        fileExists() -> bool: Checks if the model file exists in the local filesystem.
+        download() -> bool | str: Downloads the model file from Google Drive if it exists, or returns an error message.
+        represent() -> Dict[str, Any]: Prepares the model's data for serialization.
+        from_dict(data: Dict[str, Any]) -> 'Model': Creates a Model instance from a dictionary representation.
+        __str__() -> str: Returns a string representation of the Model instance.
+        
+    Raises:
+        ValueError: If 'name' or 'filename' is not a non-empty string.
+        Exception: If the model file cannot be downloaded or if the driveID is not provided.
+    
+    ## Usage
+    ```python
+    model = Model(name="ExampleModel", filename="example_model.pth", driveID="12345abcde")
+    model.download()  # Downloads the model file if it exists on Google Drive (`driveID` must be set)
+    model.fileExists()  # Checks if the model file exists locally
+    model.represent()  # Returns a dictionary representation of the model
+    new_model = Model.from_dict(model.represent())  # Deserialize back to a Model instance
+    ```
+    
+    Model files are stored in a directory specified by `ModelStore.rootDir`.
+    
+    Note: Interaction with `Model` is typically managed through the `ModelStore` class, which handles the context and storage of multiple models.
+    '''
+    
     def __init__(self, name: str, filename: str, driveID: str | None=None):
+        '''Initializes a Model instance with the given name, filename, and optional Google Drive ID.
+        
+        Args:
+            name (str): The name of the model.
+            filename (str): The filename of the model file.
+            driveID (str | None): The Google Drive ID for downloading the model file, if applicable.
+        Raises:
+            ValueError: If 'name' or 'filename' is not a non-empty string.
+        
+        '''
         if not name or not isinstance(name, str):
             raise ValueError("MODEL INIT: 'name' must be a non-empty string.")
         if not filename or not isinstance(filename, str):
@@ -20,12 +63,30 @@ class Model:
         self.driveID = driveID
     
     def driveDownloadURL(self) -> str:
+        '''Generates the Google Drive download URL for the model file.
+        
+        Returns:
+            str: The download URL for the model file.
+        
+        Raises:
+            Exception: If the driveID is not provided.
+        '''
+        
+        if not self.driveID:
+            raise Exception("ERROR: Cannot generate download URL; no driveID provided.")
         return f"https://drive.usercontent.google.com/download?id={self.driveID}&export=download&authuser=0&confirm=t"
     
     def fileExists(self) -> bool:
+        '''Checks if the model file exists in the local filesystem.'''
         return os.path.isfile(ModelStore.modelFilePath(self.filename))
     
     def download(self) -> bool | str:
+        '''Downloads the model file from Google Drive if it exists.
+        
+        Returns:
+            bool | str: True if the download was successful, or an error message if it failed.
+        
+        '''
         if not self.driveID:
             return "ERROR: No driveID provided."
         
@@ -47,6 +108,7 @@ class Model:
         return True
     
     def represent(self) -> Dict[str, Any]:
+        '''Represents the model as a dictionary.'''
         return {
             "name": self.name,
             "filename": self.filename,
@@ -55,6 +117,16 @@ class Model:
     
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'Model':
+        '''Creates a Model instance from a dictionary representation.
+        
+        Args:
+            data (Dict[str, Any]): A dictionary containing the model's data.
+        Returns:
+            Model: A new Model instance created from the provided data.
+        Raises:
+            ValueError: If the data is not a dictionary or does not contain 'name' and 'filename' keys.
+        
+        '''
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary.")
         
@@ -71,6 +143,42 @@ class Model:
         return f"Model(name={self.name}, filename={self.filename}, driveID={self.driveID})"
 
 class ModelStore:
+    '''Manages a collection of machine learning models, providing methods to load, save, and retrieve models.
+    
+    Attributes:
+        rootDir (str): The directory where models are stored.
+        contextFile (str): The filename for the context file that stores model metadata.
+        context (Dict[str, Model]): A dictionary mapping model names to Model instances.
+    
+    Methods:
+        rootDirPath() -> str: Returns the absolute path to the root directory for models.
+        contextFilePath() -> str: Returns the absolute path to the context file.
+        modelFilePath(filename: str) -> str: Returns the absolute path to a specific model file.
+        modelPath(name: str) -> str: Returns the absolute path to a model file based on its name.
+        
+        loadContext() -> bool: Loads the model context from the context file, creating it if it doesn't exist.
+        saveContext() -> bool: Saves the current model context to the context file.
+        
+        setup() -> None: Sets up the model store by creating the root directory, loading the context, and downloading models as needed.
+        getModel(name: str) -> Model | None: Retrieves a model by its name from the context.
+        removeModel(identifier: str | Model) -> bool: Removes a model from the context by its name or Model instance.
+        new(model: Model) -> bool | str: Adds a new model to the context, downloading it if necessary.
+        
+    ## Usage
+    ```python
+    model_store = ModelStore()
+    model_store.setup()  # Initializes the model store, loading existing models and downloading as needed
+    model = Model(name="ExampleModel", filename="example_model.pth", driveID="12345abcde")
+    model_store.new(model)  # Adds a new model to the store
+    retrieved_model = model_store.getModel("ExampleModel")  # Retrieves the model by name
+    model_store.removeModel("ExampleModel")  # Removes the model from the store
+    ```
+    
+    Model files are stored in a directory specified by `ModelStore.rootDir`, and the context is saved in `ModelStore.contextFile` (typically `context.json`).
+    
+    Note: `ModelStore` will skip non-downloadable non-existing models during setup, and will log warnings for any issues encountered during model loading or downloading.
+    '''
+    
     rootDir: str = "models"
     contextFile: str = "context.json"
     
@@ -97,6 +205,7 @@ class ModelStore:
 
     @staticmethod
     def loadContext() -> bool:
+        '''Loads the model context from the context file, creating it if it doesn't exist.'''
         if not os.path.isfile(ModelStore.contextFilePath()):
             ModelStore.context = {}
             with open(ModelStore.contextFilePath(), 'w') as f:
@@ -117,6 +226,7 @@ class ModelStore:
     
     @staticmethod
     def saveContext() -> bool:
+        '''Saves the current model context to the context file.'''
         preppedData = {}
         for modelName in ModelStore.context:
             preppedData[modelName] = ModelStore.context[modelName].represent()
@@ -128,6 +238,7 @@ class ModelStore:
     
     @staticmethod
     def setup():
+        '''Sets up the model store by creating the root directory, loading the context, and downloading models as needed.'''
         if not os.path.isdir(ModelStore.rootDirPath()):
             os.makedirs(ModelStore.rootDirPath())
         
@@ -156,10 +267,12 @@ class ModelStore:
     
     @staticmethod
     def getModel(name: str) -> Model | None:
+        '''Retrieves a model by its name from the context.'''
         return ModelStore.context.get(name)
     
     @staticmethod
     def removeModel(identifier: str | Model) -> bool:
+        '''Removes a model from the context by its name or Model instance.'''
         if isinstance(identifier, Model):
             identifier = identifier.name
         
@@ -173,6 +286,7 @@ class ModelStore:
     
     @staticmethod
     def new(model: Model) -> bool | str:
+        '''Adds a new model to the context, downloading it if necessary. Ensure that model file already exists or can be downloaded with `driveID`.'''
         if not model.fileExists():
             if model.driveID:
                 try:
