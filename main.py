@@ -46,7 +46,7 @@ if __name__ == "__main__":
     print("EMAILER: Context checked. Services enabled:", Emailer.servicesEnabled)
     
     # Logger service
-    Logger.setup()
+    Logger.setup() 
     
     # Background thread
     Universal.initAsync()
