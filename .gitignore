@@ -1,8 +1,8 @@
 .env
 .DS_Store
-requirements.txt
 __pycache__/
 virt/
 serviceAccountKey.json
 database.json
 logs.txt
+models/
