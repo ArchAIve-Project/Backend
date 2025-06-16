@@ -1,4 +1,4 @@
-import os, json, sys, requests
+import os, json, sys, requests, copy
 from typing import List, Dict, Any, Union
 from services import Logger
 from dotenv import load_dotenv
@@ -42,7 +42,7 @@ class Model:
         except Exception as e:
             return f"ERROR: Failed to download model '{self.name}'. Error: {e}"
         
-        Logger.log("MODEL DOWNLOAD: Successfully downloaded model '{}' ({}).".format(self.name, self.filename))
+        Logger.log("MODEL DOWNLOAD: Successfully downloaded model '{}' ({}).".format(self.name, self.filename), debugPrintExplicitDeny=True)
         
         return True
     
@@ -96,7 +96,7 @@ class ModelStore:
             raise Exception("MODELPATH ERROR: Given model name does not exist in context.")
 
     @staticmethod
-    def loadContext() -> None:
+    def loadContext() -> bool:
         if not os.path.isfile(ModelStore.contextFilePath()):
             ModelStore.context = {}
             with open(ModelStore.contextFilePath(), 'w') as f:
@@ -109,10 +109,21 @@ class ModelStore:
                 try:
                     ModelStore.context[key] = Model.from_dict(data[key])
                 except Exception as e:
-                    Logger.log(f"MODELSTORE WARNING: Error loading model '{key}' from context (skipping); error: {e}")
+                    Logger.log(f"MODELSTORE LOADCONTEXT WARNING: Error loading model '{key}' from context (skipping); error: {e}")
                     if key in ModelStore.context:
                         del ModelStore.context[key]
 
+        return True
+    
+    @staticmethod
+    def saveContext() -> bool:
+        preppedData = {}
+        for modelName in ModelStore.context:
+            preppedData[modelName] = ModelStore.context[modelName].represent()
+        
+        with open(ModelStore.contextFilePath(), 'w') as f:
+            json.dump(preppedData, f, indent=4)
+        
         return True
     
     @staticmethod
@@ -122,22 +133,24 @@ class ModelStore:
         
         ModelStore.loadContext()
         
-        for model in ModelStore.context.values():
+        for model in [x for x in ModelStore.context.values()]:
             if not model.fileExists():
                 if model.driveID:
                     try:
-                        print("MODELSTORE: Downloading model '{}'...".format(model.name))
+                        print("MODELSTORE SETUP: Downloading model '{}'...".format(model.name))
                         res = model.download()
                         if res != True:
                             raise Exception(res)
                     except Exception as e:
-                        print("MODELSTORE SETUP ERROR: Failed to download model '{}'; model will be excluded from context. Error: {}".format(model.name, e))
+                        print("MODELSTORE SETUP WARNING: Failed to download model '{}'; model will be excluded from context. Error: {}".format(model.name, e))
                         del ModelStore.context[model.name]
                 else:
-                    print("MODELSTORE SETUP ERROR: Model file not found for non-downloadable model '{}'. Model will be excluded from context.".format(model.name))
+                    print("MODELSTORE SETUP WARNING: Model file not found for non-downloadable model '{}'. Model will be excluded from context.".format(model.name))
                     del ModelStore.context[model.name]
-            else:
-                print("MODELSTORE: '{}' loaded successfully.")
+            # else:
+            #     print("MODELSTORE: '{}' loaded successfully.".format(model.name))
+        
+        ModelStore.saveContext()
         
         print("MODELSTORE: Setup complete. {} models loaded.".format(len(ModelStore.context)))
     
@@ -154,22 +167,29 @@ class ModelStore:
             return False
         else:
             del ModelStore.context[identifier]
+        
+        ModelStore.saveContext()
+        return True
     
     @staticmethod
     def new(model: Model) -> bool | str:
         if not model.fileExists():
             if model.driveID:
                 try:
-                    print("MODELSTORE: Downloading model '{}'...".format(model.name))
+                    print("MODELSTORE NEW: Downloading model '{}'...".format(model.name))
                     res = model.download()
                     if res != True:
                         raise Exception(res)
                 except Exception as e:
-                    return "MODELSTORE NEW ERROR: Failed to download model '{}'; it will not be added. Error: {}".format(model.name, e)
+                    Logger.log("MODELSTORE NEW ERROR: Error in downloading model '{}'; error: {}".format(model.name, e))
+                    return "ERROR: Failed to download model '{}'; it will not be added. Error: {}".format(model.name, e)
             else:
-                return "MODELSTORE NEW ERROR: Model file not found for non-downloadable model '{}'. It will not be added.".format(model.name)
+                Logger.log("MODELSTORE NEW ERROR: Model file not found for non-downloadable model '{}'. It will not be added.".format(model.name))
+                return "ERROR: Model file not found for non-downloadable model '{}'. It will not be added.".format(model.name)
         
         ModelStore.context[model.name] = model
-        Logger.log("MODELSTORE NEW: Model '{}' added successfully.")
+        ModelStore.saveContext()
+        
+        Logger.log("MODELSTORE NEW: Model '{}' added successfully.".format(model.name))
         
         return True
