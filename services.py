@@ -159,11 +159,20 @@ class ThreadManager:
     '''
     
     data = {}
+    defaultProcessor: AsyncProcessor | None = None
     
     @staticmethod
     def list() -> list[str]:
         '''Returns a list of all thread names managed by the ThreadManager.'''
         return list(ThreadManager.data.keys())
+    
+    @staticmethod
+    def initDefault() -> AsyncProcessor:
+        if "default" in ThreadManager.data:
+            raise Exception("ERROR: Default thread already exists.")
+
+        ThreadManager.defaultProcessor = ThreadManager.new(name="default", source="main.py")
+        return ThreadManager.defaultProcessor
     
     @staticmethod
     def new(name: str, source: str, paused: bool=False, logging: bool=True) -> AsyncProcessor | str:
@@ -213,6 +222,10 @@ class ThreadManager:
 
         processor.shutdown()
         del ThreadManager.data[name]
+        
+        if name == "default":
+            ThreadManager.defaultProcessor = None
+        
         Logger.log("THREADMANAGER CLOSETHREAD: Thread '{}' closed successfully.".format(name))
         return True
     
@@ -221,6 +234,8 @@ class ThreadManager:
         '''Shuts down all threads and returns `True` if successful.'''
         for thread in ThreadManager.list():
             ThreadManager.closeThread(thread)
+        
+        ThreadManager.defaultProcessor = None
         
         Logger.log("THREADMANAGER SHUTDOWN: Shutdown complete.")
         return True
