@@ -314,22 +314,30 @@ class ASReport:
         self.message = message
         self.extraData = extraData if extraData else {}
         self.created = Universal.utcNowString()
+        self.threadInfo = ASReport.threadInfoString()
     
     def represent(self) -> Dict[str, Any]:
         return {
             "source": self.source,
             "message": self.message,
             "extraData": self.extraData,
-            "created": self.created
+            "created": self.created,
+            "threadInfo": self.threadInfo
         }
     
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'ASReport':
         return ASReport(
-            source=data.get("source", ""),
-            message=data.get("message", ""),
-            extraData=data.get("extraData", {}),
+            source=data.get("source"),
+            message=data.get("message"),
+            extraData=data.get("extraData"),
+            created=data.get("created"),
+            threadInfo=data.get("threadInfo")
         )
+    
+    @staticmethod
+    def threadInfoString() -> str:
+        return f"{threading.get_ident()} {threading.current_thread().name} {isinstance(threading.current_thread(), threading._MainThread)}"
 
 class ASTracer:
     def __init__(self, purpose: str):
@@ -337,6 +345,7 @@ class ASTracer:
         self.purpose = purpose
         self.created = Universal.utcNowString()
         self.reports: List[ASReport] = []
+        self.pausedReports: List[ASReport] = []
         self.threadInfo = ASTracer.threadInfoString()
         self.started = None
         self.finished = None
@@ -359,9 +368,24 @@ class ASTracer:
             Logger.log("ASTRACER ADDREPORT ERROR: Report must be an instance of ASReport. (ID: {})".format(self.id))
             return False
         
-        self.reports.append(report)
+        if ArchSmith.paused:
+            Logger.log("ASTRACER ADDREPORT WARNING: ArchSmith system paused; saving to paused reports. (ID: {}, Report: {})".format(self.id, report.source))
+            self.pausedReports.append(report)
+        else:
+            self.reports.append(report)
         
         return True
+    
+    def explicitResume(self) -> int:
+        '''Resumes the tracer, by adding all paused reports to the main report list.'''
+        for report in self.pausedReports:
+            self.reports.append(report)
+        
+        restoredCount = len(self.pausedReports)
+        self.pausedReports.clear()
+        
+        Logger.log("ASTRACER EXPLICITRESUME: Resumed tracer (ID: {}) with {} restored reports.".format(self.id, restoredCount))
+        return restoredCount
     
     @staticmethod
     def threadInfoString() -> str:
@@ -384,10 +408,10 @@ class ASTracer:
         tracer = ASTracer(
             purpose=data.get("purpose", "")
         )
-        tracer.id = data.get("id", "")
-        tracer.created = data.get("created", "")
-        tracer.started = data.get("started", "")
-        tracer.finished = data.get("finished", "")
+        tracer.id = data.get("id")
+        tracer.created = data.get("created")
+        tracer.started = data.get("started")
+        tracer.finished = data.get("finished")
         tracer.reports = [ASReport.from_dict(report) for report in data.get("reports", [])]
         tracer.threadInfo = data.get("threadInfo")
         return tracer
@@ -396,6 +420,7 @@ class ArchSmith:
     dataFile = "archsmith.json"
     
     cache: Dict[str, ASTracer] = {}
+    paused: bool = False
     
     @staticmethod
     def ensureDataFile():
@@ -428,3 +453,46 @@ class ArchSmith:
         
         with open(ArchSmith.dataFile, "w") as f:
             json.dump(data, f, indent=4)
+    
+    @staticmethod
+    def pause():
+        ArchSmith.paused = True
+        Logger.log("ARCHSMITH PAUSE: All tracers are now paused. Reports will not be tracked until resumed.")
+        
+        return True
+    
+    @staticmethod
+    def resume(dropPausedReports: bool=False, autoPersist: bool=True):
+        ArchSmith.paused = False
+        
+        if dropPausedReports:
+            dropCount = 0
+            for tracer in ArchSmith.cache.values():
+                dropCount += len(tracer.pausedReports)
+                tracer.pausedReports.clear()
+            Logger.log("ARCHSMITH RESUME: Dropped {} all paused reports.".format(dropCount))
+        else:
+            restoreCount = 0
+            for tracer in ArchSmith.cache.values():
+                restoreCount += tracer.explicitResume()
+            Logger.log("ARCHSMITH RESUME: Resumed all tracers with {} paused reports restored.".format(restoreCount))
+
+        if autoPersist:
+            ArchSmith.persist()
+        
+        return True
+    
+    @staticmethod
+    def shutdown(gracefully: bool=True):
+        if gracefully:
+            for tracer in ArchSmith.cache.values():
+                tracer.end()
+            ArchSmith.persist()
+            Logger.log("ARCHSMITH SHUTDOWN: Persisted all tracers and reports before shutdown.")
+        else:
+            Logger.log("ARCHSMITH SHUTDOWN: Force shutdown without persisting tracers and reports.")
+        
+        ArchSmith.cache.clear()
+        ArchSmith.paused = False
+        
+        return True
