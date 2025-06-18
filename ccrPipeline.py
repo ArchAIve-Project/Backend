@@ -26,7 +26,33 @@ class ChineseClassifier(nn.Module):
         x = self.batch_norm(x)
         x = self.dropout(x)
         return self.classifier(x)
+
     
+class ChineseBinaryClassifier(nn.Module):
+    def __init__(self, embed_dim=512, pretrainedEncoder=True, unfreezeEncoder=True):
+        super().__init__()
+        resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT) if pretrainedEncoder else models.resnet50()
+        
+        self.resnet = nn.Sequential(*list(resnet.children())[:-1])
+        for param in self.resnet.parameters():
+            param.requires_grad = unfreezeEncoder
+        
+        self.fc = nn.Linear(resnet.fc.in_features, embed_dim)
+        self.batch_norm = nn.BatchNorm1d(embed_dim)
+        self.dropout = nn.Dropout(0.3)
+        self.classifier = nn.Linear(embed_dim, 1)
+
+    def forward(self, x, return_embedding=False):
+        x = self.resnet(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        x = self.batch_norm(x)
+        x = self.dropout(x)
+        if return_embedding:
+            return x
+        x = self.classifier(x)
+        return x  
+
 
 class CCRPipeline:
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,16 +64,29 @@ class CCRPipeline:
             label_dict = json.load(f)
         all_labels = sorted(set(label_dict.values()))
         return {idx: char for idx, char in enumerate(all_labels)}
-
+    
     @staticmethod
-    def loadModel(modelPath: str):
-        model = ChineseClassifier(embed_dim=512, num_classes=1200)
-        checkpoint = torch.load(modelPath, map_location=CCRPipeline.DEVICE, weights_only=True)
+    def loadModel(modelPath: str, modelName: str = None):
+        if modelName is None:
+            # Try to infer from filename
+            if "ccrcharfilter" in modelPath.lower():
+                modelName = "ccrCharFilter"
+            else:
+                modelName = "ccr"
+
+        # Choose correct model class
+        if modelName == "ccrCharFilter":
+            model = ChineseBinaryClassifier()
+        else:
+            model = ChineseClassifier(embed_dim=512, num_classes=1200)
+
+        # Load checkpoint
+        checkpoint = torch.load(modelPath, map_location=CCRPipeline.DEVICE)
         state_dict = checkpoint.get("model_state_dict", checkpoint)
         model.load_state_dict(state_dict, strict=False)
+
         model.to(CCRPipeline.DEVICE)
         model.eval()
-        
         return model
     
     @staticmethod
@@ -156,9 +195,9 @@ class CCRPipeline:
                 char_images.append((col_idx, padded_img))
 
         return char_images
-
+    
     @staticmethod
-    def detectCharacters(char_images, recog_model, idx2char, tracer: ASTracer):
+    def detectCharacters(char_images, recog_model, idx2char, ccrCharFilter, tracer: ASTracer):
         tracer.addReport(ASReport("detectCharacters", "Filtering & recognizing characters"))
 
         transform = transforms.Compose([
@@ -167,11 +206,28 @@ class CCRPipeline:
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+                                std=[0.229, 0.224, 0.225])
         ])
 
         result = {}
+        kept_images = []  # to hold (col_idx, img) for recognition
+
+        # First filter characters by ccrCharFilter
         for col_idx, img in char_images:
+            # Prepare input tensor for filter
+            filter_input = transform(img).unsqueeze(0).to(CCRPipeline.DEVICE)
+
+            with torch.no_grad():
+                filter_output = ccrCharFilter(filter_input)
+                prob = torch.sigmoid(filter_output).item()
+                pred_label = 1 if prob >= 0.5 else 0
+
+            if pred_label == 0:
+                # It's a valid character - keep for recognition
+                kept_images.append((col_idx, img))
+
+        # Now recognize only kept images
+        for col_idx, img in kept_images:
             input_tensor = transform(img).unsqueeze(0).to(CCRPipeline.DEVICE)
 
             with torch.no_grad():
@@ -181,8 +237,9 @@ class CCRPipeline:
 
                 result.setdefault(col_idx, []).append(char)
 
-        tracer.addReport(ASReport("detectCharacters", f"{sum(len(v) for v in result.values())} characters recognized"))
+        tracer.addReport(ASReport("detectCharacters", f"{sum(len(v) for v in result.values())} characters recognized, {len(char_images) - len(kept_images)} removed as noise"))
         return result
+
 
     @staticmethod
     def concatCharacters(result_dict, tracer: ASTracer):
@@ -199,40 +256,64 @@ class CCRPipeline:
         tracer.start()
 
         try:
-            # Get the main model from ModelStore
+            # Get the main recognition model from ModelStore
             ccr_model_ctx = ModelStore.getModel("ccr")
             if not ccr_model_ctx or not ccr_model_ctx.model:
                 raise ValueError("CCR model not loaded in ModelStore")
 
-            # Load label mappings
+            # Get the binary filter model from ModelStore
+            ccr_filter_ctx = ModelStore.getModel("ccrCharFilter")
+            if not ccr_filter_ctx or not ccr_filter_ctx.model:
+                raise ValueError("CCR Char Filter model not loaded in ModelStore")
+
+            # Load label mappings for recognition
             idx2char = CCRPipeline.load_label_mappings()
 
-            # Process the image (without binary filtering)
+            # Segment the image into character images
             char_images = CCRPipeline.segmentImage(image_path, tracer)
+
+            # Filter and recognize characters, passing both models
             recognized = CCRPipeline.detectCharacters(
-                char_images, 
-                ccr_model_ctx.model,
-                idx2char, 
-                tracer
+                char_images,
+                recog_model=ccr_model_ctx.model,
+                idx2char=idx2char,
+                ccrCharFilter=ccr_filter_ctx.model,
+                tracer=tracer
             )
+
+            # Concatenate recognized characters into final output string
             final_output = CCRPipeline.concatCharacters(recognized, tracer)
 
             tracer.addReport(ASReport("transcribe", "Transcription completed successfully"))
             return final_output
-        
+
         except Exception as e:
             tracer.addReport(ASReport("transcribe", f"Error during transcription: {str(e)}", {"error": str(e)}))
             raise
         finally:
             tracer.end()
-    
+
 
 if __name__ == "__main__":
     ModelStore.setup()
-    ModelStore.registerLoadModelCallbacks(ccr=CCRPipeline.loadModel)
-    ModelStore.loadModels("ccr")
 
-    model_ctx = ModelStore.getModel("ccr")
+    # Register load callbacks for both models
+    ModelStore.registerLoadModelCallbacks(
+        ccr=CCRPipeline.loadModel,
+        ccrCharFilter=CCRPipeline.loadModel
+    )
+
+    # Load both models
+    ModelStore.loadModels("ccr")
+    ModelStore.loadModels("ccrCharFilter")
+
+    # Test recognition model output shape
+    ccr_ctx = ModelStore.getModel("ccr")
     test_tensor = torch.randn(1, 3, 224, 224)
-    output = model_ctx.model(test_tensor)
-    print(f"Output shape: {output.shape}")
+    output = ccr_ctx.model(test_tensor)
+    print(f"CCR model output shape: {output.shape}")
+
+    # Optionally test filter model output shape
+    filter_ctx = ModelStore.getModel("ccrCharFilter")
+    filter_output = filter_ctx.model(test_tensor)
+    print(f"CCR Char Filter model output shape: {filter_output.shape}")
