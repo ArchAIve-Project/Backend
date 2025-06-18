@@ -162,10 +162,7 @@ class LLMInterface:
                 model=model,
                 messages=sanitisedMessages,
                 temperature=temperature if isinstance(temperature, float) else 0.5,
-                max_tokens=maxTokens if isinstance(maxTokens, int) else 500,
-                extra_body={
-                    "enable_thinking": False
-                }
+                max_tokens=maxTokens if isinstance(maxTokens, int) else 500
             )
             
             return response.choices[0].message
