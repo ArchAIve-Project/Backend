@@ -4,7 +4,7 @@ from services import Logger, Universal
 from dotenv import load_dotenv
 load_dotenv()
 
-class Model:
+class ModelContext:
     '''Represents a machine learning model with metadata and methods for downloading and managing the model file.
     
     Attributes:
@@ -38,7 +38,7 @@ class Model:
     Note: Interaction with `Model` is typically managed through the `ModelStore` class, which handles the context and storage of multiple models.
     '''
     
-    def __init__(self, name: str, filename: str, driveID: str | None=None):
+    def __init__(self, name: str, filename: str, driveID: str | None=None, model: Any=None, loadCallback=None):
         '''Initializes a Model instance with the given name, filename, and optional Google Drive ID.
         
         Args:
@@ -61,6 +61,8 @@ class Model:
         self.name = name
         self.filename = filename
         self.driveID = driveID
+        self.model = model
+        self.loadCallback = loadCallback
     
     def driveDownloadURL(self) -> str:
         '''Generates the Google Drive download URL for the model file.
@@ -107,6 +109,11 @@ class Model:
         
         return True
     
+    def load(self):
+        print("hello {} {}".format(self.model, self.loadCallback))
+        self.model = self.loadCallback(ModelStore.modelFilePath(self.filename)) if self.loadCallback else None
+        return self.model
+    
     def represent(self) -> Dict[str, Any]:
         '''Represents the model as a dictionary.'''
         return {
@@ -116,7 +123,7 @@ class Model:
         }
     
     @staticmethod
-    def from_dict(data: Dict[str, Any]) -> 'Model':
+    def from_dict(data: Dict[str, Any]) -> 'ModelContext':
         '''Creates a Model instance from a dictionary representation.
         
         Args:
@@ -133,7 +140,7 @@ class Model:
         if "name" not in data or "filename" not in data:
             raise ValueError("Data must contain 'name' and 'filename' keys.")
         
-        return Model(
+        return ModelContext(
             name=data.get("name", None),
             filename=data.get("filename", None),
             driveID=data.get("driveID", None)
@@ -182,7 +189,7 @@ class ModelStore:
     rootDir: str = "models"
     contextFile: str = "context.json"
     
-    context: Dict[str, Model] = {}
+    context: Dict[str, ModelContext] = {}
     
     @staticmethod
     def rootDirPath() -> str:
@@ -216,7 +223,7 @@ class ModelStore:
             
             for key in data:
                 try:
-                    ModelStore.context[key] = Model.from_dict(data[key])
+                    ModelStore.context[key] = ModelContext.from_dict(data[key])
                 except Exception as e:
                     Logger.log(f"MODELSTORE LOADCONTEXT WARNING: Error loading model '{key}' from context (skipping); error: {e}")
                     if key in ModelStore.context:
@@ -266,14 +273,14 @@ class ModelStore:
         print("MODELSTORE: Setup complete. {} model(s) loaded.".format(len(ModelStore.context)))
     
     @staticmethod
-    def getModel(name: str) -> Model | None:
+    def getModel(name: str) -> ModelContext | None:
         '''Retrieves a model by its name from the context.'''
         return ModelStore.context.get(name)
     
     @staticmethod
-    def removeModel(identifier: str | Model) -> bool:
+    def removeModel(identifier: str | ModelContext) -> bool:
         '''Removes a model from the context by its name or Model instance.'''
-        if isinstance(identifier, Model):
+        if isinstance(identifier, ModelContext):
             identifier = identifier.name
         
         if identifier not in ModelStore.context:
@@ -285,7 +292,7 @@ class ModelStore:
         return True
     
     @staticmethod
-    def new(model: Model) -> bool | str:
+    def new(model: ModelContext) -> bool | str:
         '''Adds a new model to the context, downloading it if necessary. Ensure that model file already exists or can be downloaded with `driveID`.'''
         if not model.fileExists():
             if model.driveID:
@@ -305,6 +312,36 @@ class ModelStore:
         ModelStore.saveContext()
         
         Logger.log("MODELSTORE NEW: Model '{}' added successfully.".format(model.name))
+        
+        return True
+
+    @staticmethod
+    def registerLoadModelCallbacks(**kwargs):
+        for name, callback in kwargs.items():
+            if name in ModelStore.context:
+                ModelStore.context[name].loadCallback = callback
+            else:
+                print("MODELSTORE REGISTERLOADMODELCALLBACK ERROR: Model '{}' does not exist in context.".format(name))
+        
+        return True
+    
+    @staticmethod
+    def loadModels(*args):
+        if len(args) == 0:
+            for name in ModelStore.context:
+                if ModelStore.context[name].loadCallback:
+                    ModelStore.context[name].load()
+            print("MODELSTORE LOADMODELS: All models loaded successfully.")
+        else:
+            for name in args:
+                if name in ModelStore.context:
+                    if ModelStore.context[name].loadCallback:
+                        ModelStore.context[name].load()
+                    else:
+                        raise Exception("MODELSTORE LOADMODELS ERROR: Model '{}' does not have a load callback defined.".format(name))
+                else:
+                    raise Exception("MODELSTORE LOADMODELS ERROR: Model '{}' does not exist in context.".format(name))
+            print("MODELSTORE LOADMODELS: Models loaded successfully: {}".format(", ".join(args)))
         
         return True
 
