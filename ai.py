@@ -1,8 +1,8 @@
-import os, sys, openai, base64
+import os, sys, openai, base64, json
 from typing import List
 from enum import Enum
 from openai import OpenAI
-from openai.types.chat import ChatCompletionMessage, ChatCompletionMessageToolCall
+from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
 
 class LMProvider(str, Enum):
     OPENAI = "openai"
@@ -70,12 +70,15 @@ class Interaction:
         ASSISTANT = "assistant"
         SYSTEM = "system"
         TOOL = "tool"
+        
+        def __str__(self):
+            return self.value
 
-    def __init__(self, role: Role | str, content: str, imagePath: str | None=None, imageFileType: str | None=None, completionMessage: ChatCompletionMessage | None=None):
+    def __init__(self, role: Role | str, content: str | None, imagePath: str | None=None, imageFileType: str | None=None, toolCallID: str | None=None, toolCallName: str | None=None, completionMessage: ChatCompletionMessage | None=None):
         if (not isinstance(role, str) and not isinstance(role, Interaction.Role)):
             raise ValueError("Role must be a string or an instance of Interaction.Role.")
-        elif not isinstance(content, str):
-            raise ValueError("Content must be a string.")
+        elif content is not None and not isinstance(content, str):
+            raise ValueError("Content must be a string or None.")
         elif imagePath is not None and not isinstance(imagePath, str):
             raise ValueError("Image path must be a string if provided.")
         elif imageFileType is not None and not isinstance(imageFileType, str):
@@ -84,10 +87,18 @@ class Interaction:
             raise ValueError("Image file type must be provided if image path is given.")
         elif imagePath is not None and str(role) != Interaction.Role.USER.value:
             raise ValueError("Image input can only be included by the user role.")
+        elif toolCallID is not None and not isinstance(toolCallID, str):
+            raise ValueError("Tool call ID must be a string if provided.")
+        elif toolCallName is not None and not isinstance(toolCallName, str):
+            raise ValueError("Tool call name must be a string if provided.")
+        elif toolCallID is not None and (toolCallName is None or content is None):
+            raise ValueError("Tool call name and content must be provided if tool call ID is given.")
+        elif toolCallID is not None and str(role) != Interaction.Role.TOOL.value:
+            raise ValueError("Tool call can only be included by the tool role.")
         
-        self.role: str = role if isinstance(role, str) else role.value
-        self.content: str = content
-        
+        self.role: str = str(role)
+        self.content: str | None = content
+
         if imagePath != None:
             with open(imagePath, "rb") as f:
                 data = f.read()
@@ -95,12 +106,21 @@ class Interaction:
         else:
             self.imageData: str = None
         self.imageFileType: str = imageFileType
+        self.toolCallID: str | None = toolCallID
+        self.toolCallName: str | None = toolCallName
         self.completionMessage: ChatCompletionMessage | None = completionMessage
 
     def represent(self):
         if self.imageData is None:
             return {
                 "role": self.role,
+                "content": self.content
+            }
+        elif self.role == Interaction.Role.TOOL.value:
+            return {
+                "role": self.role,
+                "tool_call_id": self.toolCallID,
+                "name": self.toolCallName,
                 "content": self.content
             }
         else:
@@ -125,7 +145,10 @@ class Interaction:
     Role: {self.role}
     Content: {self.content}
     Image Input: {'Yes' if self.imageData else 'No'}
-    Image File Type: {self.imageFileType if self.imageFileType else 'None'}"""
+    Image File Type: {self.imageFileType if self.imageFileType else 'None'}
+    Tool Call ID: {self.toolCallID if self.toolCallID else 'None'}
+    Tool Call Name: {self.toolCallName if self.toolCallName else 'None'}
+    Completion Message: {'Yes' if self.completionMessage else 'No'}"""
 
 class Tool:
     class Parameter:
@@ -186,11 +209,10 @@ class InteractionContext:
         provider: LMProvider,
         variant: LMVariant,
         history: List[Interaction]=[],
-        tools: List[Tool]=[],
-        temperature: float=0.5,
+        tools: List[Tool] | None=None,
+        temperature: float | None=None,
         presence_penalty: float | None=None,
         top_p: float | None=None,
-        top_k: int | None=None,
         preToolInvocationCallback=None,
         postToolInvocationCallback=None
     ):
@@ -201,12 +223,40 @@ class InteractionContext:
         self.temperature = temperature
         self.presence_penalty = presence_penalty
         self.top_p = top_p
-        self.top_k = top_k
         self.preToolInvocationCallback = preToolInvocationCallback
         self.postToolInvocationCallback = postToolInvocationCallback
     
     def addInteraction(self, interaction: Interaction):
         self.history.append(interaction)
+    
+    def generateInputMessages(self) -> List[dict]:
+        messages = []
+        for interaction in self.history:
+            if interaction.completionMessage and interaction.completionMessage.tool_calls:
+                # Add tool call *request* messages in direct JSON representation
+                messages.append(interaction.completionMessage.to_dict())
+            else:
+                # Add regular user/assistant/system/tool *call* messages in custom representation format
+                messages.append(interaction.represent())
+        
+        return messages
+    
+    def promptKwargs(self) -> dict:
+        params = {
+            "model": str(self.variant),
+            "messages": self.generateInputMessages()
+        }
+        
+        if self.tools:
+            params["tools"] = [tool.represent() for tool in self.tools]
+        if isinstance(self.temperature, float):
+            params["temperature"] = self.temperature
+        if isinstance(self.presence_penalty, float):
+            params["presence_penalty"] = self.presence_penalty
+        if isinstance(self.top_p, float):
+            params["top_p"] = self.top_p
+        
+        return params
 
 class LLMInterface:
     clients: dict[str, OpenAI] = {}
@@ -280,6 +330,89 @@ class LLMInterface:
         except Exception as e:
             return "ERROR: Failed to generate chat completion; error: {}".format(e)
     
+    @staticmethod
+    def engage(context: InteractionContext) -> ChatCompletionMessage | str:
+        if not LLMInterface.checkPermission():
+            return "ERROR: LLMInterface does not have permission to operate."
+        
+        client: OpenAI = LLMInterface.getClient(context.provider.value)
+        if client is None:
+            return "ERROR: Client '{}' does not exist.".format(context.provider.value)
+        
+        # Initial prompt execution
+        response: ChatCompletion | None = None
+        try:
+            response: ChatCompletion = client.chat.completions.create(**context.promptKwargs())
+        except Exception as e:
+            return "ERROR: Failed to generate chat completion; error: {}".format(e)
+        
+        context.addInteraction(
+            Interaction(
+                role=Interaction.Role.ASSISTANT,
+                content=response.choices[0].message.content,
+                completionMessage=response.choices[0].message
+            )
+        )
+        
+        while response.choices[0].message.tool_calls:
+            # Identify tool call request
+            try:
+                if context.preToolInvocationCallback is not None:
+                    if context.preToolInvocationCallback(response.choices[0].message) == False:
+                        return "ERROR: Pre-tool invocation callback returned False, stopping execution."
+                
+                toolCall: ChatCompletionMessageToolCall = response.choices[0].message.tool_calls[0]
+                tool: Tool = None
+                if context.tools is None or len(context.tools) == 0:
+                    raise Exception("Invocation request for tool '{}' but no tools are available in context.".format(toolCall.function.name))
+                for t in context.tools:
+                    if t.name == toolCall.function.name:
+                        tool = t
+                        break
+                if tool is None:
+                    return "ERROR: Tool '{}' invoked but not found in context tools.".format(toolCall.function.name)
+            except Exception as e:
+                return "ERROR: Failed to begin tool invocation; error: {}".format(e)
+            
+            # Carry out tool invocation
+            try:
+                func_args = toolCall.function.arguments
+                func_args = json.loads(func_args)
+                out = str(tool.invoke(**func_args))
+                
+                context.addInteraction(
+                    Interaction(
+                        role=Interaction.Role.TOOL,
+                        content=out,
+                        toolCallID=toolCall.id,
+                        toolCallName=toolCall.function.name
+                    )
+                )
+            except Exception as e:
+                return "ERROR: Failed to invoke tool '{}'; error: {}".format(toolCall.function.name, e)
+            
+            # Get response after tool invocation
+            try:
+                response = client.chat.completions.create(**context.promptKwargs())
+            except Exception as e:
+                return "ERROR: Failed to generate post-tool chat completion; error: {}".format(e)
+            
+            context.addInteraction(
+                Interaction(
+                    role=Interaction.Role.ASSISTANT,
+                    content=response.choices[0].message.content,
+                    completionMessage=response.choices[0].message
+                )
+            )
+            
+            if context.postToolInvocationCallback is not None:
+                try:
+                    if context.postToolInvocationCallback(response.choices[0].message) == False:
+                        return "ERROR: Post-tool invocation callback returned False, stopping execution."
+                except Exception as e:
+                    return "ERROR: Failed to execute post-tool callback; error: {}".format(e)
+        
+        return response.choices[0].message
     
     # @staticmethod
     # def prompt(client: str, model: str, newPrompt: str, contextHistory: list[Interaction]=[], temperature=0.5, maxTokens=500):
