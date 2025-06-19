@@ -191,6 +191,8 @@ class InteractionContext:
         presence_penalty: float | None=None,
         top_p: float | None=None,
         top_k: int | None=None,
+        preToolInvocationCallback=None,
+        postToolInvocationCallback=None
     ):
         self.provider = provider
         self.variant = variant
@@ -200,6 +202,8 @@ class InteractionContext:
         self.presence_penalty = presence_penalty
         self.top_p = top_p
         self.top_k = top_k
+        self.preToolInvocationCallback = preToolInvocationCallback
+        self.postToolInvocationCallback = postToolInvocationCallback
     
     def addInteraction(self, interaction: Interaction):
         self.history.append(interaction)
