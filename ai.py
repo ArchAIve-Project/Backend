@@ -1,4 +1,4 @@
-import os, sys, openai
+import os, sys, openai, base64
 from enum import Enum
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessage
@@ -64,20 +64,51 @@ class Interaction:
         SYSTEM = "system"
         TOOL = "tool"
     
-    def __init__(self, role: Role | str, content: str):
+    def __init__(self, role: Role | str, content: str, imagePath: str | None=None, imageFileType: str | None=None):
         if (not isinstance(role, str) and not isinstance(role, Interaction.Role)):
             raise ValueError("Role must be a string or an instance of Interaction.Role.")
         elif not isinstance(content, str):
             raise ValueError("Content must be a string.")
+        elif imagePath is not None and not isinstance(imagePath, str):
+            raise ValueError("Image path must be a string if provided.")
+        elif imageFileType is not None and not isinstance(imageFileType, str):
+            raise ValueError("Image file type must be a string if provided.")
+        elif imagePath is not None and imageFileType is None:
+            raise ValueError("Image file type must be provided if image path is given.")
         
-        self.role = role if isinstance(role, str) else role.value
-        self.content = content
-    
+        self.role: str = role if isinstance(role, str) else role.value
+        self.content: str = content
+        
+        if imagePath != None:
+            with open(imagePath, "rb") as f:
+                data = f.read()
+                self.imageData: str = base64.b64encode(data).decode("utf-8")
+        else:
+            self.imageData: str = None
+        self.imageFileType: str = imageFileType
+
     def represent(self):
-        return {
-            "role": self.role,
-            "content": self.content
-        }
+        if self.imageData is None:
+            return {
+                "role": self.role,
+                "content": self.content
+            }
+        else:
+            return {
+                "role": self.role,
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{self.imageFileType};base64,{self.imageData}"
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": self.content
+                    }
+                ]
+            }
 
 class LLMInterface:
     clients: dict[str, OpenAI] = {}
