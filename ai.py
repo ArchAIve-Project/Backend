@@ -1,6 +1,7 @@
 import os, sys, openai
 from enum import Enum
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessage
 
 class LMProvider(str, Enum):
     OPENAI = "openai"
@@ -136,7 +137,7 @@ class LLMInterface:
             return "ERROR: Failed to remove client '{}'; error: {}".format(name, e)
     
     @staticmethod
-    def prompt(client: str, model: str, newPrompt: str, contextHistory: list[Interaction]=[], temperature=0.5, maxTokens=500):
+    def manualPrompt(client: str, *params) -> ChatCompletionMessage | str:
         if not LLMInterface.checkPermission():
             return "ERROR: LLMInterface does not have permission to operate."
         
@@ -144,27 +145,43 @@ class LLMInterface:
         if client is None:
             return "ERROR: Client '{}' does not exist.".format(client)
         
-        sanitisedMessages = []
-        if not isinstance(contextHistory, list):
-            contextHistory = []
-        else:
-            for item in contextHistory:
-                if isinstance(item, Interaction):
-                    sanitisedMessages.append(item.represent())
-
-        sanitisedMessages.append({
-            "role": Interaction.Role.USER.value,
-            "content": newPrompt
-        })
-        
         try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=sanitisedMessages,
-                temperature=temperature if isinstance(temperature, float) else 0.5,
-                max_tokens=maxTokens if isinstance(maxTokens, int) else 500
-            )
-            
+            response = client.chat.completions.create(**params)
             return response.choices[0].message
         except Exception as e:
             return "ERROR: Failed to generate chat completion; error: {}".format(e)
+    
+    
+    # @staticmethod
+    # def prompt(client: str, model: str, newPrompt: str, contextHistory: list[Interaction]=[], temperature=0.5, maxTokens=500):
+    #     if not LLMInterface.checkPermission():
+    #         return "ERROR: LLMInterface does not have permission to operate."
+        
+    #     client: OpenAI = LLMInterface.getClient(client)
+    #     if client is None:
+    #         return "ERROR: Client '{}' does not exist.".format(client)
+        
+    #     sanitisedMessages = []
+    #     if not isinstance(contextHistory, list):
+    #         contextHistory = []
+    #     else:
+    #         for item in contextHistory:
+    #             if isinstance(item, Interaction):
+    #                 sanitisedMessages.append(item.represent())
+
+    #     sanitisedMessages.append({
+    #         "role": Interaction.Role.USER.value,
+    #         "content": newPrompt
+    #     })
+        
+    #     try:
+    #         response = client.chat.completions.create(
+    #             model=model,
+    #             messages=sanitisedMessages,
+    #             temperature=temperature if isinstance(temperature, float) else 0.5,
+    #             max_tokens=maxTokens if isinstance(maxTokens, int) else 500
+    #         )
+            
+    #         return response.choices[0].message
+    #     except Exception as e:
+    #         return "ERROR: Failed to generate chat completion; error: {}".format(e)
