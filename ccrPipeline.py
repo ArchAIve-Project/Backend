@@ -41,9 +41,9 @@ class ChineseBinaryClassifier(nn.Module):
     Binary classifier used for filtering valid vs. noisy characters.
     Uses pretrained ResNet50 optionally.
     """
-    def __init__(self, embed_dim: int = 512, pretrainedEncoder: bool = True, unfreezeEncoder: bool = True):
+    def __init__(self, embed_dim: int = 512, unfreezeEncoder: bool = True):
         super().__init__()
-        base = models.resnet50(weights=models.ResNet50_Weights.DEFAULT if pretrainedEncoder else None)
+        base = models.resnet50(weights=None)
         self.resnet = nn.Sequential(*list(base.children())[:-1])
 
         # Allow optional fine-tuning of the encoder
