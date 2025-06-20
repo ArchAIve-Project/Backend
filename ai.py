@@ -432,37 +432,3 @@ class LLMInterface:
                     return "ERROR: Failed to execute post-tool callback; error: {}".format(e)
         
         return response.choices[0].message
-    
-    # @staticmethod
-    # def prompt(client: str, model: str, newPrompt: str, contextHistory: list[Interaction]=[], temperature=0.5, maxTokens=500):
-    #     if not LLMInterface.checkPermission():
-    #         return "ERROR: LLMInterface does not have permission to operate."
-        
-    #     client: OpenAI = LLMInterface.getClient(client)
-    #     if client is None:
-    #         return "ERROR: Client '{}' does not exist.".format(client)
-        
-    #     sanitisedMessages = []
-    #     if not isinstance(contextHistory, list):
-    #         contextHistory = []
-    #     else:
-    #         for item in contextHistory:
-    #             if isinstance(item, Interaction):
-    #                 sanitisedMessages.append(item.represent())
-
-    #     sanitisedMessages.append({
-    #         "role": Interaction.Role.USER.value,
-    #         "content": newPrompt
-    #     })
-        
-    #     try:
-    #         response = client.chat.completions.create(
-    #             model=model,
-    #             messages=sanitisedMessages,
-    #             temperature=temperature if isinstance(temperature, float) else 0.5,
-    #             max_tokens=maxTokens if isinstance(maxTokens, int) else 500
-    #         )
-            
-    #         return response.choices[0].message
-    #     except Exception as e:
-    #         return "ERROR: Failed to generate chat completion; error: {}".format(e)
