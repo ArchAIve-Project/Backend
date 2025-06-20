@@ -111,19 +111,14 @@ class Interaction:
         self.completionMessage: ChatCompletionMessage | None = completionMessage
 
     def represent(self):
-        if self.imageData is None:
-            return {
-                "role": self.role,
-                "content": self.content
-            }
-        elif self.role == Interaction.Role.TOOL.value:
+        if self.role == Interaction.Role.TOOL.value:
             return {
                 "role": self.role,
                 "tool_call_id": self.toolCallID,
                 "name": self.toolCallName,
                 "content": self.content
             }
-        else:
+        elif self.imageData is not None:
             return {
                 "role": self.role,
                 "content": [
@@ -139,16 +134,14 @@ class Interaction:
                     }
                 ]
             }
+        else:
+            return {
+                "role": self.role,
+                "content": self.content
+            }
     
     def __str__(self):
-        return f"""Interaction:
-    Role: {self.role}
-    Content: {self.content}
-    Image Input: {'Yes' if self.imageData else 'No'}
-    Image File Type: {self.imageFileType if self.imageFileType else 'None'}
-    Tool Call ID: {self.toolCallID if self.toolCallID else 'None'}
-    Tool Call Name: {self.toolCallName if self.toolCallName else 'None'}
-    Completion Message: {'Yes' if self.completionMessage else 'No'}"""
+        return f"Interaction(role={self.role}, content={self.content}, imageDataLength={len(self.imageData) if self.imageData else None}, imageFileType={self.imageFileType}, toolCallID={self.toolCallID}, toolCallName={self.toolCallName}, completionMessageExists={self.completionMessage is not None})"
 
 class Tool:
     class Parameter:
@@ -226,7 +219,9 @@ class InteractionContext:
         self.preToolInvocationCallback = preToolInvocationCallback
         self.postToolInvocationCallback = postToolInvocationCallback
     
-    def addInteraction(self, interaction: Interaction):
+    def addInteraction(self, interaction: Interaction, imageMessageAcknowledged: bool=False):        
+        if interaction.imageData is not None and not imageMessageAcknowledged:
+            raise Exception("Interaction with image data requires a model variant capable of image understanding. Silence this by ensuring you have an appropriate model variant set and by setting imageMessageAcknowledged to True.")
         self.history.append(interaction)
     
     def generateInputMessages(self) -> List[dict]:
@@ -316,7 +311,7 @@ class LLMInterface:
             return "ERROR: Failed to remove client '{}'; error: {}".format(name, e)
     
     @staticmethod
-    def manualPrompt(client: str, *params) -> ChatCompletionMessage | str:
+    def manualPrompt(client: str, **params) -> ChatCompletionMessage | str:
         if not LLMInterface.checkPermission():
             return "ERROR: LLMInterface does not have permission to operate."
         
@@ -325,7 +320,7 @@ class LLMInterface:
             return "ERROR: Client '{}' does not exist.".format(client)
         
         try:
-            response = client.chat.completions.create(**params)
+            response: ChatCompletion = client.chat.completions.create(**params)
             return response.choices[0].message
         except Exception as e:
             return "ERROR: Failed to generate chat completion; error: {}".format(e)
