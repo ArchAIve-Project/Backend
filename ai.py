@@ -5,6 +5,14 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
 
 class LMProvider(str, Enum):
+    """
+    An enumeration representing supported Language Model (LM) providers.
+    Attributes:
+        OPENAI: Represents the OpenAI language model provider.
+        QWEN: Represents the Qwen language model provider.
+    Methods:
+        __str__(): Returns the string value of the LMProvider instance.
+    """
     OPENAI = "openai"
     QWEN = "qwen"
     
@@ -12,6 +20,66 @@ class LMProvider(str, Enum):
         return self.value
 
 class LMVariant(str, Enum):
+    """
+    # Enumeration of Supported Language Model (LM) Variants
+
+    Each member represents a specific LM variant, identified by its string value.
+
+    ## Variants
+
+    - **GPT_4O**: `"gpt-4o"`  
+      GPT-4 Omni model.
+    - **GPT_4O_MINI**: `"gpt-4o-mini"`  
+      Mini version of GPT-4 Omni.
+    - **GPT_4_1**: `"gpt-4.1"`  
+      GPT-4.1 model.
+    - **GPT_4_1_NANO**: `"gpt-4.1-nano"`  
+      Nano version of GPT-4.1.
+    - **GPT_4_1_MINI**: `"gpt-4.1-mini"`  
+      Mini version of GPT-4.1.
+    
+    
+    - **O3**: `"o3"`  
+      O3 model.
+    - **O3_MINI**: `"o3-mini"`  
+      Mini version of O3.
+    - **O4_MINI**: `"o4-mini"`  
+      Mini version of O4.
+    
+    
+    - **QWEN_MAX**: `"qwen-max"`  
+      Qwen Max model.
+    - **QWEN_PLUS**: `"qwen-plus"`  
+      Qwen Plus model.
+    - **QWEN_TURBO**: `"qwen-turbo"`  
+      Qwen Turbo model.
+    
+    
+    - **QWEN_VL_MAX**: `"qwen-vl-max"`  
+      Qwen Vision-Language Max model.
+    - **QWEN_VL_PLUS**: `"qwen-vl-plus"`  
+      Qwen Vision-Language Plus model.
+    
+    
+    - **QWQ**: `"qwq-plus"`  
+      QWQ Plus model.
+    - **QVQ**: `"qvq-max"`  
+      QVQ Max model.
+    
+    
+    - **QWEN3_8B**: `"qwen3-8b"`  
+      Qwen3 8B parameter model.
+    - **QWEN3_14B**: `"qwen3-14b"`  
+      Qwen3 14B parameter model.
+    - **QWEN3_32B**: `"qwen3-32b"`  
+      Qwen3 32B parameter model.
+    - **QWEN3_30B_A3B**: `"qwen3-30b-a3b"`  
+      Qwen3 30B A3B variant.
+    - **QWEN3_235B_A22B**: `"qwen3-235b-a22b"`  
+      Qwen3 235B A22B variant.
+
+    The `__str__` method returns the string value of the variant.
+    """
     GPT_4O = "gpt-4o"
     GPT_4O_MINI = "gpt-4o-mini"
     GPT_4_1 = "gpt-4.1"
@@ -42,6 +110,20 @@ class LMVariant(str, Enum):
         return self.value
 
 class ClientConfig:
+    """
+    ClientConfig is a configuration class for initializing and managing client instances for different AI service providers.
+    Attributes:
+        name (str): The name of the client or service provider.
+        args (tuple): Positional arguments to be passed to the client constructor.
+        kwargs (dict): Keyword arguments to be passed to the client constructor.
+    Methods:
+        generateClient() -> OpenAI:
+            Instantiates and returns an OpenAI client using the stored arguments.
+        __repr__():
+            Returns a string representation of the ClientConfig instance.
+        default() -> List[ClientConfig]:
+            Returns a list of default ClientConfig instances for supported providers.
+    """
     def __init__(self, name: str, *args, **kwargs):
         self.name = name
         self.args = args
@@ -65,7 +147,47 @@ class ClientConfig:
         ]
 
 class Interaction:
+    """
+    Represents an interaction in a conversational AI system, supporting user, assistant, system, and tool roles, 
+    as well as optional image and tool call data.
+    
+    ### Classes
+        Role (Enum): Defines valid roles for an interaction ('user', 'assistant', 'system', 'tool').
+    ### Args
+        role (Role | str): The role of the interaction. Must be one of the defined roles or a string.
+        content (str | None): The textual content of the interaction. Can be None.
+        imagePath (str | None, optional): Path to an image file to include in the interaction. Only allowed for 'user' role.
+        imageFileType (str | None, optional): MIME type of the image file. Required if imagePath is provided.
+        toolCallID (str | None, optional): Identifier for a tool call. Only allowed for 'tool' role.
+        toolCallName (str | None, optional): Name of the tool being called. Required if toolCallID is provided.
+        completionMessage (ChatCompletionMessage | None, optional): Associated completion message, if any.
+    ### Raises
+        ValueError: If any argument does not meet the required type or logical constraints.
+    
+    ### Attributes
+        role (str): The role of the interaction.
+        content (str | None): The textual content of the interaction.
+        imageData (str | None): Base64-encoded image data, if an image is included.
+        imageFileType (str | None): MIME type of the image, if provided.
+        toolCallID (str | None): Tool call identifier, if provided.
+        toolCallName (str | None): Tool call name, if provided.
+        completionMessage (ChatCompletionMessage | None): Associated completion message, if any.
+    
+    ### Methods:
+        represent(): Returns a dictionary representation of the interaction, formatted for downstream processing.
+        __str__(): Returns a string summary of the interaction instance.
+    """
     class Role(str, Enum):
+        """
+        An enumeration representing the different roles in a conversational AI context.
+        Attributes:
+            USER (str): Represents the user interacting with the AI.
+            ASSISTANT (str): Represents the AI assistant.
+            SYSTEM (str): Represents system-level messages or instructions.
+            TOOL (str): Represents a tool or function used within the conversation.
+        Methods:
+            __str__(): Returns the string value of the role.
+        """
         USER = "user"
         ASSISTANT = "assistant"
         SYSTEM = "system"
@@ -111,6 +233,17 @@ class Interaction:
         self.completionMessage: ChatCompletionMessage | None = completionMessage
 
     def represent(self):
+        """
+        Generates a dictionary representation of this interaction suitable for inclusion in the
+        'messages' parameter of the chat completions API.
+
+        - For 'tool' role: returns a dict with tool_call_id, name, and content.
+        - For user role with image: returns a dict with content as a list containing image_url and text.
+        - For all others: returns a dict with role and content.
+
+        Returns:
+            dict: Dictionary formatted for chat completions API.
+        """
         if self.role == Interaction.Role.TOOL.value:
             return {
                 "role": self.role,
@@ -137,15 +270,72 @@ class Interaction:
         else:
             return {
                 "role": self.role,
-                "content": self.content
+                "content": [
+                    {
+                        "type": "text",
+                        "text": self.content
+                    }
+                ]
             }
     
     def __str__(self):
         return f"Interaction(role={self.role}, content={self.content}, imageDataLength={len(self.imageData) if self.imageData else None}, imageFileType={self.imageFileType}, toolCallID={self.toolCallID}, toolCallName={self.toolCallName}, completionMessageExists={self.completionMessage is not None})"
 
 class Tool:
+    """
+    A class representing a callable tool with metadata and parameter specification.
+    Classes:
+        Parameter:
+            Represents a parameter for the tool, including its name, type, description, and whether it is required.
+            Classes:
+                Type (Enum):
+                    Enum for supported parameter types: STRING, INTEGER, NUMBER, BOOLEAN, ARRAY_NOT_RECOMMENDED, OBJECT_NOT_RECOMMENDED.
+    Attributes:
+        callback (callable): The function to be invoked by the tool.
+        name (str): The name of the tool.
+        description (str): A description of the tool.
+        parameters (List[Parameter] | None): Optional list of Parameter objects describing the tool's parameters.
+    Methods:
+        __init__(callback, name, description, parameters=None):
+            Initializes the Tool with a callback, name, description, and optional parameters.
+        invoke(*args, **kwargs):
+            Invokes the tool's callback with the provided arguments.
+        represent() -> dict:
+            Returns a dictionary representation of the tool, suitable for serialization or API documentation.
+        __str__():
+            Returns a string representation of the Tool instance.
+    
+    Contains a nested class `Parameter` to define the parameters of the tool.
+    """
     class Parameter:
+        """
+        Represents a parameter with a name, type, description, and required flag.
+        
+        Args:
+            name (str): The name of the parameter.
+            dataType (Type): The data type of the parameter, as a member of the Type enum.
+            description (str): A description of the parameter.
+            required (bool, optional): Whether the parameter is required. Defaults to False.
+        Methods:
+            __str__(): Returns a string representation of the Parameter instance.
+        
+        Contains a nested enum `Type` to define the supported data types for parameters.
+        """
         class Type(str, Enum):
+            """
+            An enumeration representing supported data types.
+
+            Attributes:
+                STRING (str): Represents a string data type.
+                INTEGER (str): Represents an integer data type.
+                NUMBER (str): Represents a numeric data type (integer or float).
+                BOOLEAN (str): Represents a boolean data type.
+                ARRAY_NOT_RECOMMENDED (str): Represents an array data type (not recommended).
+                OBJECT_NOT_RECOMMENDED (str): Represents an object data type (not recommended).
+
+            Methods:
+                __str__(): Returns the string value of the enum member.
+            """
             STRING = "string"
             INTEGER = "integer"
             NUMBER = "number"
@@ -175,9 +365,32 @@ class Tool:
         self.parameters = parameters
     
     def invoke(self, *args, **kwargs):
+        """
+        Invokes the stored callback function with the provided arguments.
+
+        Args:
+            *args: Variable length argument list to pass to the callback.
+            **kwargs: Arbitrary keyword arguments to pass to the callback.
+
+        Returns the result returned by the callback function.
+        """
         return self.callback(*args, **kwargs)
     
     def represent(self) -> dict:
+        """
+        Returns a dictionary representation of the function, including its name, description, and optionally its parameters.
+        The returned dictionary follows a specific structure:
+        - "type": Always set to "function".
+        - "function": Contains:
+            - "name": The name of the function.
+            - "description": The description of the function.
+            - "parameters" (optional): If parameters are defined and non-empty, includes:
+                - "type": Always set to "object".
+                - "properties": A dictionary mapping parameter names to their type and description.
+                - "required": A list of parameter names that are required.
+        Returns:
+            dict: The structured representation of the function and its parameters.
+        """
         data = {
             "type": "function",
             "function": {
@@ -203,6 +416,32 @@ class Tool:
         
 
 class InteractionContext:
+    """
+    InteractionContext manages the context and configuration for a sequence of interactions with a language model (LM), including conversation history, model parameters, and tool integrations.
+    Attributes:
+        provider (LMProvider): The language model provider.
+        variant (LMVariant): The specific model variant to use.
+        history (List[Interaction]): List of past interactions in the conversation.
+        tools (List[Tool] | None): Optional list of tools available for tool-augmented interactions.
+        temperature (float | None): Sampling temperature for model generation.
+        presence_penalty (float | None): Penalty for repeated tokens in model output.
+        top_p (float | None): Nucleus sampling parameter for model generation.
+        preToolInvocationCallback (callable | None): Optional callback before tool invocation.
+        postToolInvocationCallback (callable | None): Optional callback after tool invocation.
+    Methods:
+        addInteraction(interaction: Interaction, imageMessageAcknowledged: bool=False):
+            Adds an interaction to the history, with validation for image data and model capability.
+        generateInputMessages() -> List[dict]:
+            Generates a list of message dictionaries representing the conversation history, formatted for model input.
+        promptKwargs() -> dict:
+            Assembles and returns a dictionary of parameters for prompting the language model, including model, messages, tools, and generation settings.
+        __str__():
+            Returns a human-readable string representation of the InteractionContext instance, including provider, variant, history, tools, and configuration.
+    
+    Additional Notes:
+    - The `addInteraction` method raises an exception if an interaction with image data is added without acknowledging that the model variant supports image understanding.
+    - This class should be used to encapsulate the context of a conversation with a language model, allowing for structured interactions and tool invocations.
+    """
     def __init__(
         self,
         provider: LMProvider,
@@ -225,12 +464,29 @@ class InteractionContext:
         self.preToolInvocationCallback = preToolInvocationCallback
         self.postToolInvocationCallback = postToolInvocationCallback
     
-    def addInteraction(self, interaction: Interaction, imageMessageAcknowledged: bool=False):        
+    def addInteraction(self, interaction: Interaction, imageMessageAcknowledged: bool=False):
+        """Adds an interaction to the context.
+
+        Args:
+            interaction (Interaction): The interaction to add.
+            imageMessageAcknowledged (bool, optional): Whether the image message has been acknowledged. Defaults to False.
+
+        Raises:
+            Exception: If the interaction contains image data and the model variant does not support it.
+        """
         if interaction.imageData is not None and not imageMessageAcknowledged:
             raise Exception("Interaction with image data requires a model variant capable of image understanding. Silence this by ensuring you have an appropriate model variant set and by setting imageMessageAcknowledged to True.")
         self.history.append(interaction)
     
     def generateInputMessages(self) -> List[dict]:
+        """
+        Generates a list of message dictionaries representing the conversation history.
+        Iterates through each interaction in the history. If an interaction contains a completion message with tool calls,
+        it appends the direct JSON representation of the completion message. Otherwise, it appends a custom representation
+        of the interaction (for user, assistant, system, or tool call messages).
+        Returns:
+            List[dict]: A list of message dictionaries formatted for input to a language model or API.
+        """
         messages = []
         for interaction in self.history:
             if interaction.completionMessage and interaction.completionMessage.tool_calls:
@@ -243,6 +499,19 @@ class InteractionContext:
         return messages
     
     def promptKwargs(self) -> dict:
+        """
+        Generates a dictionary of keyword arguments for prompting an AI model.
+        Returns:
+            dict: A dictionary containing the model variant, input messages, and optionally
+            tools, temperature, presence penalty, and top_p parameters if they are set.
+        The returned dictionary includes:
+            - "model": The model variant as a string.
+            - "messages": The input messages generated by `generateInputMessages()`.
+            - "tools": A list of tool representations if `self.tools` is set.
+            - "temperature": The temperature value if it is a float.
+            - "presence_penalty": The presence penalty value if it is a float.
+            - "top_p": The top_p value if it is a float.
+        """
         params = {
             "model": str(self.variant),
             "messages": self.generateInputMessages()
@@ -278,6 +547,32 @@ Pre-Tool Invocation Callback: {"Yes" if self.preToolInvocationCallback else "No"
 Post-Tool Invocation Callback: {"Yes" if self.postToolInvocationCallback else "No"} />"""
 
 class LLMInterface:
+    """
+    LLMInterface provides a static interface for managing and interacting with multiple Chat Completions API supported LLM clients.
+    Attributes:
+        clients (dict[str, OpenAI]): A dictionary mapping client names to OpenAI client instances.
+        disabled (bool): A flag indicating whether the interface is disabled.
+    Methods:
+        checkPermission() -> bool:
+            Checks if the LLMInterface is enabled via the "LLMINTERFACE_ENABLED" environment variable.
+        initDefaultClients() -> bool | str:
+            Initializes default OpenAI clients using configurations from ClientConfig.default().
+            Returns True on success, or an error message string on failure or lack of permission.
+        getClient(name: str) -> OpenAI | None:
+            Retrieves an OpenAI client by name if permission is granted, otherwise returns None.
+        addClient(config: ClientConfig) -> bool | str:
+            Adds a new OpenAI client using the provided ClientConfig.
+            Returns True on success, or an error message string on failure or lack of permission.
+        removeClient(name: str) -> bool | str:
+            Removes an OpenAI client by name.
+            Returns True on success, or an error message string on failure or lack of permission.
+        manualPrompt(client: str, **params) -> ChatCompletionMessage | str:
+            Sends a manual prompt to the specified client with given parameters.
+            Returns the resulting ChatCompletionMessage, or an error message string on failure or lack of permission.
+        engage(context: InteractionContext) -> ChatCompletionMessage | str:
+            Engages in a multi-turn interaction with a client, handling tool calls and callbacks as specified in the context.
+            Returns the final ChatCompletionMessage, or an error message string on failure or lack of permission.
+    """
     clients: dict[str, OpenAI] = {}
     disabled: bool = False
     
