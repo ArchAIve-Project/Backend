@@ -438,9 +438,21 @@ class InteractionContext:
         __str__():
             Returns a human-readable string representation of the InteractionContext instance, including provider, variant, history, tools, and configuration.
     
-    Additional Notes:
+    ### Usage Guide
+    - Main variations of `InteractionContext` that are typically employed:
+        - Regular prompting: Normal and VL models are fine. Tool invocations can be used.
+        - Image understanding: VL models are required. Ensure `imageMessageAcknowledged` is set to True when adding interactions. VL models cannot invoke tools.
+        - Tool invocations: Can be used with any model variant, but ensure the model supports tool calls.
+    - Do `print(cont)` to get a comprehensive overview of the entire context quickly. Helpful for debugging purposes.
+    - Do not use `temperature` and `top_p` at the same time.
+    - Avoid using `presence_penalty` and `top_p` at the same time, as they may conflict in some models.
+    - Returning `False` from a `preToolInvocationCallback` or `postToolInvocationCallback` will interrupt the `LLMInterface.engage` process and return immediately.
     - The `addInteraction` method raises an exception if an interaction with image data is added without acknowledging that the model variant supports image understanding.
     - This class should be used to encapsulate the context of a conversation with a language model, allowing for structured interactions and tool invocations.
+    
+    Advanced:
+    `Interaction` and `Tool` classes are Pythonic representations of JSON schemas required by the ultimate underlying Chat Completions API.
+    It is possible to use these classes to manually construct interactions and tools, and setup a custom workflow with `LLMInterface.manualPrompt`.
     """
     def __init__(
         self,
@@ -572,6 +584,102 @@ class LLMInterface:
         engage(context: InteractionContext) -> ChatCompletionMessage | str:
             Engages in a multi-turn interaction with a client, handling tool calls and callbacks as specified in the context.
             Returns the final ChatCompletionMessage, or an error message string on failure or lack of permission.
+    
+    ----
+    
+    ### Usage Guide
+    - You need a valid `ClientConfig` to add a new client. Parameters passed to `ClientConfig` should match the constructor of the `OpenAI` client.
+    - Ensure that the environment variable `LLMINTERFACE_ENABLED` is set to "True" to allow operations.
+    - Use `LLMInterface.initDefaultClients()` to initialize default clients based on the configurations in `ClientConfig.default()`.
+    - After setting up and adding a client, you can use it simply by referencing its name (`ClientConfig.name`).
+    - Use `LLMInterface.manualPrompt(client: str, **params)` to send a prompt through a specific client manually.
+    - Use `LLMInterface.engage(context: InteractionContext)` to engage LLMs in a complex interaction, including tool invocations and callbacks. Relies on `InteractionContext` to upkeep the conversation state and tools.
+    
+    Sample code (Non-`InteractionContext` usage):
+    ```python
+    from openai.types.chat import ChatCompletionMessage
+    from ai import LLMInterface, ClientConfig
+    
+    openaiConfig = ClientConfig(
+        "openai",
+        api_key=os.environ["OPENAI_API_KEY"],
+        base_url="https://api.openai.com/v1"
+    )
+    
+    LLMInterface.addClient(openaiConfig)
+    
+    message: ChatCompletionMessage = LLMInterface.manualPrompt(
+        "openai",
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": "Hello, who are you?"}
+        ]
+    )
+    print(message.content)  # Outputs the response from the LLM
+    ```
+    
+    Sample Code (Using `InteractionContext`):
+    ```python
+    from openai.types.chat import ChatCompletionMessage
+    from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant, ClientConfig, Tool
+
+    LLMInterface.initDefaultClients() # includes a "openai" (LMProvider.OPENAI) and "qwen" (LMProvider.QWEN) client as of writing
+
+    def get_BMI(weight: float, height: float) -> str:
+        return str(weight / (height ** 2))
+
+    bmiTool = Tool(
+        callback=get_BMI,
+        name="get_BMI",
+        description="Calculate Body Mass Index (BMI) from weight (kg) and height (m) inputs.",
+        parameters=[
+            Tool.Parameter(
+                name="weight",
+                description="Weight in kilograms (kg).",
+                dataType=Tool.Parameter.Type.NUMBER,
+                required=True
+            ),
+            Tool.Parameter(
+                name="height",
+                description="Height in meters (m).",
+                dataType=Tool.Parameter.Type.NUMBER,
+                required=True
+            )
+        ]
+    )
+
+    cont = InteractionContext(
+        provider=LMProvider.OPENAI,
+        variant=LMVariant.GPT_4O_MINI,
+        history=[],
+        tools=[bmiTool],
+        temperature=0.8,
+        preToolInvocationCallback=lambda toolInvocMsg: print("Tool invocation message:", toolInvocMsg),
+        postToolInvocationCallback=lambda toolResultMsg: print("Tool invocation result:", toolResultMsg)
+    )
+
+    cont.addInteraction(
+        Interaction(
+            role=Interaction.Role.SYSTEM,
+            content="You are a helpful assistant that can calculate BMI using the get_BMI tool."
+        )
+    )
+
+    cont.addInteraction(
+        Interaction(
+            role=Interaction.Role.USER,
+            content="What is my BMI if I weigh 70 kg and am 1.75 m tall?"
+        )
+    )
+
+    response: ChatCompletionMessage = LLMInterface.engage(cont)
+    if not isinstance(response, str):
+        print("Response from LLM:", response.content) # Your BMI is approximately 22.86
+    else:
+        print("Error response:", response)
+    ```
+    
+    Note: Ensure that environment variables and other requirements are set up correctly for clients to function properly.
     """
     clients: dict[str, OpenAI] = {}
     disabled: bool = False
