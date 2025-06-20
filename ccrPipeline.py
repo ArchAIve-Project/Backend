@@ -97,7 +97,7 @@ class CCRPipeline:
         else:
             model = ChineseClassifier(embed_dim=512, num_classes=1200)
 
-        checkpoint = torch.load(modelPath, map_location=DEVICE)
+        checkpoint = torch.load(modelPath, map_location=DEVICE, weights_only=True)
         state_dict = checkpoint.get("model_state_dict", checkpoint)
         model.load_state_dict(state_dict, strict=False)
         model.to(DEVICE)
@@ -282,8 +282,10 @@ class CCRPipeline:
                 ccrCharFilter=ccr_filter_ctx.model,
                 tracer=tracer
             )
+            
+            finalText = CCRPipeline.concatCharacters(recognized, tracer)
 
-            return CCRPipeline.concatCharacters(recognized, tracer)
+            return finalText
 
         except Exception as e:
             tracer.addReport(ASReport("transcribe", f"Error: {e}", {"error": str(e)}))

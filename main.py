@@ -12,7 +12,7 @@ CORS(app)
 
 @app.route('/')
 def home():
-    return "Welcome to ArchAIve!" 
+    return "Welcome to ArchAIve!"
 
 if __name__ == "__main__":
     # Boot pre-processing
