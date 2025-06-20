@@ -4,7 +4,9 @@ load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
 from flask_cors import CORS
 from emailer import Emailer
-from services import Universal, Logger, Encryption
+from ai import LLMInterface
+from addons import ModelStore, ModelContext, ArchSmith, ASTracer, ASReport
+from services import Universal, Logger, Encryption, ThreadManager
 from database import DI, Ref, DIError, JSONRes, ResType, FireConn, FireRTDB
 
 app = Flask(__name__)
@@ -41,15 +43,27 @@ if __name__ == "__main__":
         print(f"MAIN BOOT: Error during DI setup: {e}")
         sys.exit(1)
     
+    # Logging services
+    Logger.setup()
+    ArchSmith.setup()
+    
     # Check Emailer context
     Emailer.checkContext()
     print("EMAILER: Context checked. Services enabled:", Emailer.servicesEnabled)
     
-    # Logger service
-    Logger.setup() 
-    
     # Background thread
-    Universal.initAsync()
+    ThreadManager.initDefault()
+    print("THREADMANAGER: Default background scheduler initialised.")
+    
+    # Setup ModelStore
+    ModelStore.setup()
+    
+    # Setup LLMInterface
+    res = LLMInterface.initDefaultClients()
+    if res != True:
+        print("MAIN BOOT: Failed to initialise default clients for LLMInterface; response:", res)
+        sys.exit(1)
+    print("LLMINTERFACE: Default clients initialised successfully.")
     
     # Import and register API blueprints
     from api import apiBP

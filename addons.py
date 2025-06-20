@@ -170,6 +170,8 @@ class ModelStore:
         getModel(name: str) -> Model | None: Retrieves a model by its name from the context.
         removeModel(identifier: str | Model) -> bool: Removes a model from the context by its name or Model instance.
         new(model: Model) -> bool | str: Adds a new model to the context, downloading it if necessary.
+        registerLoadModelCallbacks(**kwargs) -> bool: Registers load callbacks for models in the context.
+        loadModels(*args) -> bool: Loads models by their names, executing their load callbacks if defined. Provide no arguments to load all models.
         
     ## Usage
     ```python
@@ -346,6 +348,30 @@ class ModelStore:
         return True
 
 class ASReport:
+    """
+    ASReport represents a structured report containing information about a specific event or message, 
+    including its source, message content, optional extra data, creation timestamp, and thread information.
+    
+    ### Args
+        source (str): The origin or source of the report.
+        message (str): The main message or description of the report.
+        extraData (dict | None): Optional additional data relevant to the report.
+    
+    ### Attributes
+        source (str): The origin or source of the report.
+        message (str): The main message or description of the report.
+        extraData (dict): Optional additional data relevant to the report.
+        created (str): The UTC timestamp string when the report was created.
+        threadInfo (str): Information about the thread where the report was created.
+    
+    ### Methods
+        represent() -> Dict[str, Any]:
+            Returns a dictionary representation of the report instance.
+        from_dict(data: Dict[str, Any]) -> 'ASReport':
+            Creates an ASReport instance from a dictionary.
+        threadInfoString() -> str:
+            Returns a string containing the current thread's identifier, name, and whether it is the main thread.
+    """
     def __init__(self, source: str, message: str, extraData: dict | None=None):
         self.source = source
         self.message = message
@@ -377,6 +403,42 @@ class ASReport:
         return f"{threading.get_ident()} {threading.current_thread().name} {isinstance(threading.current_thread(), threading._MainThread)}"
 
 class ASTracer:
+    """
+    ASTracer is a class for tracing and managing analysis session reports within the ArchAIve Backend system.
+    
+    ### Args
+        purpose (str): A description or purpose for the tracer instance.
+    
+    ### Attributes
+        id (str): Unique identifier for the tracer instance.
+        purpose (str): Description or purpose of the tracer.
+        created (str): UTC timestamp string when the tracer was created.
+        reports (List[ASReport]): List of active reports associated with the tracer.
+        pausedReports (List[ASReport]): List of reports collected while the system is paused.
+        threadInfo (str): Information about the thread in which the tracer was created.
+        started (Optional[str]): UTC timestamp string when the tracer was started.
+        finished (Optional[str]): UTC timestamp string when the tracer was finished.
+    
+    ### Methods
+        __init__(purpose: str):
+            Initializes a new ASTracer instance with the given purpose.
+        start():
+            Marks the tracer as started by recording the current UTC time.
+        end():
+            Marks the tracer as finished by recording the current UTC time.
+        addReport(report: ASReport) -> bool:
+            Adds a report to the tracer. If the system is paused, the report is added to pausedReports.
+            Returns True if the report was added successfully, False otherwise.
+        explicitResume() -> int:
+            Moves all paused reports to the main reports list and clears pausedReports.
+            Returns the number of reports restored.
+        threadInfoString() -> str:
+            Static method that returns a string with the current thread's identifier, name, and whether it is the main thread.
+        represent() -> Dict[str, Any]:
+            Returns a dictionary representation of the tracer and its reports.
+        from_dict(data: Dict[str, Any]) -> 'ASTracer':
+            Static method that creates an ASTracer instance from a dictionary representation.
+    """
     def __init__(self, purpose: str):
         self.id = Universal.generateUniqueID()
         self.purpose = purpose
@@ -454,13 +516,86 @@ class ASTracer:
         return tracer
 
 class ArchSmith:
+    """
+    ArchSmith is a static utility class for managing ASTracer instances and persisting their state to a JSON file.
+    It provides tracer creation, data file management, and controls for pausing, resuming, and shutting down tracer operations.
+    
+    Attributes:
+        dataFile (str): The filename for storing tracer data in JSON format.
+        cache (Dict[str, ASTracer]): A cache mapping tracer IDs to ASTracer instances.
+        paused (bool): Indicates whether all tracers are currently paused.
+    
+    Static Methods:
+        checkPermissions():
+            Checks if ArchSmith is enabled via the "ARCHSMITH_ENABLED" environment variable.
+        setup():
+            Initializes ArchSmith by checking permissions and ensuring the data file exists.
+        ensureDataFile():
+            Ensures the data file exists; creates it if missing.
+        newTracer(purpose: str) -> ASTracer:
+            Creates a new ASTracer for the given purpose and adds it to the cache.
+        persist():
+            Persists the current state of all tracers to the data file and removes finished tracers from the cache.
+        pause():
+            Pauses all tracers and prevents further report tracking until resumed.
+        resume(dropPausedReports: bool=False, autoPersist: bool=True):
+            Resumes all tracers, optionally dropping paused reports or restoring them, and optionally persists state.
+        shutdown(gracefully: bool=True):
+            Shuts down ArchSmith, optionally persisting all tracer data before clearing the cache and resetting state.
+    
+    ### Usage Guide
+    - ArchSmith has been designed to be a centralized utility for tracer management and report processing.
+    - The utility taps on a tracer's memory reference, which is internally stored, allowing for report collection from any thread, process or part of system execution.
+    - It is highly recommended to call `ArchSmith.persist()` periodically to ensure that all reports are saved to disk.
+    - For efficiency, ArchSmith will only keep tracers in memory that are actively being used, and will automatically remove finished tracers from the cache.
+    - Use `ArchSmith.pause()` to temporarily halt report collection, and `ArchSmith.resume()` to continue.
+    
+    Sample code:
+    ```python
+    import time
+    from addons import ArchSmith, ASTracer, ASReport
+    from services import ThreadManager
+    
+    ThreadManager.initDefault()
+    if ArchSmith.setup() != True:  # Ensure ArchSmith is set up and ready to use
+        exit()
+    
+    def asyncWork(tracer: ASTracer):
+        print("... Some work here ...")
+        tracer.addReport(ASReport(source="ASYNCWORK", message="Work was done successfully.", extraData={"result": "success"}))
+        tracer.end()
+    
+    tracer = ArchSmith.newTracer("Example purpose")
+    ThreadManager.defaultProcessor.addJob(asyncWork, tracer) # Add a job to execute asyncWork on a background thread immediately
+    
+    time.sleep(2) # Simulate some time passing
+    ArchSmith.persist()  # Persist the tracer data to the JSON file. This should also remove the tracer from the ArchSmith.cache, as tracer.end() was called.
+    ```
+    
+    Note: Though ArchSmith is designed to be thread-safe, the user should ensure that the `ArchSmith.persist()` method is called in a controlled manner, or at least in a singular context.
+    """
     dataFile = "archsmith.json"
     
     cache: Dict[str, ASTracer] = {}
     paused: bool = False
     
     @staticmethod
+    def checkPermissions():
+        return os.environ.get("ARCHSMITH_ENABLED", "False") == "True"
+    
+    @staticmethod
+    def setup():
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
+        ArchSmith.ensureDataFile()
+        return True
+    
+    @staticmethod
     def ensureDataFile():
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         if not os.path.isfile(os.path.join(os.getcwd(), ArchSmith.dataFile)):
             with open(ArchSmith.dataFile, 'w') as f:
                 json.dump({}, f, indent=4)
@@ -469,6 +604,17 @@ class ArchSmith:
     
     @staticmethod
     def newTracer(purpose: str) -> ASTracer:
+        """
+        Creates a new ASTracer instance for the specified purpose if permissions are granted.
+        Args:
+            purpose (str): The purpose or description for the new tracer.
+        Returns:
+            ASTracer: The newly created tracer object if permissions are granted.
+            str: An error message if ArchSmith does not have permission to operate.
+        """
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         tracer = ASTracer(purpose)
         ArchSmith.cache[tracer.id] = tracer
         
@@ -476,6 +622,22 @@ class ArchSmith:
 
     @staticmethod
     def persist():
+        """
+        Persists the current state of ArchSmith's cache to a data file.
+        This function performs the following steps:
+        1. Checks if ArchSmith has the necessary permissions to operate. Returns an error message if not.
+        2. Ensures the data file exists.
+        3. Creates a deep copy of the current cache.
+        4. Loads existing data from the data file.
+        5. Updates the data with the representations of tracers from the copied cache.
+        6. Removes finished tracers from the original cache.
+        7. Writes the updated data back to the data file.
+        Returns:
+            str: An error message if permissions are insufficient, otherwise None.
+        """
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         ArchSmith.ensureDataFile()
         copiedCache = copy.deepcopy(ArchSmith.cache)
         
@@ -493,6 +655,14 @@ class ArchSmith:
     
     @staticmethod
     def pause():
+        """
+        Pauses all tracers in ArchSmith, preventing reports from being tracked until resumed.
+        Returns:
+            bool or str: Returns True if the operation is successful. Returns an error message string if ArchSmith lacks the necessary permissions.
+        """
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         ArchSmith.paused = True
         Logger.log("ARCHSMITH PAUSE: All tracers are now paused. Reports will not be tracked until resumed.")
         
@@ -500,6 +670,18 @@ class ArchSmith:
     
     @staticmethod
     def resume(dropPausedReports: bool=False, autoPersist: bool=True):
+        """
+        Resumes the ArchSmith operation, optionally dropping or restoring paused reports and persisting state.
+        Args:
+            dropPausedReports (bool, optional): If True, all paused reports are dropped and cleared from tracers. 
+                If False, attempts to restore all paused reports. Defaults to False.
+            autoPersist (bool, optional): If True, persists the current state after resuming. Defaults to True.
+        Returns:
+            bool or str: Returns True if the operation was successful, or an error message string if permissions are insufficient.
+        """
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         ArchSmith.paused = False
         
         if dropPausedReports:
@@ -521,6 +703,22 @@ class ArchSmith:
     
     @staticmethod
     def shutdown(gracefully: bool=True):
+        """
+        Shuts down the ArchSmith system, either gracefully or forcefully.
+        Args:
+            gracefully (bool, optional): If True, persists all tracers and reports before shutdown. 
+                If False, shuts down immediately without persisting. Defaults to True.
+        Returns:
+            bool or str: Returns True if shutdown is successful, or an error message string if permissions are insufficient.
+        Behavior:
+            - Checks if ArchSmith has permission to operate.
+            - If 'gracefully' is True, ends all tracers, persists data, and logs the shutdown.
+            - If 'gracefully' is False, logs a force shutdown without persisting data.
+            - Clears the ArchSmith cache and resets the paused state.
+        """
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         if gracefully:
             for tracer in ArchSmith.cache.values():
                 tracer.end()
