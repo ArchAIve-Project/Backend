@@ -1,4 +1,3 @@
-# === Imports ===
 import os
 import json
 import cv2
@@ -111,13 +110,13 @@ class CCRPipeline:
         Adds padding around the character and centers it in a square image.
         Helps with consistent input shape for the classifier.
         """
-        tracer.addReport(ASReport("padToSquare", "Padding image to square shape"))
         h, w = image.shape
         size = max(h, w)
         square = np.zeros((size, size), dtype=np.uint8)
         y_offset = (size - h) // 2
         x_offset = (size - w) // 2
         square[y_offset:y_offset + h, x_offset:x_offset + w] = image
+        tracer.addReport(ASReport("CCRPIPELINE PADTOSQUARE", "Image padded to square shape"))
         return cv2.copyMakeBorder(square, padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=0)
 
     @staticmethod
@@ -126,13 +125,12 @@ class CCRPipeline:
         Segments a scanned handwritten document image into individual character images.
         Follows right-to-left, top-to-bottom reading order typical of traditional Chinese.
         """
-        tracer.addReport(ASReport("segmentImage", f"Segmenting image: {image_path}"))
-
+        
         # Load image and convert to binary
         img = cv2.imread(image_path, cv2.IMREAD_COLOR)
         if img is None:
             error_msg = f"Could not read image: {image_path}"
-            tracer.addReport(ASReport("segmentImage", error_msg, {"error": True}))
+            tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE ERROR", error_msg, {"error": True}))
             raise FileNotFoundError(error_msg)
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -163,8 +161,6 @@ class CCRPipeline:
         if in_region:
             columns.append((0, end))
 
-        tracer.addReport(ASReport("segmentImage", f"Found {len(columns)} columns"))
-
         # Segment characters in each column
         char_images = []
         for col_idx, (x1, x2) in enumerate(columns):
@@ -194,14 +190,14 @@ class CCRPipeline:
                 if bottom - top >= 20:
                     char_regions.append((top, bottom))
 
-            tracer.addReport(ASReport("segmentImage", f"Column {col_idx}: Found {len(char_regions)} characters"))
-
             for char_idx, (y1, y2) in enumerate(char_regions):
                 char_img = col_img[y1:y2, :]
                 if char_img.size == 0:
                     continue
                 padded_img = CCRPipeline.padToSquare(char_img, tracer)
                 char_images.append((col_idx, padded_img))
+                
+        tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE", f"Segmented image: {image_path}"))
 
         return char_images
 
@@ -211,8 +207,7 @@ class CCRPipeline:
         Filters out noise using the binary classifier, and recognizes valid characters using the main model.
         Returns a dictionary mapping column index to character list.
         """
-        tracer.addReport(ASReport("detectCharacters", "Filtering & recognizing characters"))
-
+        
         transform = transforms.Compose([
             transforms.Lambda(lambda x: cv2.cvtColor(x, cv2.COLOR_GRAY2RGB)),
             transforms.ToPILImage(),
@@ -243,7 +238,7 @@ class CCRPipeline:
 
         total = sum(len(chars) for chars in result.values())
         removed = len(char_images) - len(kept_images)
-        tracer.addReport(ASReport("detectCharacters", f"{total} recognized, {removed} filtered out"))
+        tracer.addReport(ASReport("CCRPIPELINE DETECTCHARACTERS", f"{total} recognized, {removed} filtered out."))
         return result
 
     @staticmethod
@@ -252,8 +247,9 @@ class CCRPipeline:
         Combines the recognized characters into a final output string,
         preserving the RTL, top-down reading order.
         """
-        tracer.addReport(ASReport("concatCharacters", "Reconstructing final text (RTL)"))
-        return "\n".join("".join(result_dict[col]) for col in sorted(result_dict.keys()))
+        concatText = "\n".join("".join(result_dict[col]) for col in sorted(result_dict.keys()))
+        tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", "Reconstructed final text."))
+        return concatText
 
     @staticmethod
     def transcribe(image_path: str, tracer: ASTracer = None):
