@@ -460,7 +460,22 @@ class ArchSmith:
     paused: bool = False
     
     @staticmethod
+    def checkPermissions():
+        return os.environ.get("ARCHSMITH_ENABLED", "False") == "True"
+    
+    @staticmethod
+    def setup():
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
+        ArchSmith.ensureDataFile()
+        return True
+    
+    @staticmethod
     def ensureDataFile():
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         if not os.path.isfile(os.path.join(os.getcwd(), ArchSmith.dataFile)):
             with open(ArchSmith.dataFile, 'w') as f:
                 json.dump({}, f, indent=4)
@@ -469,6 +484,9 @@ class ArchSmith:
     
     @staticmethod
     def newTracer(purpose: str) -> ASTracer:
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         tracer = ASTracer(purpose)
         ArchSmith.cache[tracer.id] = tracer
         
@@ -476,6 +494,9 @@ class ArchSmith:
 
     @staticmethod
     def persist():
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         ArchSmith.ensureDataFile()
         copiedCache = copy.deepcopy(ArchSmith.cache)
         
@@ -493,6 +514,9 @@ class ArchSmith:
     
     @staticmethod
     def pause():
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         ArchSmith.paused = True
         Logger.log("ARCHSMITH PAUSE: All tracers are now paused. Reports will not be tracked until resumed.")
         
@@ -500,6 +524,9 @@ class ArchSmith:
     
     @staticmethod
     def resume(dropPausedReports: bool=False, autoPersist: bool=True):
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         ArchSmith.paused = False
         
         if dropPausedReports:
@@ -521,6 +548,9 @@ class ArchSmith:
     
     @staticmethod
     def shutdown(gracefully: bool=True):
+        if not ArchSmith.checkPermissions():
+            return "ERROR: ArchSmith does not have permission to operate."
+        
         if gracefully:
             for tracer in ArchSmith.cache.values():
                 tracer.end()
