@@ -162,6 +162,9 @@ class Tool:
             self.description = description
             self.required = required
         
+        def __str__(self):
+            return f"Parameter(name={self.name}, type={self.type}, description={self.description}, required={self.required})"
+        
     def __init__(self, callback, name: str, description: str, parameters: List[Parameter] | None=None):
         if not callable(callback):
             raise ValueError("Callback must be a callable function.")
@@ -194,6 +197,9 @@ class Tool:
             }
 
         return data
+
+    def __str__(self):
+        return f"Tool(name={self.name}, description={self.description}, parameters={', '.join(str(param) for param in self.parameters) if self.parameters else 'None'})"
         
 
 class InteractionContext:
@@ -252,6 +258,24 @@ class InteractionContext:
             params["top_p"] = self.top_p
         
         return params
+    
+    def __str__(self):        
+        return f"""<InteractionContext Instance:
+Provider: {self.provider}
+Variant: {self.variant}
+History:
+---
+{"\n".join(str(interaction) for interaction in self.history) if self.history else "None"}
+---
+Tools:
+---
+{"\n".join(str(tool) for tool in self.tools) if self.tools else "None"}
+---
+Temperature: {self.temperature}
+Presence Penalty: {self.presence_penalty}
+Top P: {self.top_p}
+Pre-Tool Invocation Callback: {"Yes" if self.preToolInvocationCallback else "No"}
+Post-Tool Invocation Callback: {"Yes" if self.postToolInvocationCallback else "No"} />"""
 
 class LLMInterface:
     clients: dict[str, OpenAI] = {}
