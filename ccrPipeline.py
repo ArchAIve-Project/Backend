@@ -70,6 +70,8 @@ class CCRPipeline:
     """
     The full pipeline to transcribe handwritten Chinese characters from a scanned image.
     """
+    
+    idx2char = None
 
     @staticmethod
     def load_label_mappings():
@@ -291,8 +293,6 @@ class CCRPipeline:
         - Filter and recognize characters
         - Return final transcription
         """
-        tracer = tracer or ASTracer("CCRPipeline_transcribe")
-        tracer.start() #dont need to start, .addreport starts the tracer automatically
 
         try:
             ccr_model_ctx = ModelStore.getModel("ccr")
@@ -303,19 +303,21 @@ class CCRPipeline:
             if not ccr_filter_ctx or not ccr_filter_ctx.model:
                 raise ValueError("CCR Char Filter model not loaded")
 
-            idx2char = CCRPipeline.load_label_mappings()
+            # Load and cache idx2char only once
+            if CCRPipeline.idx2char is None:
+                CCRPipeline.idx2char = CCRPipeline.load_label_mappings()
+
             char_images = CCRPipeline.segmentImage(image_path, tracer)
 
             recognized = CCRPipeline.detectCharacters(
                 char_images,
                 recog_model=ccr_model_ctx.model,
-                idx2char=idx2char,
+                idx2char=CCRPipeline.idx2char,
                 ccrCharFilter=ccr_filter_ctx.model,
                 tracer=tracer
             )
-            
-            finalText = CCRPipeline.concatCharacters(recognized, tracer)
 
+            finalText = CCRPipeline.concatCharacters(recognized, tracer)
             return finalText
 
         except Exception as e:
@@ -323,7 +325,6 @@ class CCRPipeline:
             raise
         finally:
             tracer.end()
-
 
 # === Entry Point ===
 
