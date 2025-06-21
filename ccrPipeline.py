@@ -128,27 +128,31 @@ class CCRPipeline:
         Segments a scanned handwritten document image into individual character images.
         Follows right-to-left, top-to-bottom reading order typical of traditional Chinese.
         """
-        
-        # Load image and convert to binary
+
+        # Read the image in color
         img = cv2.imread(image_path, cv2.IMREAD_COLOR)
         if img is None:
             error_msg = f"Could not read image: {image_path}"
             tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE ERROR", error_msg))
             raise FileNotFoundError(error_msg)
 
+        # Convert the image to grayscale and apply binarization (inverse + Otsu)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-        # Denoise and extract vertical column structure
+        # Apply morphological opening to clean up small noise (1x1 is minimal but useful)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
         denoised = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
 
+        # Create a vertical projection profile to estimate column positions
         vertical_proj = np.sum(denoised, axis=0)
         smooth_proj = cv2.GaussianBlur(vertical_proj.astype(np.float32), (25, 1), 0)
+
+        # Threshold the smoothed projection to find regions considered part of a column
         threshold = np.max(smooth_proj) * 0.05
         in_column = smooth_proj > threshold
 
-        # Detect columns (right to left)
+        # Iterate the projection (right to left) to detect column boundaries
         columns = []
         in_region = False
         for i, val in enumerate(in_column[::-1]):
@@ -158,13 +162,13 @@ class CCRPipeline:
                 in_region = True
             elif not val and in_region:
                 start = idx
-                if end - start >= 10:
+                if end - start >= 10:  # Filter out narrow strips
                     columns.append((start, end))
                 in_region = False
         if in_region:
-            columns.append((0, end))
+            columns.append((0, end))  # Final column if still open
 
-        # Segment characters in each column
+        # Process each column to detect characters within
         char_images = []
         padded_count = 0
         pad_errors = []
@@ -173,13 +177,19 @@ class CCRPipeline:
             col_img = denoised[:, x1:x2]
             if col_img.size == 0:
                 continue
+
+            # Scale up column for better resolution and separation
             col_img = cv2.resize(col_img, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
 
+            # Generate horizontal projection profile to find characters within the column
             horizontal_proj = np.sum(col_img, axis=1)
             smooth_hproj = cv2.GaussianBlur(horizontal_proj.astype(np.float32), (15, 1), 0)
+
+            # Threshold to identify horizontal spans where characters likely exist
             threshold = np.max(smooth_hproj) * 0.05
             in_char = smooth_hproj > threshold
 
+            # Detect character row regions within the column
             char_regions = []
             in_region = False
             for i, val in enumerate(in_char):
@@ -188,7 +198,7 @@ class CCRPipeline:
                     in_region = True
                 elif not val and in_region:
                     bottom = i
-                    if bottom - top >= 20:
+                    if bottom - top >= 20:  # Filter out tiny components
                         char_regions.append((top, bottom))
                     in_region = False
             if in_region:
@@ -196,6 +206,7 @@ class CCRPipeline:
                 if bottom - top >= 20:
                     char_regions.append((top, bottom))
 
+            # Extract each character image and pad it to square
             for char_idx, (y1, y2) in enumerate(char_regions):
                 char_img = col_img[y1:y2, :]
                 if char_img.size == 0:
@@ -207,7 +218,7 @@ class CCRPipeline:
                 except Exception as e:
                     pad_errors.append(str(e))
 
-        # Summary report for all padding
+        # Report how many characters were padded and any errors that occurred
         summary_msg = f"{padded_count} images padded to square."
         if pad_errors:
             summary_msg += f" {len(pad_errors)} failed with errors: {', '.join(pad_errors[:3])}"
@@ -218,6 +229,16 @@ class CCRPipeline:
         tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE", f"Segmented image: {image_path}"))
 
         return char_images
+    
+    # Static transform reused for all image inputs
+    transform = transforms.Compose([
+        transforms.Lambda(lambda x: cv2.cvtColor(x, cv2.COLOR_GRAY2RGB)),
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225])
+    ])
 
     @staticmethod
     def detectCharacters(char_images, recog_model, idx2char, ccrCharFilter, tracer: ASTracer):
@@ -225,22 +246,13 @@ class CCRPipeline:
         Filters out noise using the binary classifier, and recognizes valid characters using the main model.
         Returns a dictionary mapping column index to character list.
         """
-        
-        transform = transforms.Compose([
-            transforms.Lambda(lambda x: cv2.cvtColor(x, cv2.COLOR_GRAY2RGB)),
-            transforms.ToPILImage(),
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
-        ])
 
         result = {}
         kept_images = []
 
         # First filter using binary classifier
         for col_idx, img in char_images:
-            tensor = transform(img).unsqueeze(0).to(DEVICE)
+            tensor = CCRPipeline.transform(img).unsqueeze(0).to(DEVICE)
             with torch.no_grad():
                 prob = torch.sigmoid(ccrCharFilter(tensor)).item()
             if prob < 0.5:  # 0 = valid char
@@ -248,7 +260,7 @@ class CCRPipeline:
 
         # Recognize using multiclass classifier
         for col_idx, img in kept_images:
-            tensor = transform(img).unsqueeze(0).to(DEVICE)
+            tensor = CCRPipeline.transform(img).unsqueeze(0).to(DEVICE)
             with torch.no_grad():
                 logits = recog_model(tensor)
                 pred_idx = torch.argmax(torch.softmax(logits, dim=1), dim=1).item()
@@ -336,8 +348,3 @@ if __name__ == "__main__":
 
     print(f"CCR model output shape: {ccr_ctx.model(test_tensor).shape}")
     print(f"Filter model output shape: {filter_ctx.model(test_tensor).shape}")
-
-
-
-# TODO: 
-# Consider AST report appearing 1 time per img
