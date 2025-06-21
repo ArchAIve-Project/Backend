@@ -71,7 +71,17 @@ class CCRPipeline:
     The full pipeline to transcribe handwritten Chinese characters from a scanned image.
     """
     
-    idx2char = None
+    idx2char = None    
+    
+    # Static transform reused for all image inputs
+    transform = transforms.Compose([
+        transforms.Lambda(lambda x: cv2.cvtColor(x, cv2.COLOR_GRAY2RGB)),
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225])
+    ])
 
     @staticmethod
     def load_label_mappings():
@@ -231,16 +241,6 @@ class CCRPipeline:
         tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE", f"Segmented image: {image_path}"))
 
         return char_images
-    
-    # Static transform reused for all image inputs
-    transform = transforms.Compose([
-        transforms.Lambda(lambda x: cv2.cvtColor(x, cv2.COLOR_GRAY2RGB)),
-        transforms.ToPILImage(),
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225])
-    ])
 
     @staticmethod
     def detectCharacters(char_images, recog_model, idx2char, ccrCharFilter, tracer: ASTracer):
@@ -318,14 +318,13 @@ class CCRPipeline:
             )
 
             finalText = CCRPipeline.concatCharacters(recognized, tracer)
+            tracer.end()
             return finalText
 
         except Exception as e:
             tracer.addReport(ASReport("transcribe", f"Error: {e}", {"error": str(e)}))
-            return str(e)
-
-        finally:
             tracer.end()
+            return str(e)
 
 # === Entry Point ===
 

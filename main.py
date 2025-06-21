@@ -6,8 +6,6 @@ from flask_cors import CORS
 from emailer import Emailer
 from services import Universal, Logger, Encryption
 from database import DI, Ref, DIError, JSONRes, ResType, FireConn, FireRTDB
-from addons import ModelStore, ModelContext
-from ccrPipeline import CCRPipeline
 
 app = Flask(__name__)
 CORS(app)
@@ -52,10 +50,6 @@ if __name__ == "__main__":
     
     # Background thread
     Universal.initAsync()
-    
-    # Model initialization
-    ModelStore.registerLoadModelCallbacks(ccr=CCRPipeline.loadChineseClassifier, ccrCharFilter=CCRPipeline.loadBinaryClassifier)
-    ModelStore.loadModels()
     
     # Import and register API blueprints
     from api import apiBP
