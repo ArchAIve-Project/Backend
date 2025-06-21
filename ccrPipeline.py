@@ -6,6 +6,7 @@ import numpy as np
 from torch import nn
 from torchvision import models, transforms
 from addons import ModelStore, ASTracer, ASReport
+from ai import LLMInterface, InteractionContext, Interaction, Tool, LMProvider, LMVariant
 
 # === Constants ===
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -283,6 +284,71 @@ class CCRPipeline:
         textCount = sum(len(chars) for chars in result_dict.values())
         tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", f"Reconstructed final text. Number of text: {textCount}"))
         return concatText
+    
+    @staticmethod
+    def llmCorrection(image_path: str, predicted_text: str, tracer) -> str:
+        """
+        Sends the predicted Chinese calligraphy text and its corresponding image to an LLM for correction.
+        Returns the LLM-corrected version of the text and logs the result to the tracer.
+        """
+
+        LLMInterface.initDefaultClients()
+
+        def get_ccrCorrected(filePath: str, predText: str) -> str:
+            return predText.strip()
+
+        def preToolCallback(msg): print(f"\n[PRE-LLM] {msg}\n")
+        def postToolCallback(msg): print(f"\n[POST-LLM] {msg}\n")
+
+        cont = InteractionContext(
+            provider=LMProvider.QWEN,
+            variant=LMVariant.QWEN_VL_PLUS,
+            tools=[
+                Tool(
+                    callback=get_ccrCorrected,
+                    name="get_ccrCorrected",
+                    description="This tool can correct predicted Chinese Calligraphy text.",
+                    parameters=[
+                        Tool.Parameter(
+                            name="filePath",
+                            dataType=Tool.Parameter.Type.STRING,
+                            description="Image of Chinese Calligraphy meeting minutes.",
+                            required=True
+                        ),
+                        Tool.Parameter(
+                            name="predText",
+                            dataType=Tool.Parameter.Type.STRING,
+                            description="Predicted text from OCR or recognition model.",
+                            required=True
+                        )
+                    ]
+                )
+            ],
+            preToolInvocationCallback=preToolCallback,
+            postToolInvocationCallback=postToolCallback
+        )
+
+        cont.addInteraction(
+            Interaction(
+                role=Interaction.Role.USER,
+                content=f"Based on the image provided, correct the predicted text. {predicted_text.strip()} Only output the corrected Chinese text, nothing else.",
+                imagePath=image_path,
+                imageFileType="image/jpg"
+            ),
+            imageMessageAcknowledged=True
+        )
+
+        try:
+            response = LLMInterface.engage(cont)
+            print(response)
+            corrected = response.content.strip()
+            textCount = len(corrected)
+            
+            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION", f"LLM correction applied. Final text count: {textCount}"))
+            return corrected
+        except Exception as e:
+            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION ERROR", f"LLM correction failed: {e}"))
+            return predicted_text  # fallback to uncorrected text
 
     @staticmethod
     def transcribe(image_path: str, tracer: ASTracer):
@@ -291,7 +357,8 @@ class CCRPipeline:
         - Load models from ModelStore
         - Segment image
         - Filter and recognize characters
-        - Return final transcription
+        - Corrects predicted transcription using an LLM
+        - Returns final transcription
         """
 
         try:
@@ -317,9 +384,12 @@ class CCRPipeline:
                 tracer=tracer
             )
 
-            finalText = CCRPipeline.concatCharacters(recognized, tracer)
+            predText = CCRPipeline.concatCharacters(recognized, tracer)
+
+            correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer)
+
             tracer.end()
-            return finalText
+            return correctedText
 
         except Exception as e:
             tracer.addReport(ASReport("transcribe", f"Error: {e}", {"error": str(e)}))
