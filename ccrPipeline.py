@@ -133,7 +133,7 @@ class CCRPipeline:
         img = cv2.imread(image_path, cv2.IMREAD_COLOR)
         if img is None:
             error_msg = f"Could not read image: {image_path}"
-            tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE ERROR", error_msg, {"error": True}))
+            tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE ERROR", error_msg))
             raise FileNotFoundError(error_msg)
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -214,7 +214,7 @@ class CCRPipeline:
             if len(pad_errors) > 3:
                 summary_msg += f", and {len(pad_errors) - 3} more."
 
-        tracer.addReport(ASReport("CCRPIPELINE PADTOSQUARE SUMMARY", summary_msg))
+        tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE PADTOSQUARE", summary_msg))
         tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE", f"Segmented image: {image_path}"))
 
         return char_images
@@ -266,7 +266,8 @@ class CCRPipeline:
         preserving the RTL, top-down reading order.
         """
         concatText = "\n".join("".join(result_dict[col]) for col in sorted(result_dict.keys()))
-        tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", "Reconstructed final text."))
+        textCount = sum(len(chars) for chars in result_dict.values())
+        tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", f"Reconstructed final text. Number of text: {textCount}"))
         return concatText
 
     @staticmethod
