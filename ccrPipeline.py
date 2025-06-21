@@ -83,6 +83,9 @@ class CCRPipeline:
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                             std=[0.229, 0.224, 0.225])
     ])
+    
+    # Initialize the LLM clients once, so we don’t do it on every function call.
+    LLMInterface.initDefaultClients()
 
     @staticmethod
     def load_label_mappings():
@@ -285,6 +288,43 @@ class CCRPipeline:
         tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", f"Reconstructed final text. Number of text: {textCount}"))
         return concatText
     
+    # Define the callback function for the LLM tool.
+    def getccrCorrected(filePath: str, predText: str) -> str:
+        """
+        Simple passthrough callback for the tool that trims whitespace from the predicted text.
+        """
+        return predText.strip()
+
+    # Pre-tool invocation callback to log or handle messages before tool runs.
+    def preToolCallback(msg):
+        print(f"\n[PRE-LLM] {msg}\n")
+
+    # Post-tool invocation callback to log or handle messages after tool runs.
+    def postToolCallback(msg):
+        print(f"\n[POST-LLM] {msg}\n")
+
+    # Define the LLM Tool once and reuse it for all calls.
+    # This tool describes what parameters it expects and what it does.
+    TOOL_GET_CCR_CORRECTED = Tool(
+        callback=getccrCorrected,
+        name="get_ccrCorrected",
+        description="This tool can correct predicted Chinese Calligraphy text.",
+        parameters=[
+            Tool.Parameter(
+                name="filePath",
+                dataType=Tool.Parameter.Type.STRING,
+                description="Image of Chinese Calligraphy meeting minutes.",
+                required=True
+            ),
+            Tool.Parameter(
+                name="predText",
+                dataType=Tool.Parameter.Type.STRING,
+                description="Predicted text from OCR or recognition model.",
+                required=True
+            )
+        ]
+    )
+    
     @staticmethod
     def llmCorrection(image_path: str, predicted_text: str, tracer) -> str:
         """
@@ -292,42 +332,18 @@ class CCRPipeline:
         Returns the LLM-corrected version of the text and logs the result to the tracer.
         """
 
-        LLMInterface.initDefaultClients()
-
-        def get_ccrCorrected(filePath: str, predText: str) -> str:
-            return predText.strip()
-
-        def preToolCallback(msg): print(f"\n[PRE-LLM] {msg}\n")
-        def postToolCallback(msg): print(f"\n[POST-LLM] {msg}\n")
-
+        # Create a new interaction context for each call with the reused tool and callbacks.
         cont = InteractionContext(
             provider=LMProvider.QWEN,
             variant=LMVariant.QWEN_VL_PLUS,
-            tools=[
-                Tool(
-                    callback=get_ccrCorrected,
-                    name="get_ccrCorrected",
-                    description="This tool can correct predicted Chinese Calligraphy text.",
-                    parameters=[
-                        Tool.Parameter(
-                            name="filePath",
-                            dataType=Tool.Parameter.Type.STRING,
-                            description="Image of Chinese Calligraphy meeting minutes.",
-                            required=True
-                        ),
-                        Tool.Parameter(
-                            name="predText",
-                            dataType=Tool.Parameter.Type.STRING,
-                            description="Predicted text from OCR or recognition model.",
-                            required=True
-                        )
-                    ]
-                )
-            ],
-            preToolInvocationCallback=preToolCallback,
-            postToolInvocationCallback=postToolCallback
+            tools=[CCRPipeline.TOOL_GET_CCR_CORRECTED],
+            preToolInvocationCallback=CCRPipeline.preToolCallback,
+            postToolInvocationCallback=CCRPipeline.postToolCallback
         )
 
+        # Add the user interaction to the context:
+        # Ask the LLM to correct the predicted text based on the image.
+        # The LLM is expected to only output corrected Chinese text.
         cont.addInteraction(
             Interaction(
                 role=Interaction.Role.USER,
@@ -340,7 +356,6 @@ class CCRPipeline:
 
         try:
             response = LLMInterface.engage(cont)
-            print(response)
             corrected = response.content.strip()
             textCount = len(corrected)
             
