@@ -110,10 +110,9 @@ class CCRPipeline:
         return model
 
     @staticmethod
-    def padToSquare(image, tracer: ASTracer, padding: int = 40):
+    def padToSquare(image, padding: int = 40):
         """
         Adds padding around the character and centers it in a square image.
-        Helps with consistent input shape for the classifier.
         """
         h, w = image.shape
         size = max(h, w)
@@ -121,7 +120,6 @@ class CCRPipeline:
         y_offset = (size - h) // 2
         x_offset = (size - w) // 2
         square[y_offset:y_offset + h, x_offset:x_offset + w] = image
-        tracer.addReport(ASReport("CCRPIPELINE PADTOSQUARE", "Image padded to square shape"))
         return cv2.copyMakeBorder(square, padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=0)
 
     @staticmethod
@@ -168,6 +166,9 @@ class CCRPipeline:
 
         # Segment characters in each column
         char_images = []
+        padded_count = 0
+        pad_errors = []
+
         for col_idx, (x1, x2) in enumerate(columns):
             col_img = denoised[:, x1:x2]
             if col_img.size == 0:
@@ -199,9 +200,21 @@ class CCRPipeline:
                 char_img = col_img[y1:y2, :]
                 if char_img.size == 0:
                     continue
-                padded_img = CCRPipeline.padToSquare(char_img, tracer)
-                char_images.append((col_idx, padded_img))
-                
+                try:
+                    padded_img = CCRPipeline.padToSquare(char_img)
+                    char_images.append((col_idx, padded_img))
+                    padded_count += 1
+                except Exception as e:
+                    pad_errors.append(str(e))
+
+        # Summary report for all padding
+        summary_msg = f"{padded_count} images padded to square."
+        if pad_errors:
+            summary_msg += f" {len(pad_errors)} failed with errors: {', '.join(pad_errors[:3])}"
+            if len(pad_errors) > 3:
+                summary_msg += f", and {len(pad_errors) - 3} more."
+
+        tracer.addReport(ASReport("CCRPIPELINE PADTOSQUARE SUMMARY", summary_msg))
         tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE", f"Segmented image: {image_path}"))
 
         return char_images
