@@ -84,19 +84,24 @@ class CCRPipeline:
         return {idx: char for idx, char in enumerate(unique_chars)}
 
     @staticmethod
-    def loadModel(modelPath: str, modelName: str = None):
+    def loadChineseClassifier(modelPath: str):
         """
-        Loads either the main recognition model or the binary filter model
-        based on the file name or explicitly provided name.
+        Standardized loader for the main Chinese character classifier model.
         """
-        if modelName is None:
-            modelName = "ccrCharFilter" if "ccrcharfilter" in modelPath.lower() else "ccr"
+        model = ChineseClassifier(embed_dim=512, num_classes=1200)
+        checkpoint = torch.load(modelPath, map_location=DEVICE, weights_only=True)
+        state_dict = checkpoint.get("model_state_dict", checkpoint)
+        model.load_state_dict(state_dict, strict=False)
+        model.to(DEVICE)
+        model.eval()
+        return model
 
-        if modelName == "ccrCharFilter":
-            model = ChineseBinaryClassifier()
-        else:
-            model = ChineseClassifier(embed_dim=512, num_classes=1200)
-
+    @staticmethod
+    def loadBinaryClassifier(modelPath: str):
+        """
+        Standardized loader for the binary character filter model.
+        """
+        model = ChineseBinaryClassifier()
         checkpoint = torch.load(modelPath, map_location=DEVICE, weights_only=True)
         state_dict = checkpoint.get("model_state_dict", checkpoint)
         model.load_state_dict(state_dict, strict=False)
@@ -252,7 +257,7 @@ class CCRPipeline:
         return concatText
 
     @staticmethod
-    def transcribe(image_path: str, tracer: ASTracer = None):
+    def transcribe(image_path: str, tracer: ASTracer):
         """
         Full pipeline execution:
         - Load models from ModelStore
@@ -261,7 +266,7 @@ class CCRPipeline:
         - Return final transcription
         """
         tracer = tracer or ASTracer("CCRPipeline_transcribe")
-        tracer.start()
+        tracer.start() #dont need to start, .addreport starts the tracer automatically
 
         try:
             ccr_model_ctx = ModelStore.getModel("ccr")
@@ -302,8 +307,8 @@ if __name__ == "__main__":
 
     # Register loading callbacks for the models
     ModelStore.registerLoadModelCallbacks(
-        ccr=CCRPipeline.loadModel,
-        ccrCharFilter=CCRPipeline.loadModel
+        ccr=CCRPipeline.loadChineseClassifier,
+        ccrCharFilter=CCRPipeline.loadBinaryClassifier
     )
 
     # Load both models
@@ -317,3 +322,8 @@ if __name__ == "__main__":
 
     print(f"CCR model output shape: {ccr_ctx.model(test_tensor).shape}")
     print(f"Filter model output shape: {filter_ctx.model(test_tensor).shape}")
+
+
+
+# TODO: 
+# Consider AST report appearing 1 time per img
