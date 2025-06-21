@@ -322,7 +322,8 @@ class CCRPipeline:
 
         except Exception as e:
             tracer.addReport(ASReport("transcribe", f"Error: {e}", {"error": str(e)}))
-            raise
+            return str(e)
+
         finally:
             tracer.end()
 
@@ -339,8 +340,7 @@ if __name__ == "__main__":
     )
 
     # Load both models
-    ModelStore.loadModels("ccr")
-    ModelStore.loadModels("ccrCharFilter")
+    ModelStore.loadModels("ccr", "ccrCharFilter")
 
     # Run simple model output tests
     test_tensor = torch.randn(1, 3, 224, 224)
