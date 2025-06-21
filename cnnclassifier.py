@@ -1,4 +1,3 @@
-from email.mime import image
 import os
 import torch
 import torch.nn as nn
@@ -56,27 +55,22 @@ class ImageClassifier:
     transform = None
     device = None
     class_names = ['cc', 'hf']
-    modelPath = os.path.join("models", "SCCCIClassifier.pth")
+    modelPath = "SCCCIClassifier.pth"
 
     @staticmethod
-    def load_model(model_weights=None, device=None):
+    def load_model(modelPath: str, device = None):
         if device and not isinstance(device, torch.device):
             raise ValueError("Device must be a torch.device or None.")
 
-        ImageClassifier.device = (
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            if device is None else device
-        )
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else device
+        model = CNNModel()  # Local model, not an instance variable
 
-        ImageClassifier.model = CNNModel()
-        model_weights = model_weights or ImageClassifier.modelPath
-
-        checkpoint = torch.load(model_weights, map_location=ImageClassifier.device)
+        checkpoint = torch.load(modelPath, map_location=device)
         state_dict = checkpoint.get("model_state_dict", checkpoint)
-        ImageClassifier.model.load_state_dict(state_dict, strict=False)
-
-        ImageClassifier.model.to(ImageClassifier.device)
-        ImageClassifier.model.eval()
+        model.load_state_dict(state_dict, strict=False)
+        
+        model.to(device)
+        model.eval()
 
         ImageClassifier.transform = transforms.Compose([
             transforms.Resize((224, 224)),
@@ -84,7 +78,8 @@ class ImageClassifier:
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         ])
 
-        return ImageClassifier
+        ImageClassifier.model = model
+        return model
 
     @staticmethod
     def predict(input_path, tracer: ASTracer):
@@ -124,7 +119,7 @@ class ImageClassifier:
 
                 if tracer:
                     report = ASReport(
-                        source=os.path.basename(path),
+                        source="IMAGECLASSIFIER PREDICT",
                         message=f"Prediction: {label} ({confidence:.2f}%)",
                         extraData={"probability": prob, "label_index": label_idx}
                     )
@@ -141,13 +136,13 @@ if __name__ == "__main__":
 
     ModelStore.registerLoadModelCallbacks(
         cnn=ImageClassifier.load_model
+    
     )
 
     ModelStore.loadModels("cnn")
 
     cnn_ctx = ModelStore.getModel("cnn")
 
-    # Sanity test
     test_tensor = torch.randn(1, 3, 224, 224).to(ImageClassifier.device)
     print(f"CNN model output shape: {ImageClassifier.model(test_tensor).shape}")
 
