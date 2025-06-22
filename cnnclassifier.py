@@ -150,7 +150,16 @@ class ImageClassifier:
                     tracer.addReport(report)
 
             except Exception as e:
-                print(f"Error processing {path}: {e}")
+                error_msg = f"Error processing {path}: {e}"
+                print(error_msg)
+                
+                if tracer:
+                    error_report = ASReport(
+                        source="IMAGECLASSIFIER PREDICT ERROR",
+                        message=error_msg,
+                        extraData={"path": path, "exception": str(e)}
+                    )
+                    tracer.addReport(error_report)
 
         return results
 
