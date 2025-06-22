@@ -83,9 +83,6 @@ class CCRPipeline:
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                             std=[0.229, 0.224, 0.225])
     ])
-    
-    # Initialize the LLM clients once, so we don’t do it on every function call.
-    LLMInterface.initDefaultClients()
 
     @staticmethod
     def load_label_mappings():
@@ -356,6 +353,7 @@ class CCRPipeline:
 
         try:
             response = LLMInterface.engage(cont)
+            print(response)
             corrected = response.content.strip()
             textCount = len(corrected)
             
@@ -364,6 +362,95 @@ class CCRPipeline:
         except Exception as e:
             tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION ERROR", f"LLM correction failed: {e}"))
             return predicted_text  # fallback to uncorrected text
+        
+    @staticmethod
+    def accuracy(pred_text: str, gt: str, show: bool = True) -> float:
+        """
+        Computes character-level accuracy using Longest Common Subsequence (LCS).
+
+        - LCS finds the longest sequence of matching characters in order (not positionally).
+        - Accuracy = matched characters (LCS) / total characters in ground truth.
+        - More tolerant to extra, missing, or misaligned characters than strict comparison.
+        - If show=True, prints matched, missing, extra characters, and basic stats.
+
+        Returns:
+            Accuracy as a float between 0 and 1.
+        """
+        
+        # Read ground truth
+        if not os.path.exists(gt):
+            if show:
+                print(f"[ERROR] Ground truth file '{gt}' not found.")
+            return 0.0
+
+        with open(gt, 'r', encoding='utf-8') as f:
+            gt_text = f.read().strip()
+
+        pred_text = pred_text.strip()
+
+        # === LCS Computation ===
+        m, n = len(gt_text), len(pred_text)
+        dp = [[0] * (n + 1) for _ in range(m + 1)]
+
+        for i in range(m):
+            for j in range(n):
+                if gt_text[i] == pred_text[j]:
+                    dp[i + 1][j + 1] = dp[i][j] + 1
+                else:
+                    dp[i + 1][j + 1] = max(dp[i][j + 1], dp[i + 1][j])
+
+        # Trace back to find the matched sequence
+        i, j = m, n
+        matched = []
+        while i > 0 and j > 0:
+            if gt_text[i - 1] == pred_text[j - 1]:
+                matched.append(gt_text[i - 1])
+                i -= 1
+                j -= 1
+            elif dp[i - 1][j] >= dp[i][j - 1]:
+                i -= 1
+            else:
+                j -= 1
+        matched.reverse()
+
+        # Calculate missing and extra characters
+        i = j = 0
+        matched_chars = matched
+        missing = []
+        extra = []
+
+        for c in matched_chars:
+            while i < len(gt_text) and gt_text[i] != c:
+                missing.append(gt_text[i])
+                i += 1
+            while j < len(pred_text) and pred_text[j] != c:
+                extra.append(pred_text[j])
+                j += 1
+            i += 1
+            j += 1
+
+        missing.extend(gt_text[i:])
+        extra.extend(pred_text[j:])
+
+        # Accuracy
+        match_count = len(matched_chars)
+        acc = match_count / len(gt_text) if len(gt_text) > 0 else 0.0
+
+        # === PRINT REPORT IF show ===
+        if show:
+            print("\n[Accuracy Report]")
+            print(f"Ground truth length : {len(gt_text)}")
+            print(f"Prediction length   : {len(pred_text)}")
+            print(f"Matched characters  : {match_count}")
+            print(f"Accuracy (LCS)      : {acc:.2%}")
+            print("\nMatched sequence    :")
+            print(f"{''.join(matched_chars)}")
+            print("\nMissing (in GT)     :")
+            print(f"{''.join(missing)}")
+            print("\nExtra (in Pred)     :")
+            print(f"{''.join(extra)}\n")
+
+        return acc
 
     @staticmethod
     def transcribe(image_path: str, tracer: ASTracer):
@@ -402,8 +489,13 @@ class CCRPipeline:
             predText = CCRPipeline.concatCharacters(recognized, tracer)
 
             correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer)
+            
+            # accuracy = CCRPipeline.accuracy(predText, "./ccr img/-064GT.txt", show=True)
+            accuracy = CCRPipeline.accuracy(correctedText, "./ccr img/-064GT.txt", show=True)
+            print(accuracy)
 
             tracer.end()
+            # return predText
             return correctedText
 
         except Exception as e:
@@ -416,6 +508,9 @@ class CCRPipeline:
 if __name__ == "__main__":
     # Setup the model registry
     ModelStore.setup()
+    
+    # Initialize the LLM client
+    LLMInterface.initDefaultClients()
 
     # Register loading callbacks for the models
     ModelStore.registerLoadModelCallbacks(
