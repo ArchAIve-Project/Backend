@@ -10,7 +10,7 @@ from addons import ModelStore, ASTracer, ASReport
 A CNN-based binary classifier for distinguishing between 'cc' and 'hf' classes.
 """
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # === Model Definition ===
 class CNNModel(nn.Module):
@@ -57,16 +57,14 @@ class ImageClassifier:
 
     @staticmethod
     def load_model(modelPath: str):
-        if device and not isinstance(device, torch.device):
-            raise ValueError("Device must be a torch.device")
 
         model = CNNModel() 
 
-        checkpoint = torch.load(modelPath, map_location=device)
+        checkpoint = torch.load(modelPath, map_location=DEVICE)
         state_dict = checkpoint.get("model_state_dict", checkpoint)
         model.load_state_dict(state_dict, strict=False)
         
-        model.to(device)
+        model.to(DEVICE)
         model.eval()
 
         ImageClassifier.transform = transforms.Compose([
@@ -84,7 +82,10 @@ class ImageClassifier:
         Returns a list of (path, predicted_label, confidence).
         """
 
-        model = ModelStore.getModel("cnn").model
+        model_ctx = ModelStore.getModel("cnn")
+        if model_ctx is None or model_ctx.model is None:
+            raise RuntimeError("CNN model is not loaded. Ensure it is registered and loaded in ModelStore.")
+        model = model_ctx.model
 
         # if dir or file path is provided
         if isinstance(input_path, str):
@@ -93,8 +94,7 @@ class ImageClassifier:
                 image_paths = [
                     os.path.join(input_path, f) 
                     for f in os.listdir(input_path)
-                    if f.lower().endswith(('.png', '.jpg', '.jpeg')) and
-                    os.path.isfile(os.path.join(input_path, f)) # Ensure it's a file
+                    if f.lower().endswith(('.png', '.jpg', '.jpeg')) 
                 ]
             # file
             elif os.path.isfile(input_path):
@@ -106,13 +106,19 @@ class ImageClassifier:
                 raise FileNotFoundError(f"Input path does not exist: {input_path}")
         # list 
         elif isinstance(input_path, list):
-            image_paths = [
+            invalid_paths = [
                 path for path in input_path
-                if isinstance(path, str) and os.path.isfile(path)
-                and path.lower().endswith(('.png', '.jpg', '.jpeg'))
+                if not isinstance(path, str) or
+                not os.path.isfile(path) or
+                not path.lower().endswith(('.png', '.jpg', '.jpeg'))
             ]
-            if not image_paths:
-                raise FileNotFoundError("No valid image files found in the input list.")
+
+            if invalid_paths:
+                raise FileNotFoundError(
+                    "Invalid or unsupported image files:\n" + "\n".join(invalid_paths)
+                )
+
+            image_paths = input_path
 
         else:
             raise ValueError("Input must be a file path, directory path, or list of file paths")
@@ -122,7 +128,7 @@ class ImageClassifier:
         for path in image_paths:
             try:
                 image = Image.open(path).convert("RGB")
-                image = ImageClassifier.transform(image).unsqueeze(0).to(device)
+                image = ImageClassifier.transform(image).unsqueeze(0).to(DEVICE)
 
                 with torch.no_grad():
                     output = model(image)
@@ -159,10 +165,13 @@ if __name__ == "__main__":
 
     ModelStore.loadModels("cnn")
 
-    cnn_ctx = ModelStore.getModel("cnn")
+    model_ctx = ModelStore.getModel("cnn")
+    if model_ctx is None or model_ctx.model is None:
+        raise RuntimeError("CNN model is not loaded. Ensure it is registered and loaded in ModelStore.")
+    model = model_ctx.model
 
-    test_tensor = torch.randn(1, 3, 224, 224).to(device)
-    print(f"CNN model output shape: {cnn_ctx.model(test_tensor).shape}")
+    test_tensor = torch.randn(1, 3, 224, 224).to(DEVICE)
+    print(f"CNN model output shape: {model(test_tensor).shape}")
 
     # Predict on a sample image
     results = ImageClassifier.predict("Companydata/CC/Sample 1/-003.jpg", tracer=None)
