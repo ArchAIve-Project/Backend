@@ -344,7 +344,7 @@ class CCRPipeline:
         cont.addInteraction(
             Interaction(
                 role=Interaction.Role.USER,
-                content=f"Based on the image provided, correct the predicted text. {predicted_text.strip()} Only output the corrected Chinese text, nothing else.",
+                content=f"Please review the image and correct the predicted Chinese text below. Make sure the correction matches the characters in the image and makes sense in context. Fix any errors, missing characters, or confusing parts. Only output the corrected Chinese text—no explanations.\n\nPredicted text:\n{predicted_text.strip()}",
                 imagePath=image_path,
                 imageFileType="image/jpg"
             ),
