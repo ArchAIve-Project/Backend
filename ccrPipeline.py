@@ -353,7 +353,6 @@ class CCRPipeline:
 
         try:
             response = LLMInterface.engage(cont)
-            print(response)
             corrected = response.content.strip()
             textCount = len(corrected)
             
