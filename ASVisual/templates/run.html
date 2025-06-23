@@ -68,7 +68,7 @@
                 timeoutReload();
             } else {
                 document.getElementById('refreshButton').textContent = 'Enable Auto-Reload';
-                clearInterval(timeoutID);
+                clearTimeout(timeoutID);
             }
         }
 
