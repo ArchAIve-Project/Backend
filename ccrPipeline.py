@@ -286,17 +286,6 @@ class CCRPipeline:
         tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", f"Reconstructed final text. Number of text: {textCount}"))
         return concatText
 
-    # Pre-tool invocation callback to log or handle messages before tool runs.
-    def preToolCallback(msg):
-        print(f"\n[PRE-LLM] {msg}\n")
-
-    # Post-tool invocation callback to log or handle messages after tool runs.
-    def postToolCallback(msg):
-        print(f"\n[POST-LLM] {msg}\n")
-
-    # Define the LLM Tool once and reuse it for all calls.
-    # This tool describes what parameters it expects and what it does.
-    
     @staticmethod
     def llmCorrection(image_path: str, predicted_text: str, tracer) -> str:
         """
@@ -307,9 +296,7 @@ class CCRPipeline:
         # Create a new interaction context for each call with the reused tool and callbacks.
         cont = InteractionContext(
             provider=LMProvider.QWEN,
-            variant=LMVariant.QWEN_VL_PLUS,
-            preToolInvocationCallback=CCRPipeline.preToolCallback,
-            postToolInvocationCallback=CCRPipeline.postToolCallback
+            variant=LMVariant.QWEN_VL_PLUS
         )
 
         # Add the user interaction to the context:
@@ -337,7 +324,7 @@ class CCRPipeline:
             return predicted_text  # fallback to uncorrected text
         
     @staticmethod
-    def accuracy(pred_text: str, gt: str, show: bool = True) -> float:
+    def accuracy(pred_text: str, filePath: str, show: bool = True) -> float:
         """
         Computes character-level accuracy using Longest Common Subsequence (LCS).
 
@@ -350,13 +337,19 @@ class CCRPipeline:
             Accuracy as a float between 0 and 1.
         """
         
+        # Remove the extension
+        base, _ = os.path.splitext(filePath)
+
+        # Construct the new path
+        gtFilePath = f"{base}GT.txt"
+        
         # Read ground truth
-        if not os.path.exists(gt):
+        if not os.path.exists(gtFilePath):
             if show:
-                print(f"[ERROR] Ground truth file '{gt}' not found.")
+                print(f"[ERROR] Ground truth file '{gtFilePath}' not found.")
             return 0.0
 
-        with open(gt, 'r', encoding='utf-8') as f:
+        with open(gtFilePath, 'r', encoding='utf-8') as f:
             gt_text = f.read().strip()
 
         pred_text = pred_text.strip()
@@ -409,24 +402,10 @@ class CCRPipeline:
         match_count = len(matched_chars)
         acc = match_count / len(gt_text) if len(gt_text) > 0 else 0.0
 
-        # === PRINT REPORT IF show ===
-        if show:
-            print("\n[Accuracy Report]")
-            print(f"Ground truth length : {len(gt_text)}")
-            print(f"Prediction length   : {len(pred_text)}")
-            print(f"Matched characters  : {match_count}")
-            print(f"Accuracy (LCS)      : {acc:.2%}")
-            print("\nMatched sequence    :")
-            print(f"{''.join(matched_chars)}")
-            print("\nMissing (in GT)     :")
-            print(f"{''.join(missing)}")
-            print("\nExtra (in Pred)     :")
-            print(f"{''.join(extra)}\n")
-
         return acc
 
     @staticmethod
-    def transcribe(image_path: str, tracer: ASTracer):
+    def transcribe(image_path: str, tracer: ASTracer, showAccuracy=None):
         """
         Full pipeline execution:
         - Load models from ModelStore
@@ -462,22 +441,17 @@ class CCRPipeline:
             predText = CCRPipeline.concatCharacters(recognized, tracer)
 
             correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer)
-                        
-            # Remove the extension
-            base, _ = os.path.splitext(image_path)
 
-            # Construct the new path
-            gtFilePath = f"{base}GT.txt"
-
-            accuracyPred = CCRPipeline.accuracy(predText, gtFilePath, show=True)
-            accuracyCorrected = CCRPipeline.accuracy(correctedText, gtFilePath, show=False)
-            print("\nAccuracy Corrected: {}".format(accuracyCorrected))
+            if showAccuracy:
+                predAccuracy = CCRPipeline.accuracy(predText, image_path)
+                correctedAccuracy = CCRPipeline.accuracy(correctedText, image_path)
+                print(f"{predAccuracy} -> {correctedAccuracy}")
 
             # return predText
             return correctedText
 
         except Exception as e:
-            tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", f"Error: {e}", {"error": str(e)}))
+            tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", f"Error: {e}"))
             return str(e)
 
 # === Entry Point ===
