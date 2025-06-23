@@ -1,7 +1,7 @@
 import json
 import torch
-from transformers import BertTokenizerFast, BertConfig, BertForTokenClassification
-from modelstore import ModelStore
+from transformers import BertTokenizerFast, BertConfig, BertForTokenClassification, AutoModelForTokenClassification
+from addons import ModelStore, ASTracer, ASReport
 
 class TokenizerManager:
     def __init__(self, model_name_or_path):
@@ -36,17 +36,25 @@ class DataHandler:
     
 
 class ModelManager:
-    def __init__(self, model_name: str, num_labels: int, id2label: dict, label2id: dict, pth_path: str):
-        # model config
-        config = BertConfig.from_pretrained(
-            model_name, 
-            num_labels=num_labels, 
-            id2label=id2label, 
-            label2id=label2id
+    def __init__(self, model_name: str = None, num_labels: int = None, id2label: dict = None, label2id: dict = None,
+                 pth_path: str = None, model_path: str = None):
+        if model_path:
+            # Load from modelstore directory
+            self.model = AutoModelForTokenClassification.from_pretrained(model_path)
+            print(f"✅ Model loaded from modelstore: {model_path}")
+        elif pth_path:
+            # Load using weights
+            config = BertConfig.from_pretrained(
+                model_name,
+                num_labels=num_labels,
+                id2label=id2label,
+                label2id=label2id
             )
-        self.model = BertForTokenClassification.from_pretrained(model_name, config=config)
-        self.model.load_state_dict(torch.load(pth_path, map_location=torch.device('cpu')))
-        print(f"Model loaded from {pth_path}")
+            self.model = BertForTokenClassification.from_pretrained(model_name, config=config)
+            self.model.load_state_dict(torch.load(pth_path, map_location=torch.device('cpu')))
+            print(f"✅ Model loaded from weights: {pth_path}")
+        else:
+            raise ValueError("Either pth_path or model_path must be provided.")
 
     def get_model(self):
         return self.model
@@ -91,37 +99,32 @@ class NERPipeline:
 
         self.label_mgr.set_labels(label2id, id2label)  # ✅ Correct method call
 
-
-
-    def load_model_from_pth(self, pth_path: str):
-        label2id, id2label = self.label_mgr.get_labels()
-        print("Loaded label2id:", label2id)
-        print("Number of labels:", len(label2id))
-
-        self.model_mgr = ModelManager(
-            model_name=self.model_name,
-            num_labels=len(label2id),
-            id2label=id2label,
-            label2id=label2id,
-            pth_path=pth_path
-        )
-        model = self.model_mgr.get_model()
-        tokenizer = self.tokenizer_mgr.get_tokenizer()
-        self.predictor = NERPredictor(model, tokenizer, id2label)
-
     def predict(self, sentence: str):
         if self.predictor is None:
             raise RuntimeError("Model not loaded. Call load_model_from_pth() first.")
         return self.predictor.predict(sentence)
+    
+    
 
 
 # --- Example usage ---
 if __name__ == "__main__":
-    ModelStore.setup()
+    ModelStore.setup(useDefaults=True)
+
+    ModelStore.registerLoadModelCallbacks(
+        ner=NERPipeline.load_model_from_pth
+    )
+
+    ModelStore.loadModels("ner")
+
+    # Assuming the model is registered and loaded in ModelStore
+    model_ctx = ModelStore.getModel("ner")  
+    if model_ctx is None or model_ctx.model is None:
+        raise RuntimeError("NER model is not loaded. Ensure it is registered and loaded in ModelStore.")
+    model = model_ctx.model
 
     pipeline = NERPipeline("bert-base-cased")
-    pipeline.load_labels("models\label2id.json", "models\id2label.json")
-    pipeline.load_model_from_pth("bert_ner_weights.pth")
+    pipeline.load_labels("models/label2id.json", "models/id2label.json")
 
     sentence = "Qin Shi Huang was the first emperor of a unified China."
     predictions = pipeline.predict(sentence)

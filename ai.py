@@ -458,7 +458,7 @@ class InteractionContext:
         self,
         provider: LMProvider,
         variant: LMVariant,
-        history: List[Interaction]=[],
+        history: List[Interaction]=None,
         tools: List[Tool] | None=None,
         temperature: float | None=None,
         presence_penalty: float | None=None,
@@ -468,7 +468,7 @@ class InteractionContext:
     ):
         self.provider = provider
         self.variant = variant
-        self.history = history
+        self.history = history if history is not None else []
         self.tools = tools
         self.temperature = temperature
         self.presence_penalty = presence_penalty
