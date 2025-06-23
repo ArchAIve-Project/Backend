@@ -25,7 +25,16 @@ def getTracers():
 
 @app.route('/')
 def index():
-    return render_template('index.html', tracerData={t.id: t.represent() for t in getTracers()})
+    return render_template('index.html', tracerData={t.id: t.represent() for t in getTracers()}, lastUpdate=datetime.datetime.now().strftime("%d %B, %A, %Y %H:%M:%S%p"))
+
+@app.route('/tracer/<tracer_id>')
+def tracerDetail(tracer_id):
+    tracers = getTracers()
+    tracer = next((t for t in tracers if t.id == tracer_id), None)
+    if tracer is None:
+        return jsonify({"error": "Tracer not found"}), 404
+    
+    return render_template('run.html', tracerInfo=tracer.represent(), lastUpdate=datetime.datetime.now().strftime("%d %B, %A, %Y %H:%M:%S%p"))
 
 def main():
     app.run(host='0.0.0.0', port=8001)
