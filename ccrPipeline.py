@@ -302,12 +302,20 @@ class CCRPipeline:
         # Add the user interaction to the context:
         # Ask the LLM to correct the predicted text based on the image.
         # The LLM is expected to only output corrected Chinese text.
+        
+        # Extract extension, normalize
+        ext = os.path.splitext(image_path)[1].lower().replace('.', '')
+        if ext not in ['jpg', 'jpeg', 'jpe', 'png']:
+            raise ValueError(f"Unsupported image file type: .{ext}")
+
+        image_file_type = f"image/{'jpeg' if ext in ['jpg', 'jpeg', 'jpe'] else 'png'}"
+
         cont.addInteraction(
             Interaction(
                 role=Interaction.Role.USER,
                 content=f"Please review the image and correct the predicted Chinese text below. Make sure the correction matches the characters in the image and makes sense in context. Fix any errors, missing characters, or confusing parts. Only output the corrected Chinese text—no explanations.\n\nPredicted text:\n{predicted_text.strip()}",
                 imagePath=image_path,
-                imageFileType="image/jpg"
+                imageFileType=image_file_type
             ),
             imageMessageAcknowledged=True
         )
@@ -320,7 +328,7 @@ class CCRPipeline:
             tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION", f"LLM correction applied. Final text count: {textCount}"))
             return corrected
         except Exception as e:
-            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION ERROR", f"LLM correction failed: {e}"))
+            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION ERROR", f"Fallback to original predicted text. LLM correction failed: {e}"))
             return predicted_text  # fallback to uncorrected text
         
     @staticmethod
