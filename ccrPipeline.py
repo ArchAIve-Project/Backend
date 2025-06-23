@@ -9,8 +9,9 @@ from addons import ModelStore, ASTracer, ASReport
 from ai import LLMInterface, InteractionContext, Interaction, Tool, LMProvider, LMVariant
 
 # === Constants ===
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+DEVICE= torch.device("mps" if torch.backends.mps.is_available()
+                            else "cuda" if torch.cuda.is_available()
+                            else "cpu")
 
 # === Model Definitions ===
 
@@ -461,10 +462,16 @@ class CCRPipeline:
             predText = CCRPipeline.concatCharacters(recognized, tracer)
 
             correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer)
-            
-            # accuracy = CCRPipeline.accuracy(predText, "./ccr img/-064GT.txt", show=True)
-            # accuracy = CCRPipeline.accuracy(correctedText, "./ccr img/-064GT.txt", show=False)
-            # print("\nAccuracy: {}".format(accuracy))
+                        
+            # Remove the extension
+            base, _ = os.path.splitext(image_path)
+
+            # Construct the new path
+            gtFilePath = f"{base}GT.txt"
+
+            accuracyPred = CCRPipeline.accuracy(predText, gtFilePath, show=True)
+            accuracyCorrected = CCRPipeline.accuracy(correctedText, gtFilePath, show=False)
+            print("\nAccuracy Corrected: {}".format(accuracyCorrected))
 
             # return predText
             return correctedText
