@@ -17,9 +17,16 @@ DEVICE= torch.device("mps" if torch.backends.mps.is_available()
 
 class ChineseClassifier(nn.Module):
     """
-    Multi-class character classification model using a ResNet50 backbone.
-    Outputs a class index representing a Chinese character.
+    A ResNet50-based model for multi-class Chinese character classification.
+
+    Given an input image, the model extracts features using a ResNet50 backbone,
+    passes them through a projection and classification head, and outputs logits
+    corresponding to character class indices.
+
+    Usage:
+        `model = ChineseClassifier(embed_dim=256, num_classes=1200)`
     """
+
     def __init__(self, embed_dim: int, num_classes: int):
         super().__init__()
         base = models.resnet50(weights=None)
@@ -40,8 +47,13 @@ class ChineseClassifier(nn.Module):
 
 class ChineseBinaryClassifier(nn.Module):
     """
-    Binary classifier used for filtering valid vs. noisy characters.
-    Uses pretrained ResNet50 optionally.
+    A binary classifier for filtering valid characters from noise in image segmentation.
+
+    The model is based on ResNet50 and outputs a single logit indicating validity.
+    It supports optional feature extraction via `return_embedding`.
+
+    Usage:
+        `model = ChineseBinaryClassifier(embed_dim=512, unfreezeEncoder=True)`
     """
     def __init__(self, embed_dim: int = 512, unfreezeEncoder: bool = True):
         super().__init__()
@@ -70,7 +82,10 @@ class ChineseBinaryClassifier(nn.Module):
 
 class CCRPipeline:
     """
-    The full pipeline to transcribe handwritten Chinese characters from a scanned image.
+    Full pipeline for transcribing handwritten Chinese characters from scanned images.
+
+    This class provides methods for image segmentation, character filtering,
+    recognition, LLM-based correction, and accuracy evaluation.
     """
     
     idx2char = None    
@@ -88,8 +103,9 @@ class CCRPipeline:
     @staticmethod
     def load_label_mappings():
         """
-        Loads label mappings from a JSON file stored in ModelStore.
-        Converts class indices to Chinese characters.
+        Loads and returns a mapping from class indices to Chinese characters.
+
+        The mappings are read from 'ccr_labels.json' located in the model store directory.
         """
         labels_file = os.path.join(ModelStore.rootDirPath(), "ccr_labels.json")
         with open(labels_file, "r", encoding="utf-8") as f:
@@ -100,7 +116,11 @@ class CCRPipeline:
     @staticmethod
     def loadChineseClassifier(modelPath: str):
         """
-        Standardized loader for the main Chinese character classifier model.
+        Loads a trained Chinese character classifier from a checkpoint.
+
+        Initializes the model, loads weights from the specified path, and prepares
+        it for inference on the configured device.
+
         """
         model = ChineseClassifier(embed_dim=512, num_classes=1200)
         checkpoint = torch.load(modelPath, map_location=DEVICE, weights_only=True)
@@ -113,7 +133,10 @@ class CCRPipeline:
     @staticmethod
     def loadBinaryClassifier(modelPath: str):
         """
-        Standardized loader for the binary character filter model.
+        Loads a trained binary classifier for filtering valid characters from noise.
+
+        Initializes the binary classifier model, loads weights from the given checkpoint,
+        and sets it to evaluation mode on the configured device.
         """
         model = ChineseBinaryClassifier()
         checkpoint = torch.load(modelPath, map_location=DEVICE, weights_only=True)
@@ -126,7 +149,20 @@ class CCRPipeline:
     @staticmethod
     def padToSquare(image, padding: int = 40):
         """
-        Adds padding around the character and centers it in a square image.
+        Pads a grayscale image to a square shape by centering it and adding borders.
+
+        The original image is centered on a square black background, then additional padding
+        is added around all sides.
+
+        Args:
+            image (np.ndarray): Input 2D grayscale image array.
+            padding (int, optional): Number of pixels to pad on each side after squaring. Defaults to 40.
+
+        Returns:
+            np.ndarray: The padded square image with extra border.
+
+        Usage:
+            padded_img = YourClass.padToSquare(img, padding=40)
         """
         h, w = image.shape
         size = max(h, w)
@@ -139,8 +175,26 @@ class CCRPipeline:
     @staticmethod
     def segmentImage(image_path: str, tracer: ASTracer):
         """
-        Segments a scanned handwritten document image into individual character images.
-        Follows right-to-left, top-to-bottom reading order typical of traditional Chinese.
+        Segments a scanned handwritten Chinese document image into individual character images.
+
+        The segmentation follows traditional right-to-left, top-to-bottom reading order.
+        It performs grayscale conversion, binarization, morphological noise removal,
+        column detection via vertical projection, and character row detection within columns.
+
+        Each detected character image is padded to a square shape for uniformity.
+
+        Args:
+            image_path (str): Path to the input image file.
+            tracer (ASTracer): Tracer object for logging segmentation reports.
+
+        Returns:
+            List[Tuple[int, np.ndarray]]: List of tuples containing (column_index, padded_character_image).
+
+        Usage:
+            chars = CCRPipeline.segmentImage("docs/handwritten_sample.jpg", tracer)
+            for col_idx, char_img in chars:
+                # Process each character image
+                pass
         """
 
         # Read the image in color
@@ -247,8 +301,24 @@ class CCRPipeline:
     @staticmethod
     def detectCharacters(char_images, recog_model, idx2char, ccrCharFilter, tracer: ASTracer):
         """
-        Filters out noise using the binary classifier, and recognizes valid characters using the main model.
-        Returns a dictionary mapping column index to character list.
+        Filters character images to remove noise and recognizes valid characters.
+
+        Uses a binary classifier to filter out noisy/non-character images,
+        then applies the main recognition model to predict Chinese characters.
+        Returns a dictionary mapping column indices to lists of recognized characters.
+
+        Args:
+            char_images (List[Tuple[int, np.ndarray]]): List of (column_index, character_image) tuples.
+            recog_model (nn.Module): Multi-class Chinese character classification model.
+            idx2char (Dict[int, str]): Mapping from class indices to Chinese characters.
+            ccrCharFilter (nn.Module): Binary classifier model for filtering noise.
+            tracer (ASTracer): Tracer object for logging recognition reports.
+
+        Returns:
+            Dict[int, List[str]]: Mapping from column index to recognized character list.
+
+        Usage:
+            recognized_chars = CCRPipeline.detectCharacters(char_images, recog_model, idx2char, ccrCharFilter, tracer)
         """
 
         result = {}
@@ -278,9 +348,22 @@ class CCRPipeline:
     @staticmethod
     def concatCharacters(result_dict, tracer: ASTracer):
         """
-        Combines the recognized characters into a final output string,
-        preserving the RTL, top-down reading order.
+        Concatenates recognized characters into a final text string in reading order.
+
+        Preserves the traditional right-to-left, top-to-bottom reading sequence
+        by joining characters column-wise from left to right.
+
+        Args:
+            result_dict (Dict[int, List[str]]): Mapping of column indices to recognized characters.
+            tracer (ASTracer): Tracer object for logging the concatenation process.
+
+        Returns:
+            str: The reconstructed text string combining all recognized characters.
+
+        Usage:
+            final_text = CCRPipeline.concatCharacters(recognized_chars, tracer)
         """
+
         concatText = "\n".join("".join(result_dict[col]) for col in sorted(result_dict.keys()))
         textCount = sum(len(chars) for chars in result_dict.values())
         tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", f"Reconstructed final text. Number of text: {textCount}"))
@@ -289,9 +372,25 @@ class CCRPipeline:
     @staticmethod
     def llmCorrection(image_path: str, predicted_text: str, tracer) -> str:
         """
-        Sends the predicted Chinese calligraphy text and its corresponding image to an LLM for correction.
-        Returns the LLM-corrected version of the text and logs the result to the tracer.
+        Uses a large language model (LLM) to correct predicted Chinese calligraphy text
+        based on the corresponding image.
+
+        Sends the image and predicted text to the LLM with instructions to fix errors,
+        missing characters, and confusing parts, returning only corrected Chinese text.
+        Logs success or failure to the provided tracer.
+
+        Args:
+            image_path (str): File path to the input calligraphy image.
+            predicted_text (str): Initial OCR-predicted Chinese text.
+            tracer: Tracer object for logging correction results.
+
+        Returns:
+            str: LLM-corrected Chinese text, or the original prediction if correction fails.
+
+        Usage:
+            corrected_text = CCRPipeline.llmCorrection(image_path, predicted_text, tracer)
         """
+
 
         # Create a new interaction context for each call with the reused tool and callbacks.
         cont = InteractionContext(
@@ -334,15 +433,23 @@ class CCRPipeline:
     @staticmethod
     def accuracy(pred_text: str, filePath: str, show: bool = True) -> float:
         """
-        Computes character-level accuracy using Longest Common Subsequence (LCS).
+        Calculates character-level accuracy between predicted and ground truth text
+        using the Longest Common Subsequence (LCS) method.
 
-        - LCS finds the longest sequence of matching characters in order (not positionally).
-        - Accuracy = matched characters (LCS) / total characters in ground truth.
-        - More tolerant to extra, missing, or misaligned characters than strict comparison.
-        - If show=True, prints matched, missing, extra characters, and basic stats.
+        LCS identifies the longest sequence of matching characters in order,
+        allowing for tolerance of extra, missing, or misaligned characters.
+
+        Args:
+            pred_text (str): The predicted text string.
+            filePath (str): Path to the predicted text file; ground truth file is
+                            inferred by replacing extension with 'GT.txt'.
+            show (bool, optional): If True, prints detailed match statistics. Defaults to True.
 
         Returns:
-            Accuracy as a float between 0 and 1.
+            float: Accuracy score between 0 and 1, ratio of matched characters to ground truth length.
+
+        Usage:
+            accuracy_score = CCRPipeline.accuracy(predicted_text, "path/to/pred.txt", show=True)
         """
         
         # Remove the extension
@@ -415,13 +522,27 @@ class CCRPipeline:
     @staticmethod
     def transcribe(image_path: str, tracer: ASTracer, showAccuracy=None):
         """
-        Full pipeline execution:
-        - Load models from ModelStore
-        - Segment image
-        - Filter and recognize characters
-        - Corrects predicted transcription using an LLM
-        - Returns final transcription
+        Executes the full OCR transcription pipeline on a given image.
+
+        Steps include:
+        - Loading required models from ModelStore.
+        - Segmenting the image into individual characters.
+        - Filtering noise and recognizing characters.
+        - Correcting the predicted text using a large language model (LLM).
+        - Optionally computes and prints accuracy before and after correction.
+
+        Args:
+            image_path (str): Path to the input image file.
+            tracer (ASTracer): Tracer object for logging pipeline reports.
+            showAccuracy (bool, optional): If True, prints accuracy metrics. Defaults to None.
+
+        Returns:
+            str: The final corrected transcription text, or error message if failed.
+
+        Usage:
+            transcription = CCRPipeline.transcribe("path/to/image.jpg", tracer, showAccuracy=True)
         """
+
 
         try:
             ccr_model_ctx = ModelStore.getModel("ccr")

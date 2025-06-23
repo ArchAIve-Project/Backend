@@ -4,14 +4,35 @@ from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVari
 
 class TranscriptionProcessor:
     """
-    Handles the processing of traditional Chinese text by:
-    - Converting to simplified Chinese
-    - Translating to English
-    - Summarizing the translation
+    Processes traditional Chinese text through conversion, translation, and summarization.
+
+    Provides static methods to convert traditional Chinese to simplified Chinese,
+    translate traditional Chinese to English, and summarize the English translation.
+
+    Usage:
+        simplified, english, summary = TranscriptionProcessor.process(traditional_text, tracer)
     """
+
 
     @staticmethod
     def tradToSimp(traditional_text: str, tracer: ASTracer) -> str:
+        """
+        Converts traditional Chinese text to simplified Chinese using an LLM.
+
+        Sends the input traditional Chinese text to a language model for conversion,
+        and returns the simplified Chinese output. Logs success or failure to the tracer.
+
+        Args:
+            traditional_text (str): Text in traditional Chinese characters.
+            tracer (ASTracer): Tracer object for logging the conversion process.
+
+        Returns:
+            str: Simplified Chinese text if successful, or error message on failure.
+
+        Usage:
+            simplified_text = CCRPipeline.tradToSimp(traditional_text, tracer)
+        """
+
         cont = InteractionContext(
             provider=LMProvider.QWEN,
             variant=LMVariant.QWEN_PLUS
@@ -32,6 +53,23 @@ class TranscriptionProcessor:
 
     @staticmethod
     def tradToEng(traditional_text: str, tracer: ASTracer) -> str:
+        """
+        Translates traditional Chinese text into formal and fluent English using an LLM.
+
+        Sends the traditional Chinese input to a language model that outputs English only,
+        without including any Chinese text or explanations. Logs translation status to the tracer.
+
+        Args:
+            traditional_text (str): Text in traditional Chinese characters.
+            tracer (ASTracer): Tracer object for logging the translation process.
+
+        Returns:
+            str: English translation if successful, or error message on failure.
+
+        Usage:
+            english_text = CCRPipeline.tradToEng(traditional_text, tracer)
+        """
+
         cont = InteractionContext(
             provider=LMProvider.QWEN,
             variant=LMVariant.QWEN_PLUS
@@ -56,6 +94,23 @@ class TranscriptionProcessor:
 
     @staticmethod
     def engSummary(english_text: str, tracer: ASTracer) -> str:
+        """
+        Generates a concise summary of English text using an LLM.
+
+        Sends the input English text to a language model to produce a brief summary,
+        and logs the result to the tracer.
+
+        Args:
+            english_text (str): The English text to summarize.
+            tracer (ASTracer): Tracer object for logging the summarization process.
+
+        Returns:
+            str: Concise summary of the input text, or error message on failure.
+
+        Usage:
+            summary = CCRPipeline.engSummary(english_text, tracer)
+        """
+
         cont = InteractionContext(
             provider=LMProvider.OPENAI,
             variant=LMVariant.GPT_4O_MINI
@@ -76,6 +131,26 @@ class TranscriptionProcessor:
 
     @staticmethod
     def process(traditional_text: str, tracer: ASTracer) -> tuple:
+        """
+        Processes traditional Chinese text through conversion, translation, and summarization.
+
+        Performs the following sequential steps:
+        1. Converts traditional Chinese to simplified Chinese.
+        2. Translates traditional Chinese to English.
+        3. Summarizes the English translation.
+
+        Args:
+            traditional_text (str): Input text in traditional Chinese.
+            tracer (ASTracer): Tracer object for logging each step.
+
+        Returns:
+            tuple: A tuple containing (simplified Chinese, English translation, English summary),
+                   or an error message string if processing fails.
+
+        Usage:
+            simp, eng, summ = TranscriptionProcessor.process(traditional_text, tracer)
+        """
+
         try:
             simplified = TranscriptionProcessor.tradToSimp(traditional_text, tracer)
 
