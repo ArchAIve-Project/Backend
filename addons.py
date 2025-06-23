@@ -415,13 +415,14 @@ class ASReport:
     
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'ASReport':
-        return ASReport(
+        r = ASReport(
             source=data.get("source"),
             message=data.get("message"),
-            extraData=data.get("extraData"),
-            created=data.get("created"),
-            threadInfo=data.get("threadInfo")
+            extraData=data.get("extraData")
         )
+        r.created = data.get("created")
+        r.threadInfo = data.get("threadInfo")
+        return r
     
     @staticmethod
     def threadInfoString() -> str:
