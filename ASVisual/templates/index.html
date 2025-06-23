@@ -15,7 +15,7 @@
     <p>Tracer Runs:</p>
     <ul>
         {% for tracerID in tracerData %}
-            <li><a href="{{ url_for('tracerDetail', tracer_id=tracerID) }}">Purpose: '{{ tracerData[tracerID]['purpose'] }}', Created: {{ tracerData[tracerID]['created'] }}</a></li>
+            <li><a href="{{ url_for('tracerDetail', tracer_id=tracerID) }}">Purpose: '{{ tracerData[tracerID]['purpose'] }}', Created: {{ tracerData[tracerID]['created'] }}, Finished: {{ tracerData[tracerID]['finished'] }}</a></li>
         {% endfor %}
     </ul>
     <script>

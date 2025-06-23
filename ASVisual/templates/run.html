@@ -14,10 +14,12 @@
     <h1>Tracer Details</h1>
     <h3>Last Update: {{ lastUpdate }}</h3>
     <button id="refreshButton" onclick="toggleReload()">Disable Auto-Reload</button>
+    <p>ID: {{ tracerInfo['id'] }}</p>
     <p>Purpose: {{ tracerInfo['purpose'] }}</p>
     <p>Created: {{ tracerInfo['created'] }}</p>
     <p>Started: {{ tracerInfo['started'] }}</p>
     <p>Finished: {{ tracerInfo['finished'] }}</p>
+    <p>Duration: {{ tracerInfo['duration'] }}</p>
     <p>Thread Info: {{ tracerInfo['threadInfo'] }}</p>
     <p>Number of Reports: {{ tracerInfo['reports']|length }}</p>
     <p>Reports: <button onclick="toggleReportsVisibility()">Toggle Visibility</button></p>
@@ -28,7 +30,8 @@
                 <li>Message: {{ report['message'] }}</li>
                 <li>Extra Data: {{ report['extraData'] }}</li>
                 <li>Created: {{ report['created'] }}</li>
-                <li>Thread Info: {{ report['thread'] }}</li>
+                <li>Thread Info: {{ report['threadInfo'] }}</li>
+                <li>Time to Next Report: {{ report['timeToNext'] }}</li>
             </ul>
         {% endfor %}
     </div>
