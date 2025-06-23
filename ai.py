@@ -544,14 +544,8 @@ class InteractionContext:
         return f"""<InteractionContext Instance:
 Provider: {self.provider}
 Variant: {self.variant}
-History:
----
-{"\n".join(str(interaction) for interaction in self.history) if self.history else "None"}
----
-Tools:
----
-{"\n".join(str(tool) for tool in self.tools) if self.tools else "None"}
----
+History:{("\n---\n- " + ("\n- ".join(str(interaction) for interaction in self.history)) + "\n---") if self.history else " None"}
+Tools:{("\n---\n- " + ("\n- ".join(str(tool) for tool in self.tools)) + "\n---") if self.tools else " None"}
 Temperature: {self.temperature}
 Presence Penalty: {self.presence_penalty}
 Top P: {self.top_p}

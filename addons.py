@@ -146,7 +146,7 @@ class ModelContext:
         )
     
     def __str__(self):
-        return f"Model(name={self.name}, filename={self.filename}, driveID={self.driveID})"
+        return f"ModelContext(name={self.name}, filename={self.filename}, driveID={self.driveID}, model={'Yes' if self.model is not None else 'No'}, loadCallback={'Yes' if self.loadCallback is not None else 'No'})"
 
 class ModelStore:
     '''Manages a collection of machine learning models, providing methods to load, save, and retrieve models.
@@ -415,17 +415,21 @@ class ASReport:
     
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'ASReport':
-        return ASReport(
+        r = ASReport(
             source=data.get("source"),
             message=data.get("message"),
-            extraData=data.get("extraData"),
-            created=data.get("created"),
-            threadInfo=data.get("threadInfo")
+            extraData=data.get("extraData")
         )
+        r.created = data.get("created")
+        r.threadInfo = data.get("threadInfo")
+        return r
     
     @staticmethod
     def threadInfoString() -> str:
         return f"{threading.get_ident()} {threading.current_thread().name} {isinstance(threading.current_thread(), threading._MainThread)}"
+    
+    def __str__(self):
+        return f"ASReport(source={self.source}, message={self.message}, extraData={self.extraData}, created={self.created}, threadInfo={self.threadInfo})"
 
 class ASTracer:
     """
@@ -526,6 +530,16 @@ class ASTracer:
             "reports": [report.represent() for report in self.reports],
             "threadInfo": self.threadInfo
         }
+    
+    def __str__(self):
+        return f"""<ASTracer Instance:
+ID: {self.id}
+Purpose: {self.purpose}
+Created: {self.created}
+Started: {self.started}
+Finished: {self.finished}
+Reports:{("\n---\n- " + ("\n- ".join(str(report) for report in self.reports)) + "\n---") if self.reports else " None"}
+Thread Info: {self.threadInfo} />"""
     
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'ASTracer':
