@@ -112,6 +112,17 @@ class ImageCaptioningModelInference(nn.Module):
         return self.decoder.generate(features, vocab_size=vocab_size, max_len=max_len)
 
 class ImageCaptioning:
+    '''Pipeline for the Image Captioning model.
+    
+    Contains ModelStore-compatible loading callback: `ImageCaptioning.loadModel`
+    
+    Generate captions for images using `ImageCaptioning.generateCaption(imagePath: str, tracer: ASTracer)`.
+    The method returns a string - this could be a caption, or, if it begins with "ERROR: ", an error message.
+    
+    Methods have been integrated to support the ArchSmith framework, allowing for tracing and reporting.
+    Requires `imageCaptioner`-named context present in `ModelStore`.
+    '''
+    
     VOCAB_PATH = os.path.join(ModelStore.rootDirPath(), "vocab.pkl")
     MAX_SEQ_LENGTH = 25
     SEED = 42
