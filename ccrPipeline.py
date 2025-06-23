@@ -284,13 +284,6 @@ class CCRPipeline:
         textCount = sum(len(chars) for chars in result_dict.values())
         tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", f"Reconstructed final text. Number of text: {textCount}"))
         return concatText
-    
-    # Define the callback function for the LLM tool.
-    def getccrCorrected(filePath: str, predText: str) -> str:
-        """
-        Simple passthrough callback for the tool that trims whitespace from the predicted text.
-        """
-        return predText.strip()
 
     # Pre-tool invocation callback to log or handle messages before tool runs.
     def preToolCallback(msg):
@@ -302,25 +295,6 @@ class CCRPipeline:
 
     # Define the LLM Tool once and reuse it for all calls.
     # This tool describes what parameters it expects and what it does.
-    TOOL_GET_CCR_CORRECTED = Tool(
-        callback=getccrCorrected,
-        name="get_ccrCorrected",
-        description="This tool can correct predicted Chinese Calligraphy text.",
-        parameters=[
-            Tool.Parameter(
-                name="filePath",
-                dataType=Tool.Parameter.Type.STRING,
-                description="Image of Chinese Calligraphy meeting minutes.",
-                required=True
-            ),
-            Tool.Parameter(
-                name="predText",
-                dataType=Tool.Parameter.Type.STRING,
-                description="Predicted text from OCR or recognition model.",
-                required=True
-            )
-        ]
-    )
     
     @staticmethod
     def llmCorrection(image_path: str, predicted_text: str, tracer) -> str:
@@ -333,7 +307,6 @@ class CCRPipeline:
         cont = InteractionContext(
             provider=LMProvider.QWEN,
             variant=LMVariant.QWEN_VL_PLUS,
-            tools=[CCRPipeline.TOOL_GET_CCR_CORRECTED],
             preToolInvocationCallback=CCRPipeline.preToolCallback,
             postToolInvocationCallback=CCRPipeline.postToolCallback
         )
@@ -490,16 +463,14 @@ class CCRPipeline:
             correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer)
             
             # accuracy = CCRPipeline.accuracy(predText, "./ccr img/-064GT.txt", show=True)
-            accuracy = CCRPipeline.accuracy(correctedText, "./ccr img/-064GT.txt", show=True)
-            print(accuracy)
+            # accuracy = CCRPipeline.accuracy(correctedText, "./ccr img/-064GT.txt", show=False)
+            # print("\nAccuracy: {}".format(accuracy))
 
-            tracer.end()
             # return predText
             return correctedText
 
         except Exception as e:
-            tracer.addReport(ASReport("transcribe", f"Error: {e}", {"error": str(e)}))
-            tracer.end()
+            tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", f"Error: {e}", {"error": str(e)}))
             return str(e)
 
 # === Entry Point ===

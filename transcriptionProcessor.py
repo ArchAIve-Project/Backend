@@ -1,98 +1,103 @@
 import traceback
 from addons import ASTracer, ASReport
-from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant
-
+from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant, Tool
 
 class TranscriptionProcessor:
     """
-    Processes traditional Chinese text by:
-    - Converting it to simplified Chinese
-    - Translating it to English
-    - Summarizing the English version
+    Handles the processing of traditional Chinese text by:
+    - Converting to simplified Chinese
+    - Translating to English
+    - Summarizing the translation
     """
-    
+
+    @staticmethod
     def extract_content(response):
-        # Return the `.content` if it's a message object
         if hasattr(response, "content"):
             return response.content.strip()
-        # If it's a string (error), return it as-is
         elif isinstance(response, str):
             return f"[ERROR] {response.strip()}"
         else:
             return "[ERROR] Unknown response type"
 
     @staticmethod
-    def process(traditional_text: str, tracer: ASTracer) -> tuple:
-        """
-        Takes traditional Chinese text and returns:
-        - simplified Chinese
-        - English translation
-        - summary in English
-        """
-
+    def tradToSimp(traditional_text: str, tracer: ASTracer) -> str:
+        cont = InteractionContext(
+            provider=LMProvider.QWEN,
+            variant=LMVariant.QWEN_PLUS
+        )
+        cont.addInteraction(
+            Interaction(
+                role=Interaction.Role.USER,
+                content=f"Convert the following traditional Chinese text to simplified Chinese. Only output simplified Chinese:\n\n{traditional_text.strip()}"
+            )
+        )
         try:
-            # Convert Traditional → Simplified Chinese
-            cont_simp = InteractionContext(
-                provider=LMProvider.QWEN,
-                variant=LMVariant.QWEN_PLUS
-            )
-            cont_simp.addInteraction(
-                Interaction(
-                    role=Interaction.Role.USER,
-                    content=f"Convert the following traditional Chinese text to simplified Chinese. Only output simplified Chinese:\n\n{traditional_text.strip()}"
-                )
-            )
-            # simp_response = LLMInterface.engage(cont_simp)
-            # print(simp_response)
-            # simplified = simp_response.content.strip()
-            simplified = TranscriptionProcessor.extract_content(LLMInterface.engage(cont_simp))
-            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR PROCESS", "Simplified Chinese generated."))
+            response = LLMInterface.engage(cont)
+            return TranscriptionProcessor.extract_content(response)
+        except Exception as e:
+            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR SIMPLIFY ERROR", str(e)))
+            return "ERROR: Failed to simplify; error: {}".format(e)
 
-            # Translate Traditional Chinese → English
-            cont_en = InteractionContext(
-                provider=LMProvider.QWEN,
-                variant=LMVariant.QWEN_PLUS
-            )
-            cont_en.addInteraction(
-                Interaction(
-                    role=Interaction.Role.USER,
-                    content=f"Translate the following traditional Chinese text into English. Only output English:\n\n{traditional_text.strip()}"
+    @staticmethod
+    def tradToEng(traditional_text: str, tracer: ASTracer) -> str:
+        cont = InteractionContext(
+            provider=LMProvider.QWEN,
+            variant=LMVariant.QWEN_PLUS
+        )
+        cont.addInteraction(
+            Interaction(
+                role=Interaction.Role.USER,
+                content=(
+                    "Task: Translate the following Traditional Chinese into formal and fluent English.\n"
+                    "Output: English only. Do NOT include any Chinese text, explanations, or notes.\n\n"
+                    f"Text to translate:\n{traditional_text.strip()}"
                 )
             )
-            # en_response = LLMInterface.engage(cont_en)
-            # print(en_response)
-            # english = en_response.content.strip()
-            english = TranscriptionProcessor.extract_content(LLMInterface.engage(cont_en))
-            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR PROCESS", "English translation generated."))
+        )
+        try:
+            response = LLMInterface.engage(cont)
+            return TranscriptionProcessor.extract_content(response)
+        except Exception as e:
+            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR TRANSLATE ERROR", str(e)))
+            return "ERROR: Failed to translate into english; error: {}".format(e)
 
-            # Summarize the English Text
-            cont_sum = InteractionContext(
-                provider=LMProvider.OPENAI,
-                variant=LMVariant.GPT_4O_MINI
+    @staticmethod
+    def engSummary(english_text: str, tracer: ASTracer) -> str:
+        cont = InteractionContext(
+            provider=LMProvider.OPENAI,
+            variant=LMVariant.GPT_4O_MINI
+        )
+        cont.addInteraction(
+            Interaction(
+                role=Interaction.Role.USER,
+                content=f"Summarize the following English text concisely:\n\n{english_text.strip()}"
             )
-            cont_sum.addInteraction(
-                Interaction(
-                    role=Interaction.Role.USER,
-                    content=f"Summarize the following English text concisely:\n\n{english}"
-                )
-            )
-            # sum_response = LLMInterface.engage(cont_sum)
-            # print(sum_response)
-            # summary = sum_response.content.strip()
-            summary = TranscriptionProcessor.extract_content(LLMInterface.engage(cont_sum))
-            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR PROCESS", "English summary generated."))
-            
-            tracer.end()
+        )
+        try:
+            response = LLMInterface.engage(cont)
+            return TranscriptionProcessor.extract_content(response)
+        except Exception as e:
+            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR SUMMARY ERROR", str(e)))
+            return "ERROR: Failed to summarise text; error: {}".format(e)
+
+    @staticmethod
+    def process(traditional_text: str, tracer: ASTracer) -> tuple:
+        try:
+            simplified = TranscriptionProcessor.tradToSimp(traditional_text, tracer)
+            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR PROCESS", "Simplified Chinese generated.", extraData={"output": simplified}))
+
+            english = TranscriptionProcessor.tradToEng(traditional_text, tracer)
+            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR PROCESS", "English translation generated.", extraData={"output": english}))
+
+            summary = TranscriptionProcessor.engSummary(english, tracer)
+            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR PROCESS", "English summary generated.", extraData={"output": summary}))
 
             return simplified, english, summary
 
-
         except Exception as e:
-            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR PROCESS ERROR", f"Failed during processing: {e}", {
-                "traceback": traceback.format_exc()
-            }))
-            print("ERROR: {}".format(e))
-            tracer.end()
-            
-            return "", "", ""
-
+            tracer.addReport(ASReport(
+                "TRANSCRIPTIONPROCESSOR PROCESS ERROR",
+                f"Failed during processing: {e}"
+            ))
+            print(f"ERROR: {e}")
+            return None, None, None

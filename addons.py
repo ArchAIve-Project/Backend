@@ -110,7 +110,6 @@ class ModelContext:
         return True
     
     def load(self):
-        print("hello {} {}".format(self.model, self.loadCallback))
         self.model = self.loadCallback(ModelStore.modelFilePath(self.filename)) if self.loadCallback else None
         return self.model
     
