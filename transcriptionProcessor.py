@@ -11,15 +11,6 @@ class TranscriptionProcessor:
     """
 
     @staticmethod
-    def extract_content(response):
-        if hasattr(response, "content"):
-            return response.content.strip()
-        elif isinstance(response, str):
-            return f"[ERROR] {response.strip()}"
-        else:
-            return "[ERROR] Unknown response type"
-
-    @staticmethod
     def tradToSimp(traditional_text: str, tracer: ASTracer) -> str:
         cont = InteractionContext(
             provider=LMProvider.QWEN,
@@ -33,10 +24,10 @@ class TranscriptionProcessor:
         )
         try:
             response = LLMInterface.engage(cont)
-            return TranscriptionProcessor.extract_content(response)
+            return (response.content if hasattr(response, 'content') else f"[ERROR] {str(response).strip()}")
         except Exception as e:
             tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR SIMPLIFY ERROR", str(e)))
-            return "ERROR: Failed to simplify; error: {}".format(e)
+            return f"ERROR: Failed to simplify; error: {e}"
 
     @staticmethod
     def tradToEng(traditional_text: str, tracer: ASTracer) -> str:
@@ -56,10 +47,10 @@ class TranscriptionProcessor:
         )
         try:
             response = LLMInterface.engage(cont)
-            return TranscriptionProcessor.extract_content(response)
+            return (response.content if hasattr(response, 'content') else f"[ERROR] {str(response).strip()}")
         except Exception as e:
             tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR TRANSLATE ERROR", str(e)))
-            return "ERROR: Failed to translate into english; error: {}".format(e)
+            return f"ERROR: Failed to translate into english; error: {e}"
 
     @staticmethod
     def engSummary(english_text: str, tracer: ASTracer) -> str:
@@ -75,10 +66,10 @@ class TranscriptionProcessor:
         )
         try:
             response = LLMInterface.engage(cont)
-            return TranscriptionProcessor.extract_content(response)
+            return (response.content if hasattr(response, 'content') else f"[ERROR] {str(response).strip()}")
         except Exception as e:
             tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR SUMMARY ERROR", str(e)))
-            return "ERROR: Failed to summarise text; error: {}".format(e)
+            return f"ERROR: Failed to summarise text; error: {e}"
 
     @staticmethod
     def process(traditional_text: str, tracer: ASTracer) -> tuple:
