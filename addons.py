@@ -110,7 +110,6 @@ class ModelContext:
         return True
     
     def load(self):
-        print("hello {} {}".format(self.model, self.loadCallback))
         self.model = self.loadCallback(ModelStore.modelFilePath(self.filename)) if self.loadCallback else None
         return self.model
     
@@ -246,12 +245,37 @@ class ModelStore:
         return True
     
     @staticmethod
-    def setup():
+    def defaultModels():
+        ls = [
+            ModelContext(name="imageCaptioner", filename="SCCCICaptioner.pth"),
+            ModelContext(name="cnn", filename="CNNBinary.pth"),
+            ModelContext(name="ccr", filename="CCR.pth"),
+            ModelContext(name="ccrCharFilter", filename="CCRCharFilter.pth")
+        ]
+        
+        for mcIndex in range(len(ls)):
+            if not ls[mcIndex].fileExists():
+                id = input("MODELSTORE DEFAULTMODELS: File for model '{}' not found. Enter Drive ID ('.ignore' to ignore): ".format(ls[mcIndex].name))
+                if id.strip() == ".ignore":
+                    continue
+                ls[mcIndex].driveID = id.strip()
+        
+        return ls
+    
+    @staticmethod
+    def setup(useDefaults: bool=False, autoLoad: bool=True, **callbackArgs):
         '''Sets up the model store by creating the root directory, loading the context, and downloading models as needed.'''
         if not os.path.isdir(ModelStore.rootDirPath()):
             os.makedirs(ModelStore.rootDirPath())
         
         ModelStore.loadContext()
+        
+        if useDefaults:
+            defaults = ModelStore.defaultModels()
+            for model in defaults:
+                if model.name not in ModelStore.context:
+                    print("MODELSTORE SETUP: Adding default model '{}'.".format(model.name))
+                    ModelStore.context[model.name] = model
         
         for model in [x for x in ModelStore.context.values()]:
             if not model.fileExists():
@@ -262,15 +286,16 @@ class ModelStore:
                         if res != True:
                             raise Exception(res)
                     except Exception as e:
-                        print("MODELSTORE SETUP WARNING: Failed to download model '{}'; model will be excluded from context. Error: {}".format(model.name, e))
-                        del ModelStore.context[model.name]
+                        return "MODELSTORE SETUP ERROR: Failed to download model '{}'; error: {}".format(model.name, e)
                 else:
-                    print("MODELSTORE SETUP WARNING: Model file not found for non-downloadable model '{}'. Model will be excluded from context.".format(model.name))
-                    del ModelStore.context[model.name]
-            # else:
-            #     print("MODELSTORE: '{}' loaded successfully.".format(model.name))
+                    return "MODELSTORE SETUP ERROR: Model file not found for non-downloadable model '{}'.".format(model.name)
         
         ModelStore.saveContext()
+        
+        if autoLoad:
+            if len(callbackArgs) > 0:
+                ModelStore.registerLoadModelCallbacks(**callbackArgs)
+            ModelStore.loadModels(*callbackArgs.keys())
         
         print("MODELSTORE: Setup complete. {} model(s) loaded.".format(len(ModelStore.context)))
     
