@@ -10,5 +10,10 @@
     <p>This is a lightweight server that makes ArchSmith-tracked data more accessible for a better debugging/analysis experience.</p>
     <br>
     <p>Tracer Runs:</p>
+    <ul>
+        {% for tracerID in tracerData %}
+            <li>Purpose: '{{ tracerData[tracerID]['purpose'] }}', Created: {{ tracerData[tracerID]['created'] }}</li>
+        {% endfor %}
+    </ul>
 </body>
 </html>
