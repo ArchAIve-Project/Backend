@@ -483,3 +483,6 @@ Commands:
                 break
     
         return
+
+class FileManager:
+    pass

@@ -34,10 +34,12 @@ class FireConn:
         if not FireConn.checkPermissions():
             return "ERROR: Firebase connection permissions are not granted."
         if not os.path.exists("serviceAccountKey.json"):
-            return "ERROR: Failed to connect to Firebase. The file serviceAccountKey.json was not found. Please re-read instructions for the Firebase addon."
+            return "ERROR: Failed to connect to Firebase. The file serviceAccountKey.json was not found."
         else:
             if 'RTDB_URL' not in os.environ:
-                return "ERROR: Failed to connect to Firebase. RTDB_URL environment variable not set in .env file. Please re-read instructions for the Firebase addon."
+                return "ERROR: Failed to connect to Firebase. RTDB_URL environment variable not set in .env file."
+            if 'STORAGE_URL' not in os.environ:
+                return "ERROR: Failed to connect to Firebase. STORAGE_URL environment variable not set in .env file."
             try:
                 ## Firebase
                 cred_obj = credentials.Certificate(os.path.join(os.getcwd(), "serviceAccountKey.json"))
@@ -289,7 +291,9 @@ class FireStorage:
             return "ERROR: FireStorage service operation permission denied."
         try:
             bucket = storage.bucket()
-            blob = bucket.blob(filename)
+            blob = bucket.get_blob(filename)
+            if blob is None:
+                return "ERROR: File not found in cloud storage."
             if metadataOnly:
                 return {
                     "id": blob.id,
@@ -312,11 +316,12 @@ class FireStorage:
     
     @staticmethod
     def getFileSignedURL(filename: str, expiration: datetime.timedelta=None, allowCache: bool=True, updateCache: bool=True) -> str:
-        if expiration is None:
-            expiration = datetime.timedelta(hours=1)
         '''Returns the signed URL of a file in Firebase Storage.'''
         if not FireStorage.checkPermissions():
             return "ERROR: FireStorage service operation permission denied."
+        
+        if expiration is None:
+            expiration = datetime.timedelta(hours=1)
         
         if FireStorage.signedURLCache.get(filename) != None and allowCache:
             cachedData = FireStorage.signedURLCache[filename]
@@ -345,7 +350,7 @@ class FireStorage:
             
             return url
         except Exception as e:
-            return "ERROR: Error occurred in getting file URL from cloud storage; error: {}".format(e)
+            return "ERROR: Error in generating signed URL for file in cloud storage; error: {}".format(e)
     
     @staticmethod
     def getFilePublicURL(filename: str) -> str:
