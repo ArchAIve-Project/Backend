@@ -193,20 +193,14 @@ class TranscriptionProcessor:
             simp, eng, summ = TranscriptionProcessor.process(traditional_text, tracer)
         ```
         """
+        
+        simplified = TranscriptionProcessor.tradToSimp(traditional_text, tracer)
+        if simplified.startswith("ERROR:"):
+            return simplified, "", ""
 
-        try:
-            simplified = TranscriptionProcessor.tradToSimp(traditional_text, tracer)
+        english = TranscriptionProcessor.tradToEng(traditional_text, tracer)
+        if english.startswith("ERROR:"):
+            return simplified, english, ""
 
-            english = TranscriptionProcessor.tradToEng(traditional_text, tracer)
-
-            summary = TranscriptionProcessor.engSummary(english, tracer)
-
-            return simplified, english, summary
-
-        except Exception as e:
-            tracer.addReport(ASReport(
-                "TRANSCRIPTIONPROCESSOR PROCESS ERROR",
-                f"Failed during processing: {e}"
-            ))
-            print(f"ERROR: {e}")
-            return "ERROR: {e}"
+        summary = TranscriptionProcessor.engSummary(english, tracer)
+        return simplified, english, summary
