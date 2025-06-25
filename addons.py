@@ -710,21 +710,14 @@ class ArchSmith:
     @staticmethod
     def autoPersistCheck():
         if ArchSmith.autoPersist and ArchSmith.autoPersistCount >= ArchSmith.autoPersistThreshold:
-            if ArchSmith._persist_lock.acquire(blocking=False):
-                try:
-                    ArchSmith.autoPersistCount = 0
-                    ArchSmith.persist()
-                except Exception as e:
-                    Logger.log("ARCHSMITH AUTOPERSIST ERROR: Failed to persist data; error: {}".format(e))
-                finally:
-                    ArchSmith._persist_lock.release()
-                
-                Logger.log("ARCHSMITH AUTOPERSIST: Automatic persistence triggered. Post-persist cache size: {}".format(len(ArchSmith.cache)))
-                return True # Successfully persisted
-            else:
-                Logger.log("ARCHSMITH AUTOPERSIST SKIPPED: Another thread is already persisting data. Skipping this call.")
+            if ArchSmith._persist_lock.locked():
                 ArchSmith._skippedPersistAttempts += 1
-                return False # Another thread is already persisting, skip this call
+                Logger.log("ARCHSMITH AUTOPERSIST WARNING: Skipping auto-persist due to lock contention. Total skipped attempts: {}".format(ArchSmith._skippedPersistAttempts))
+                return False
+            
+            ArchSmith.autoPersistCount = 0
+            ArchSmith.persist()
+            Logger.log("ARCHSMITH AUTOPERSIST: Automatic persistence triggered. Post-persist cache size: {}".format(len(ArchSmith.cache)))
         
         return True # Threshold not reached, no action taken
     
