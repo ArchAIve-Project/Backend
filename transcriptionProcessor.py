@@ -49,8 +49,19 @@ class TranscriptionProcessor:
         )
         try:
             response = LLMInterface.engage(cont)
-            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR TRADTOSIMP", "Simplified Chinese generated."))
-            return (response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}")
+            if isinstance(response, str):
+                raise Exception("ERROR: Failed to carry out LLM correction; response: {}".format(response))
+
+            content = response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}"
+            charCount = len(content.strip())
+            
+            tracer.addReport(ASReport(
+                "TRANSCRIPTIONPROCESSOR TRADTOSIMP",
+                f"Simplified Chinese generated. Number of characters: {charCount}"
+            ))
+
+            return content
+
         except Exception as e:
             tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR TRADTOSIMP ERROR", str(e)))
             return f"ERROR: Failed to simplify: {e}"
@@ -92,8 +103,19 @@ class TranscriptionProcessor:
         )
         try:
             response = LLMInterface.engage(cont)
-            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR TRADTOENG", "English translation generated."))
-            return (response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}")
+            if isinstance(response, str):
+                raise Exception("ERROR: Failed to carry out LLM correction; response: {}".format(response))
+            
+            content = response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}"
+            charCount = len(content.strip())
+            
+            tracer.addReport(ASReport(
+                "TRANSCRIPTIONPROCESSOR TRADTOENG", 
+                f"English translation generated. Number of characters: {charCount}"
+            ))
+            
+            return content
+        
         except Exception as e:
             tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR TRADTOENG ERROR", str(e)))
             return f"ERROR: Failed to translate into english: {e}"
@@ -131,8 +153,19 @@ class TranscriptionProcessor:
         )
         try:
             response = LLMInterface.engage(cont)
-            tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR ENGSUMMARY", "English summary generated."))
-            return (response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}")
+            if isinstance(response, str):
+                raise Exception("ERROR: Failed to carry out LLM correction; response: {}".format(response))
+            
+            content = response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}"
+            charCount = len(content.strip())
+            
+            tracer.addReport(ASReport(
+                "TRANSCRIPTIONPROCESSOR ENGSUMMARY", 
+                f"English summary generated. Number of characters: {charCount}"
+            ))
+            
+            return content
+        
         except Exception as e:
             tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR ENGSUMMARY ERROR", str(e)))
             return f"ERROR: Failed to summarise text: {e}"
