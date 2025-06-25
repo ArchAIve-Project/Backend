@@ -439,6 +439,10 @@ class CCRPipeline:
 
         try:
             response = LLMInterface.engage(cont)
+            
+            if isinstance(response, str):
+                raise Exception("ERROR: Failed to carry out LLM correction; response: {}".format(response))
+            
             corrected = response.content.strip()
             textCount = len(corrected)
             
