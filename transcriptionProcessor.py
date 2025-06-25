@@ -9,8 +9,10 @@ class TranscriptionProcessor:
     Provides static methods to convert traditional Chinese to simplified Chinese,
     translate traditional Chinese to English, and summarize the English translation.
 
-    Usage:
+    ## Usage:
+    ```python
         simplified, english, summary = TranscriptionProcessor.process(traditional_text, tracer)
+    ```
     """
 
 
@@ -29,8 +31,10 @@ class TranscriptionProcessor:
         Returns:
             str: Simplified Chinese text if successful, or error message on failure.
 
-        Usage:
+        ## Usage:
+        ```python
             simplified_text = CCRPipeline.tradToSimp(traditional_text, tracer)
+        ```
         """
 
         cont = InteractionContext(
@@ -66,8 +70,10 @@ class TranscriptionProcessor:
         Returns:
             str: English translation if successful, or error message on failure.
 
-        Usage:
+        ## Usage:
+        ```python
             english_text = CCRPipeline.tradToEng(traditional_text, tracer)
+        ```
         """
 
         cont = InteractionContext(
@@ -107,8 +113,10 @@ class TranscriptionProcessor:
         Returns:
             str: Concise summary of the input text, or error message on failure.
 
-        Usage:
+        ## Usage:
+        ```python
             summary = CCRPipeline.engSummary(english_text, tracer)
+        ```
         """
 
         cont = InteractionContext(
@@ -147,8 +155,10 @@ class TranscriptionProcessor:
             tuple: A tuple containing (simplified Chinese, English translation, English summary),
                    or an error message string if processing fails.
 
-        Usage:
+        ## Usage:
+        ```python
             simp, eng, summ = TranscriptionProcessor.process(traditional_text, tracer)
+        ```
         """
 
         try:

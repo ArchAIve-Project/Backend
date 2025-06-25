@@ -23,8 +23,10 @@ class ChineseClassifier(nn.Module):
     passes them through a projection and classification head, and outputs logits
     corresponding to character class indices.
 
-    Usage:
-        `model = ChineseClassifier(embed_dim=256, num_classes=1200)`
+    ## ## Usage:
+    ```python    
+        model = ChineseClassifier(embed_dim=256, num_classes=1200)
+    ```
     """
 
     def __init__(self, embed_dim: int, num_classes: int):
@@ -52,7 +54,7 @@ class ChineseBinaryClassifier(nn.Module):
     The model is based on ResNet50 and outputs a single logit indicating validity.
     It supports optional feature extraction via `return_embedding`.
 
-    Usage:
+    ## ## Usage:
         `model = ChineseBinaryClassifier(embed_dim=512, unfreezeEncoder=True)`
     """
     def __init__(self, embed_dim: int = 512, unfreezeEncoder: bool = True):
@@ -99,6 +101,19 @@ class CCRPipeline:
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                             std=[0.229, 0.224, 0.225])
     ])
+    
+    @staticmethod
+    def checkFileType(image_path: str, tracer: ASTracer):
+        print("Image Path: {}".format(image_path))
+        # Extract extension, normalize
+        ext = os.path.splitext(image_path)[1].lower().replace('.', '')
+        if ext not in ['jpg', 'jpeg', 'jpe', 'png']:
+            tracer.addReport(ASReport("CCRPIPELINE CHECKFILETYPE ERROR", f"File type of {ext} not supported."))
+            return f"ERROR: Unsupported image file type: .{ext}"
+
+        imageFIleType = f"image/{'jpeg' if ext in ['jpg', 'jpeg', 'jpe'] else 'png'}"
+        print("Image file type: {}".format(imageFIleType))
+        return imageFIleType
 
     @staticmethod
     def load_label_mappings():
@@ -161,8 +176,10 @@ class CCRPipeline:
         Returns:
             np.ndarray: The padded square image with extra border.
 
-        Usage:
+        ## Usage:
+        ```python
             padded_img = YourClass.padToSquare(img, padding=40)
+        ```
         """
         h, w = image.shape
         size = max(h, w)
@@ -190,11 +207,13 @@ class CCRPipeline:
         Returns:
             List[Tuple[int, np.ndarray]]: List of tuples containing (column_index, padded_character_image).
 
-        Usage:
+        ## Usage:
+        ```python
             chars = CCRPipeline.segmentImage("docs/handwritten_sample.jpg", tracer)
             for col_idx, char_img in chars:
                 # Process each character image
                 pass
+        ```
         """
 
         # Read the image in color
@@ -317,8 +336,10 @@ class CCRPipeline:
         Returns:
             Dict[int, List[str]]: Mapping from column index to recognized character list.
 
-        Usage:
+        ## Usage:
+        ```python
             recognized_chars = CCRPipeline.detectCharacters(char_images, recog_model, idx2char, ccrCharFilter, tracer)
+        ```
         """
 
         result = {}
@@ -360,8 +381,10 @@ class CCRPipeline:
         Returns:
             str: The reconstructed text string combining all recognized characters.
 
-        Usage:
+        ## Usage:
+        ```python
             final_text = CCRPipeline.concatCharacters(recognized_chars, tracer)
+        ```
         """
 
         concatText = "\n".join("".join(result_dict[col]) for col in sorted(result_dict.keys()))
@@ -370,7 +393,7 @@ class CCRPipeline:
         return concatText
 
     @staticmethod
-    def llmCorrection(image_path: str, predicted_text: str, tracer) -> str:
+    def llmCorrection(image_path: str, predicted_text: str, tracer, imageFIleType: str) -> str:
         """
         Uses a large language model (LLM) to correct predicted Chinese calligraphy text
         based on the corresponding image.
@@ -387,8 +410,10 @@ class CCRPipeline:
         Returns:
             str: LLM-corrected Chinese text, or the original prediction if correction fails.
 
-        Usage:
+        ## Usage:
+        ```python
             corrected_text = CCRPipeline.llmCorrection(image_path, predicted_text, tracer)
+        ```
         """
 
 
@@ -401,20 +426,13 @@ class CCRPipeline:
         # Add the user interaction to the context:
         # Ask the LLM to correct the predicted text based on the image.
         # The LLM is expected to only output corrected Chinese text.
-        
-        # Extract extension, normalize
-        ext = os.path.splitext(image_path)[1].lower().replace('.', '')
-        if ext not in ['jpg', 'jpeg', 'jpe', 'png']:
-            raise ValueError(f"Unsupported image file type: .{ext}")
-
-        image_file_type = f"image/{'jpeg' if ext in ['jpg', 'jpeg', 'jpe'] else 'png'}"
 
         cont.addInteraction(
             Interaction(
                 role=Interaction.Role.USER,
                 content=f"Please review the image and correct the predicted Chinese text below. Make sure the correction matches the characters in the image and makes sense in context. Fix any errors, missing characters, or confusing parts. Only output the corrected Chinese text—no explanations.\n\nPredicted text:\n{predicted_text.strip()}",
                 imagePath=image_path,
-                imageFileType=image_file_type
+                imageFileType=imageFIleType
             ),
             imageMessageAcknowledged=True
         )
@@ -448,8 +466,10 @@ class CCRPipeline:
         Returns:
             float: Accuracy score between 0 and 1, ratio of matched characters to ground truth length.
 
-        Usage:
+        ## Usage:
+        ```python
             accuracy_score = CCRPipeline.accuracy(predicted_text, "path/to/pred.txt", show=True)
+        ```
         """
         
         # Remove the extension
@@ -539,8 +559,10 @@ class CCRPipeline:
         Returns:
             str: The final corrected transcription text, or error message if failed.
 
-        Usage:
+        ## Usage:
+        ```python
             transcription = CCRPipeline.transcribe("path/to/image.jpg", tracer, showAccuracy=True)
+        ```
         """
 
 
@@ -556,6 +578,12 @@ class CCRPipeline:
             # Load and cache idx2char only once
             if CCRPipeline.idx2char is None:
                 CCRPipeline.idx2char = CCRPipeline.load_label_mappings()
+                
+            # Check file type
+            imageFileType = CCRPipeline.checkFileType(image_path, tracer)
+            
+            if imageFileType.startswith("ERROR"):
+                return "ERROR: Unsupported file type. Please only input .jpg .jpe .jpeg or .png files."
 
             char_images = CCRPipeline.segmentImage(image_path, tracer)
 
@@ -569,7 +597,7 @@ class CCRPipeline:
 
             predText = CCRPipeline.concatCharacters(recognized, tracer)
 
-            correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer)
+            correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer, imageFileType)
 
             if showAccuracy:
                 predAccuracy = CCRPipeline.accuracy(predText, image_path)
