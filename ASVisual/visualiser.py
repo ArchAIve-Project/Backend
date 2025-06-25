@@ -7,8 +7,12 @@ app = Flask(__name__)
 reloadTime = 3000
 
 def getTracers():
-    with open(os.path.join(os.path.dirname(__file__), "..", "archsmith.json"), "r") as f:
-        data = json.load(f)
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "..", "archsmith.json"), "r") as f:
+            data = json.load(f)
+    except Exception as e:
+        print("ASVISUALISER GETTRACERS ERROR: Couldn't load ArchSmith data (Defaulting to empty list). Error: {}".format(e))
+        return []
     
     tracers: list[ASTracer] = []
     for key in data:
