@@ -4,7 +4,7 @@ from enum import Enum
 from services import FileOps, Logger, Universal
 
 class File:
-    class Type(str, Enum):
+    class Type(str, Enum): # maybe change to Store? better modularity?
         FACESHOT = "faceshot"
         ARTEFACT = "artefact"
         FACE_EMBEDDINGS = "embeddings"
@@ -170,7 +170,7 @@ class FileManager:
     @staticmethod
     def saveContext() -> bool | str:
         try:
-            with open(FileManager.dataFile, "r") as f:
+            with open(FileManager.dataFile, "w") as f:
                 data = {file.id: file.represent() for file in FileManager.context.values()}
                 data['mode'] = FileManager.mode
                 
