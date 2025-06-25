@@ -1,7 +1,7 @@
 import os, shutil, sys, json
 from typing import List, Dict
 from enum import Enum
-from services import FileOps, Logger
+from services import FileOps, Logger, Universal
 
 class File:
     class Type(str, Enum):
@@ -56,9 +56,9 @@ class File:
             return os.path.join(os.getcwd(), "FileStore", self.filename)
     
     @staticmethod
-    def from_dict(data: dict) -> 'File':
+    def from_dict(filename: str, data: dict) -> 'File':
         return File(
-            filename=data.get("filename"),
+            filename=filename,
             fileType=data.get("type"),
             id=data.get("id"),
             contentType=data.get("contentType"),
@@ -73,6 +73,7 @@ class File:
 class FileManager:
     mode = "cloud"
     dataFile = "fmContext.json"
+    stores = ["FileStore", "people", "artefacts"]
     context: Dict[str, File] = {}
     
     @staticmethod
@@ -87,20 +88,51 @@ class FileManager:
     
     @staticmethod
     def exists(file: File) -> bool:
-        return os.path.isfile(file.path())
+        # Check if a File object exists
+        return FileOps.exists(file.path(), type="file")
     
     @staticmethod
     def delete(file: File):
         try:
-            os.remove(file.path())
+            res = FileOps.deleteFile(file.path())
+            if res != True:
+                raise Exception(res)
         except Exception as e:
             return "ERROR: Failed to delete file; error: {}".format(e)
     
     @staticmethod
-    def cleanupNonmatchingFiles():
-        for file in FileManager.context.values():
-            if not FileManager.exists(file):
-                pass
+    def cleanupNonmatchingFiles(explicitEmbeddingsFileCheck=True):
+        # Check non-matching files in regular stores
+        for store in FileManager.stores:
+            filenames = FileOps.getFilenames(store)
+            if isinstance(filenames, str):
+                return "ERROR: Failed to get filenames for store '{}'; response: {}".format(filenames)
+            
+            for filename in filenames:
+                if filename not in FileManager.context.keys():
+                    FileOps.deleteFile(os.path.join(store, filename))
+        
+        # See if embedding file is non-matching
+        if FileOps.exists(os.path.join(os.getcwd(), str(File.Type.FACE_EMBEDDINGS)), type="file"):
+            if File.Type.FACE_EMBEDDINGS.value not in FileManager.context.keys():
+                FileOps.deleteFile(str(File.Type.FACE_EMBEDDINGS))
+    
+    @staticmethod
+    def createStores(*args: list[str]):
+        toCreate = FileManager.stores if len(args) == 0 else args
+        
+        for store in toCreate:
+            res = FileOps.createFolder(store)
+            
+            if res != True:
+                if store in FileManager.stores:
+                    FileManager.stores.remove(store)
+                return "ERROR: Failed to create store '{}'; error: {}".format(res)
+            
+            if store not in FileManager.stores:
+                FileManager.stores.append(store)
+        
+        return True
     
     @staticmethod
     def loadContext() -> bool | str:
@@ -113,22 +145,22 @@ class FileManager:
         except Exception as e:
             return "ERROR: Failed to load context data; error: {}".format(e)
         
-        for fileID in data:
-            if fileID == "mode": # TODO: context morphing for mode mismatch
+        for filename in data:
+            if filename == "mode": # TODO: context morphing for mode mismatch
                 continue
-            if not isinstance(data[fileID], dict):
-                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file ID '{}' due to a value that is not of type 'dict'.".format(fileID))
+            if not isinstance(data[filename], dict):
+                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file '{}' due to a value that is not of type 'dict'.".format(filename))
             
             try:
-                file = File.from_dict(data)
+                file = File.from_dict(filename, data)
                 if (file.filename is None) or (not isinstance(file.filename, str)) or (file.fileType is None) or (not File.Type.isValid(file.fileType)):
                     raise Exception("Filename or type is missing or invalid.")
                 if not FileManager.exists(file):
                     raise Exception("File not found.")
                 
-                FileManager.context[fileID] = file
+                FileManager.context[filename] = file
             except Exception as e:
-                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file with ID '{}' due to error: {}".format(fileID, e))
+                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file with ID '{}' due to error: {}".format(filename, e))
         
         FileManager.saveContext()
         FileManager.cleanupNonmatchingFiles()

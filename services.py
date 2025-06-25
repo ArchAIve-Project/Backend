@@ -513,9 +513,9 @@ class FileOps:
             return "ERROR: Failed to create folder '{}'; error: {}".format(relativePath, e)
     
     @staticmethod
-    def getFilenames(relativeFolderPath: str) -> list[str] | None | str:
+    def getFilenames(relativeFolderPath: str) -> list[str] | str:
         if not FileOps.exists(os.path.join(os.getcwd(), relativeFolderPath), type="folder"):
-            return None
+            return []
         
         try:
             files = os.listdir(os.path.join(os.getcwd(), relativeFolderPath))
