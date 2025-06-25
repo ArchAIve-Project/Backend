@@ -1,5 +1,8 @@
-import os, json, base64, random, datetime, uuid, functools
+import os, shutil, json, base64, random, datetime, uuid, functools
+from enum import Enum
+from typing import List, Dict
 from apscheduler.schedulers.background import BackgroundScheduler
+from firebase import FireStorage
 from passlib.hash import sha256_crypt as sha
 from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -484,5 +487,60 @@ Commands:
     
         return
 
-class FileManager:
-    pass
+class FileOps:
+    @staticmethod
+    def exists(path: str, type: str="folder"):
+        '''Check the existence of a file/folder. Provide 'path' and 'type'.
+        Valid values for 'type' include 'folder' and 'file'.
+        Raises `ValueError` if an invalid type value is provided.'''
+        if type not in ["folder", "file"]:
+            raise ValueError("Invalid type provided. Must be 'folder' or 'file'.")
+        
+        if type == "file":
+            return os.path.isfile(path)
+        else:
+            return os.path.isdir(path)
+    
+    @staticmethod
+    def createFolder(relativePath: str) -> bool | str:
+        if FileOps.exists(os.path.join(os.getcwd(), relativePath), type="folder"):
+            return True
+        
+        try:
+            os.mkdir(os.path.join(os.getcwd(), relativePath))
+            return True
+        except Exception as e:
+            return "ERROR: Failed to create folder '{}'; error: {}".format(relativePath, e)
+    
+    @staticmethod
+    def getFilenames(relativeFolderPath: str) -> list[str] | None | str:
+        if not FileOps.exists(os.path.join(os.getcwd(), relativeFolderPath), type="folder"):
+            return None
+        
+        try:
+            files = os.listdir(os.path.join(os.getcwd(), relativeFolderPath))
+            return files
+        except Exception as e:
+            return "ERROR: Failed to list files in folder '{}'; error: {}".format(relativeFolderPath, e)
+    
+    @staticmethod
+    def deleteFolder(relativePath: str) -> bool | str:
+        if not FileOps.exists(os.path.join(os.getcwd(), relativePath), type="folder"):
+            return True
+        
+        try:
+            shutil.rmtree(os.path.join(os.getcwd(), relativePath))
+            return True
+        except Exception as e:
+            return "ERROR: Failed to delete folder '{}'; error: {}".format(relativePath, e)
+    
+    @staticmethod
+    def deleteFile(relativePath: str) -> bool | str:
+        if not FileOps.exists(os.path.join(os.getcwd(), relativePath), type="file"):
+            return True
+        
+        try:
+            os.remove(os.path.join(os.getcwd(), relativePath))
+            return True
+        except Exception as e:
+            return "ERROR: Failed to remove file '{}'; error: {}".format(relativePath, e)
