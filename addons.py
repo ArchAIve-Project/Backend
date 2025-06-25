@@ -483,6 +483,9 @@ class ASTracer:
     
     def end(self):
         self.finished = Universal.utcNowString()
+        
+        ArchSmith.autoPersistCount += 1
+        ArchSmith.autoPersistCheck()
     
     def addReport(self, report: ASReport) -> bool:
         '''Adds a report to the tracer.'''
@@ -501,6 +504,9 @@ class ASTracer:
             self.pausedReports.append(report)
         else:
             self.reports.append(report)
+        
+        ArchSmith.autoPersistCount += 1
+        ArchSmith.autoPersistCheck()
         
         return True
     
@@ -614,20 +620,28 @@ class ArchSmith:
     Note: Though ArchSmith is designed to be thread-safe, the user should ensure that the `ArchSmith.persist()` method is called in a controlled manner, or at least in a singular context.
     """
     dataFile = "archsmith.json"
+    _persist_lock = threading.Lock() # Lock for thread-safe persistence operations
+    _skippedPersistAttempts = 0  # Counter for skipped persistence attempts due to lock contention
     
     cache: Dict[str, ASTracer] = {}
     paused: bool = False
+    autoPersist: bool = True
+    autoPersistCount: int = 0
+    autoPersistThreshold: int = 10 if os.environ.get("DEBUG_MODE", "False") != "True" else 1  # Default to 10, but 1 in debug mode for faster testing
     
     @staticmethod
     def checkPermissions():
         return os.environ.get("ARCHSMITH_ENABLED", "False") == "True"
     
     @staticmethod
-    def setup():
+    def setup(autoPersist: bool=True, autoPersistThreshold: int=None):
         if not ArchSmith.checkPermissions():
             return "ERROR: ArchSmith does not have permission to operate."
         
         ArchSmith.ensureDataFile()
+        ArchSmith.autoPersist = autoPersist
+        if isinstance(autoPersistThreshold, int) and autoPersistThreshold > 0:
+            ArchSmith.autoPersistThreshold = autoPersistThreshold
         return True
     
     @staticmethod
@@ -677,20 +691,42 @@ class ArchSmith:
         if not ArchSmith.checkPermissions():
             return "ERROR: ArchSmith does not have permission to operate."
         
-        ArchSmith.ensureDataFile()
-        copiedCache = copy.deepcopy(ArchSmith.cache)
+        with ArchSmith._persist_lock:
+            ArchSmith.ensureDataFile()
+            copiedCache = copy.deepcopy(ArchSmith.cache)
+            
+            with open(ArchSmith.dataFile, "r") as f:
+                data: dict = json.load(f)
+            
+            data.update({tracer.id: tracer.represent() for tracer in copiedCache.values()})
+            
+            for tracerID in list(copiedCache.keys()):
+                if copiedCache[tracerID].finished:
+                    del ArchSmith.cache[tracerID]
+            
+            with open(ArchSmith.dataFile, "w") as f:
+                json.dump(data, f, indent=4)
+    
+    @staticmethod
+    def autoPersistCheck():
+        if ArchSmith.autoPersist and ArchSmith.autoPersistCount >= ArchSmith.autoPersistThreshold:
+            if ArchSmith._persist_lock.acquire(blocking=False):
+                try:
+                    ArchSmith.autoPersistCount = 0
+                    ArchSmith.persist()
+                except Exception as e:
+                    Logger.log("ARCHSMITH AUTOPERSIST ERROR: Failed to persist data; error: {}".format(e))
+                finally:
+                    ArchSmith._persist_lock.release()
+                
+                Logger.log("ARCHSMITH AUTOPERSIST: Automatic persistence triggered. Post-persist cache size: {}".format(len(ArchSmith.cache)))
+                return True # Successfully persisted
+            else:
+                Logger.log("ARCHSMITH AUTOPERSIST SKIPPED: Another thread is already persisting data. Skipping this call.")
+                ArchSmith._skippedPersistAttempts += 1
+                return False # Another thread is already persisting, skip this call
         
-        with open(ArchSmith.dataFile, "r") as f:
-            data: dict = json.load(f)
-        
-        data.update({tracer.id: tracer.represent() for tracer in copiedCache.values()})
-        
-        for tracerID in list(copiedCache.keys()):
-            if copiedCache[tracerID].finished:
-                del ArchSmith.cache[tracerID]
-        
-        with open(ArchSmith.dataFile, "w") as f:
-            json.dump(data, f, indent=4)
+        return True # Threshold not reached, no action taken
     
     @staticmethod
     def pause():
