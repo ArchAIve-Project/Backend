@@ -104,7 +104,6 @@ class CCRPipeline:
     
     @staticmethod
     def checkFileType(image_path: str, tracer: ASTracer):
-        print("Image Path: {}".format(image_path))
         # Extract extension, normalize
         ext = os.path.splitext(image_path)[1].lower().replace('.', '')
         if ext not in ['jpg', 'jpeg', 'jpe', 'png']:
@@ -112,7 +111,6 @@ class CCRPipeline:
             return f"ERROR: Unsupported image file type: .{ext}"
 
         imageFIleType = f"image/{'jpeg' if ext in ['jpg', 'jpeg', 'jpe'] else 'png'}"
-        print("Image file type: {}".format(imageFIleType))
         return imageFIleType
 
     @staticmethod
@@ -430,7 +428,13 @@ class CCRPipeline:
         cont.addInteraction(
             Interaction(
                 role=Interaction.Role.USER,
-                content=f"Please review the image and correct the predicted Chinese text below. Make sure the correction matches the characters in the image and makes sense in context. Fix any errors, missing characters, or confusing parts. Only output the corrected Chinese text—no explanations.\n\nPredicted text:\n{predicted_text.strip()}",
+                content=(
+                    "Please review the image and correct the predicted Chinese text below. "
+                    "Make sure the correction matches the characters in the image and makes sense in context. "
+                    "Fix any errors, missing characters, or confusing parts. "
+                    "Only output the corrected Chinese text—no explanations.\n\n"
+                    f"Predicted text:\n{predicted_text.strip()}"
+                ),
                 imagePath=image_path,
                 imageFileType=imageFIleType
             ),
@@ -439,17 +443,18 @@ class CCRPipeline:
 
         try:
             response = LLMInterface.engage(cont)
-            
+
             if isinstance(response, str):
                 raise Exception("ERROR: Failed to carry out LLM correction; response: {}".format(response))
-            
+
             corrected = response.content.strip()
             textCount = len(corrected)
-            
+
             tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION", f"LLM correction applied. Final text count: {textCount}"))
             return corrected
+
         except Exception as e:
-            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION ERROR", f"Fallback to original predicted text. LLM correction failed: {e}"))
+            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION ERROR", f"LLM correction failed: {e}"))            
             return predicted_text  # fallback to uncorrected text
         
     @staticmethod
@@ -600,8 +605,13 @@ class CCRPipeline:
             )
 
             predText = CCRPipeline.concatCharacters(recognized, tracer)
+            
+            try:
+                correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer, imageFileType)
+            except Exception:
+                correctedText = predText  # fallback
+                tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", "Fallback to original predicted text due to LLM failure."))
 
-            correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer, imageFileType)
 
             if showAccuracy:
                 predAccuracy = CCRPipeline.accuracy(predText, image_path)
