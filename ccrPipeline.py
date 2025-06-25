@@ -543,37 +543,24 @@ class CCRPipeline:
         return acc
 
     @staticmethod
-    def transcribe( image_path: str, tracer: ASTracer, showAccuracy: bool = None, useLLMCorrection: bool = True, gtPath: str = None ) -> str:
+    def transcribe(image_path: str, tracer: ASTracer, showAccuracy: bool = None, useLLMCorrection: bool = True, gtPath: str = None) -> dict:
         """
         Executes the full OCR transcription pipeline on a given image.
-
-        Steps include:
-        - Loading required models from ModelStore.
-        - Segmenting the image into individual characters.
-        - Filtering noise and recognizing characters.
-        - Optionally correcting the predicted text using a large language model (LLM).
-        - Optionally computing and printing accuracy before and after correction.
 
         Args:
             image_path (str): Path to the input image file.
             tracer (ASTracer): Tracer object for logging pipeline reports.
-            showAccuracy (bool, optional): If True, prints accuracy metrics.
+            showAccuracy (bool, optional): If True, computes accuracy. Defaults to None.
             useLLMCorrection (bool, optional): If True, applies LLM correction. Defaults to True.
-            gtPath (str, optional): Explicit path to ground truth text file. If None, uses default convention.
+            gtPath (str, optional): Path to ground truth file. Required if showAccuracy=True.
 
         Returns:
-            str: The final (corrected or uncorrected) transcription text, or error message if failed.
-
-        ## Usage:
-        ```python
-        transcription = CCRPipeline.transcribe(
-            image_path="path/to/image.jpg",
-            tracer=tracer,
-            showAccuracy=True,
-            useLLMCorrection=False,
-            gtPath="path/to/custom_GT.txt"
-        )
-        ```
+            dict: {
+                "transcription": <final text>,
+                "corrected": <bool>,
+                "preCorrectionAccuracy": <float or None>,
+                "postCorrectionAccuracy": <float or None>
+            }
         """
 
         try:
@@ -585,13 +572,18 @@ class CCRPipeline:
             if not ccr_filter_ctx or not ccr_filter_ctx.model:
                 raise ValueError("CCR Char Filter model not loaded")
 
-            # Load and cache idx2char only once
             if CCRPipeline.idx2char is None:
                 CCRPipeline.idx2char = CCRPipeline.load_label_mappings()
 
             imageFileType = CCRPipeline.checkFileType(image_path, tracer)
             if imageFileType.startswith("ERROR"):
-                return "ERROR: Unsupported file type. Please only input .jpg .jpe .jpeg or .png files."
+                return {
+                    "transcription": "",
+                    "corrected": False,
+                    "preCorrectionAccuracy": None,
+                    "postCorrectionAccuracy": None,
+                    "error": "Unsupported file type."
+                }
 
             char_images = CCRPipeline.segmentImage(image_path, tracer)
 
@@ -605,10 +597,20 @@ class CCRPipeline:
 
             predText = CCRPipeline.concatCharacters(recognized, tracer)
 
-            # Apply optional LLM correction
+            # Accuracy before correction
+            preAcc = None
+            postAcc = None
+
+            if showAccuracy:
+                preAcc = CCRPipeline.accuracy(predText, image_path, gtPath, show=False)
+
+            # LLM correction
+            corrected = False
             if useLLMCorrection:
                 try:
                     correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer, imageFileType)
+                    if correctedText != predText:
+                        corrected = True
                 except Exception:
                     correctedText = predText
                     tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", "Fallback to original predicted text due to LLM failure."))
@@ -616,17 +618,26 @@ class CCRPipeline:
                 correctedText = predText
                 tracer.addReport(ASReport("CCRPIPELINE", "LLM correction skipped by user option."))
 
-            # Accuracy check with optional ground truth path
             if showAccuracy:
-                predAccuracy = CCRPipeline.accuracy(predText, image_path, gtPath)
-                correctedAccuracy = CCRPipeline.accuracy(correctedText, image_path, gtPath)
-                print(f"{predAccuracy} -> {correctedAccuracy}")
+                postAcc = CCRPipeline.accuracy(correctedText, image_path, gtPath, show=False)
+                print(f"Accuracy: {preAcc} -> {postAcc}")
 
-            return correctedText
+            return {
+                "transcription": correctedText,
+                "corrected": corrected,
+                "preCorrectionAccuracy": preAcc,
+                "postCorrectionAccuracy": postAcc
+            }
 
         except Exception as e:
             tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", f"Error: {e}"))
-            return str(e)
+            return {
+                "transcription": "",
+                "corrected": False,
+                "preCorrectionAccuracy": None,
+                "postCorrectionAccuracy": None,
+                "error": str(e)
+            }
 
 # === Entry Point ===
 
