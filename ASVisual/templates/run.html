@@ -57,7 +57,7 @@
         function timeoutReload() {
             timeoutID = setTimeout(() => {
                 window.location.reload();
-            }, 2000)
+            }, parseInt("{{ reloadTime }}"))
         }
 
         function toggleReload() {

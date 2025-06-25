@@ -4,6 +4,8 @@ from addons import ASTracer
 
 app = Flask(__name__)
 
+reloadTime = 3000
+
 def getTracers():
     with open(os.path.join(os.path.dirname(__file__), "..", "archsmith.json"), "r") as f:
         data = json.load(f)
@@ -58,7 +60,7 @@ def preppedTracersForRendering():
 
 @app.route('/')
 def index():
-    return render_template('index.html', tracerData=preppedTracersForRendering(), lastUpdate=datetime.datetime.now().strftime("%d %B, %A, %Y %H:%M:%S%p"))
+    return render_template('index.html', tracerData=preppedTracersForRendering(), lastUpdate=datetime.datetime.now().strftime("%d %B, %A, %Y %H:%M:%S%p"), reloadTime=reloadTime)
 
 @app.route('/tracer/<tracer_id>')
 def tracerDetail(tracer_id):
@@ -67,10 +69,12 @@ def tracerDetail(tracer_id):
         return jsonify({"error": "Tracer not found"}), 404
     tracer = tracers[tracer_id]
     
-    return render_template('run.html', tracerInfo=tracer, lastUpdate=datetime.datetime.now().strftime("%d %B, %A, %Y %H:%M:%S%p"))
+    return render_template('run.html', tracerInfo=tracer, lastUpdate=datetime.datetime.now().strftime("%d %B, %A, %Y %H:%M:%S%p"), reloadTime=reloadTime)
 
-def main():
+def main(reload: int=3000):
+    global reloadTime
+    reloadTime = reload
     app.run(host='0.0.0.0', port=8001)
 
 if __name__ == '__main__':
-    main()
+    main(int(input("Enter the reload time in milliseconds (default 3000): ") or 3000))
