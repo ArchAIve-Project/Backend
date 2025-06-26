@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracer Details | ASVisualiser</title>
+    <style>
+        #reportsDiv {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tracer Details</h1>
+    <h3>Last Update: {{ lastUpdate }}</h3>
+    <button id="refreshButton" onclick="toggleReload()">Disable Auto-Reload</button>
+    <p>ID: {{ tracerInfo['id'] }}</p>
+    <p>Purpose: {{ tracerInfo['purpose'] }}</p>
+    <p>Created: {{ tracerInfo['created'] }}</p>
+    <p>Started: {{ tracerInfo['started'] }}</p>
+    <p>Finished: {{ tracerInfo['finished'] }}</p>
+    <p>Duration: {{ tracerInfo['duration'] }}</p>
+    <p>Thread Info: {{ tracerInfo['threadInfo'] }}</p>
+    <p>Number of Reports: {{ tracerInfo['reports']|length }}</p>
+    <p>Reports: <button onclick="toggleReportsVisibility()">Toggle Visibility</button></p>
+    <div id="reportsDiv">
+        {% for report in tracerInfo['reports'] %}
+            <ul>
+                <li>Source: {{ report['source'] }}</li>
+                <li>Message: {{ report['message'] }}</li>
+                <li>Extra Data: {{ report['extraData'] }}</li>
+                <li>Created: {{ report['created'] }}</li>
+                <li>Thread Info: {{ report['threadInfo'] }}</li>
+                <li>Time to Next Report: {{ report['timeToNext'] }}</li>
+            </ul>
+        {% endfor %}
+    </div>
+    <script>
+        function toggleReportsVisibility() {
+            const reportsDiv = document.getElementById('reportsDiv');
+            reportsDiv.style.display = reportsDiv.style.display === 'none' ? 'block' : 'none';
+            localStorage.setItem('displayReports', String(reportsDiv.style.display === 'block'));
+            console.log('Reports visibility toggled:', localStorage.getItem('displayReports'));
+        }
+
+        var displayReports = localStorage.getItem('displayReports') === 'true';
+        console.log('Initial reports visibility:', displayReports, localStorage.getItem('displayReports'));
+        if (displayReports) {
+            document.getElementById('reportsDiv').style.display = 'block';
+        } else {
+            document.getElementById('reportsDiv').style.display = 'none';
+        }
+
+        var autoRefresh = localStorage.getItem('autoRefresh') !== 'false';
+        var timeoutID = null;
+
+        function timeoutReload() {
+            timeoutID = setTimeout(() => {
+                window.location.reload();
+            }, 3000)
+        }
+
+        function toggleReload() {
+            autoRefresh = !autoRefresh;
+            localStorage.setItem('autoRefresh', String(autoRefresh));
+            if (autoRefresh) {
+                document.getElementById('refreshButton').textContent = 'Disable Auto-Reload';
+                timeoutReload();
+            } else {
+                document.getElementById('refreshButton').textContent = 'Enable Auto-Reload';
+                clearTimeout(timeoutID);
+            }
+        }
+
+        if (autoRefresh) {
+            timeoutReload();
+        } else {
+            document.getElementById('refreshButton').textContent = 'Enable Auto-Reload';
+        }
+    </script>
+</body>
+</html>

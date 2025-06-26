@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArchSmith Visualiser</title>
+</head>
+<body>
+    <h1>Welcome to ArchSmith Visualiser</h1>
+    <h3>Last Update: {{ lastUpdate }}</h3>
+    <p>This is a lightweight server that makes ArchSmith-tracked data more accessible for a better debugging/analysis experience.</p>
+    <br>
+    <button id="refreshButton" onclick="toggleReload()">Disable Auto-Reload</button>
+    <br>
+    <p>Tracer Runs:</p>
+    <ul>
+        {% for tracerID in tracerData %}
+            <li><a href="{{ url_for('tracerDetail', tracer_id=tracerID) }}">Purpose: '{{ tracerData[tracerID]['purpose'] }}', Created: {{ tracerData[tracerID]['created'] }}, Finished: {{ tracerData[tracerID]['finished'] }}</a></li>
+        {% endfor %}
+    </ul>
+    <script>
+        var autoRefresh = localStorage.getItem('autoRefresh') !== 'false';
+        var timeoutID = null;
+
+        function timeoutReload() {
+            timeoutID = setTimeout(() => {
+                window.location.reload();
+            }, 3000)
+        }
+
+        function toggleReload() {
+            autoRefresh = !autoRefresh;
+            localStorage.setItem('autoRefresh', String(autoRefresh));
+            if (autoRefresh) {
+                document.getElementById('refreshButton').textContent = 'Disable Auto-Reload';
+                timeoutReload();
+            } else {
+                document.getElementById('refreshButton').textContent = 'Enable Auto-Reload';
+                clearTimeout(timeoutID);
+            }
+        }
+
+        if (autoRefresh) {
+            timeoutReload();
+        } else {
+            document.getElementById('refreshButton').textContent = 'Enable Auto-Reload';
+        }
+    </script>
+</body>
+</html>
