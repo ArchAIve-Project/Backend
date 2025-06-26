@@ -96,7 +96,10 @@ class RealESRGAN:
                 img = np.array(img)
 
                 with torch.no_grad():
-                    output, _ = self.upsampler.enhance(img, outscale=1)
+                    h, w = img.shape[:2]
+                    outscale = 4 if max(h, w) < 800 else 2  # 4x for small, 2x for big
+                    output, _ = self.upsampler.enhance(img, outscale=outscale)
+
 
                 base = os.path.splitext(os.path.basename(path))[0]
                 ext = os.path.splitext(path)[1]
@@ -134,7 +137,7 @@ if __name__ == "__main__":
     tracer = ArchSmith.newTracer("Test run of Real ESRGAN upscaling")
 
     RealESRGAN().upscaleImage(
-        inputPath="Companydata/HF/02 Unidentified Photos (NYP)/1995 SCCCI 7251 receiving china vice premier_page-0001.jpg",  # folder or file or list
+        inputPath="Companydata/HF/02 Unidentified Photos (NYP)/41 19900617 Zhu Rongji 上海市市长朱镕基先生莅临本会 (2).jpg",  # folder or file or list
         outputPath="Companydata/Output",
         tracer=tracer
     )
