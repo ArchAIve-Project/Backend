@@ -542,8 +542,8 @@ class CCRPipeline:
             gtPath (str, optional): Path to ground truth file. Required if computeAccuracy=True.
 
         Returns:
-        ```python
-        dict: {
+        ```json
+        {
             "transcription": <final text>,
             "corrected": <bool>,
             "preCorrectionAccuracy": <float or None>,
@@ -551,6 +551,9 @@ class CCRPipeline:
         }
         ```
         """
+        
+        if computeAccuracy and not gtPath:
+            raise ValueError("Ground truth file is required for accuracy computation.")
 
         try:
             ccr_model_ctx = ModelStore.getModel("ccr")
