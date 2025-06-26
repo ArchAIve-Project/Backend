@@ -23,9 +23,9 @@ class ChineseClassifier(nn.Module):
     passes them through a projection and classification head, and outputs logits
     corresponding to character class indices.
 
-    ## ## Usage:
+    ## Usage:
     ```python    
-        model = ChineseClassifier(embed_dim=256, num_classes=1200)
+    model = ChineseClassifier(embed_dim=256, num_classes=1200)
     ```
     """
 
@@ -54,8 +54,10 @@ class ChineseBinaryClassifier(nn.Module):
     The model is based on ResNet50 and outputs a single logit indicating validity.
     It supports optional feature extraction via `return_embedding`.
 
-    ## ## Usage:
-        `model = ChineseBinaryClassifier(embed_dim=512, unfreezeEncoder=True)`
+    ## Usage:
+    ```python
+    model = ChineseBinaryClassifier(embed_dim=512, unfreezeEncoder=True)
+    ```
     """
     def __init__(self, embed_dim: int = 512, unfreezeEncoder: bool = True):
         super().__init__()
@@ -110,8 +112,8 @@ class CCRPipeline:
             tracer.addReport(ASReport("CCRPIPELINE CHECKFILETYPE ERROR", f"File type of {ext} not supported."))
             return f"ERROR: Unsupported image file type: .{ext}"
 
-        imageFIleType = f"image/{'jpeg' if ext in ['jpg', 'jpeg', 'jpe'] else 'png'}"
-        return imageFIleType
+        imageFileType = f"image/{'jpeg' if ext in ['jpg', 'jpeg', 'jpe'] else 'png'}"
+        return imageFileType
 
     @staticmethod
     def load_label_mappings():
@@ -176,7 +178,7 @@ class CCRPipeline:
 
         ## Usage:
         ```python
-            padded_img = YourClass.padToSquare(img, padding=40)
+        padded_img = CCRPipeline.padToSquare(img, padding=40)
         ```
         """
         h, w = image.shape
@@ -207,10 +209,10 @@ class CCRPipeline:
 
         ## Usage:
         ```python
-            chars = CCRPipeline.segmentImage("docs/handwritten_sample.jpg", tracer)
-            for col_idx, char_img in chars:
-                # Process each character image
-                pass
+        chars = CCRPipeline.segmentImage("docs/handwritten_sample.jpg", tracer)
+        for col_idx, char_img in chars:
+            # Process each character image
+            pass
         ```
         """
 
@@ -336,7 +338,7 @@ class CCRPipeline:
 
         ## Usage:
         ```python
-            recognized_chars = CCRPipeline.detectCharacters(char_images, recog_model, idx2char, ccrCharFilter, tracer)
+        recognized_chars = CCRPipeline.detectCharacters(char_images, recog_model, idx2char, ccrCharFilter, tracer)
         ```
         """
 
@@ -381,7 +383,7 @@ class CCRPipeline:
 
         ## Usage:
         ```python
-            final_text = CCRPipeline.concatCharacters(recognized_chars, tracer)
+        final_text = CCRPipeline.concatCharacters(recognized_chars, tracer)
         ```
         """
 
@@ -391,7 +393,7 @@ class CCRPipeline:
         return concatText
 
     @staticmethod
-    def llmCorrection(image_path: str, predicted_text: str, tracer, imageFIleType: str) -> str:
+    def llmCorrection(image_path: str, predicted_text: str, tracer, imageFileType: str) -> str:
         """
         Uses a large language model (LLM) to correct predicted Chinese calligraphy text
         based on the corresponding image.
@@ -410,7 +412,7 @@ class CCRPipeline:
 
         ## Usage:
         ```python
-            corrected_text = CCRPipeline.llmCorrection(image_path, predicted_text, tracer)
+        corrected_text = CCRPipeline.llmCorrection(image_path, predicted_text, tracer)
         ```
         """
 
@@ -436,7 +438,7 @@ class CCRPipeline:
                     f"Predicted text:\n{predicted_text.strip()}"
                 ),
                 imagePath=image_path,
-                imageFileType=imageFIleType
+                imageFileType=imageFileType
             ),
             imageMessageAcknowledged=True
         )
@@ -458,7 +460,7 @@ class CCRPipeline:
             return predicted_text  # fallback to uncorrected text
 
     @staticmethod
-    def accuracy(pred_text: str, filePath: str, gtPath: str = None, show: bool = True) -> float:
+    def accuracy(pred_text: str, filePath: str, gtPath: str = None) -> float:
         """
         Calculates character-level accuracy between predicted and ground truth text
         using the Longest Common Subsequence (LCS) method.
@@ -467,26 +469,13 @@ class CCRPipeline:
             pred_text (str): The predicted text string.
             filePath (str): Path to the predicted file (for logging purposes).
             gtPath (str): Explicit path to ground truth .txt file. Required.
-            show (bool, optional): If True, prints detailed match statistics. Defaults to True.
 
         Returns:
             float: Accuracy score between 0 and 1.
         """
 
-        if not gtPath:
-            if show:
-                print("ERROR: Ground truth path must be explicitly provided.")
-            return 0.0
-
-        if not os.path.exists(gtPath):
-            if show:
-                print(f"ERROR: Ground truth file '{gtPath}' not found.")
-            return 0.0
-
-        if not gtPath.lower().endswith('.txt'):
-            if show:
-                print(f"ERROR: Ground truth file '{gtPath}' is not a .txt file.")
-            return 0.0
+        if (not gtPath) or (not isinstance(gtPath, str)) or (not os.path.exist(gtPath)) or (not gtPath.lower().endswith('.txt')):
+            raise ValueError("Invalid ground truth file provided.")
 
         with open(gtPath, 'r', encoding='utf-8') as f:
             gt_text = f.read().strip()
@@ -543,24 +532,26 @@ class CCRPipeline:
         return acc
 
     @staticmethod
-    def transcribe(image_path: str, tracer: ASTracer, showAccuracy: bool = None, useLLMCorrection: bool = True, gtPath: str = None) -> dict:
+    def transcribe(image_path: str, tracer: ASTracer, computeAccuracy: bool = False, useLLMCorrection: bool = True, gtPath: str = None) -> dict:
         """
         Executes the full OCR transcription pipeline on a given image.
 
         Args:
             image_path (str): Path to the input image file.
             tracer (ASTracer): Tracer object for logging pipeline reports.
-            showAccuracy (bool, optional): If True, computes accuracy. Defaults to None.
+            computeAccuracy (bool, optional): If True, computes accuracy. Defaults to None.
             useLLMCorrection (bool, optional): If True, applies LLM correction. Defaults to True.
-            gtPath (str, optional): Path to ground truth file. Required if showAccuracy=True.
+            gtPath (str, optional): Path to ground truth file. Required if computeAccuracy=True.
 
         Returns:
-            dict: {
-                "transcription": <final text>,
-                "corrected": <bool>,
-                "preCorrectionAccuracy": <float or None>,
-                "postCorrectionAccuracy": <float or None>
-            }
+        ```python
+        dict: {
+            "transcription": <final text>,
+            "corrected": <bool>,
+            "preCorrectionAccuracy": <float or None>,
+            "postCorrectionAccuracy": <float or None>
+        }
+        ```
         """
 
         try:
@@ -577,13 +568,7 @@ class CCRPipeline:
 
             imageFileType = CCRPipeline.checkFileType(image_path, tracer)
             if imageFileType.startswith("ERROR"):
-                return {
-                    "transcription": "",
-                    "corrected": False,
-                    "preCorrectionAccuracy": None,
-                    "postCorrectionAccuracy": None,
-                    "error": "Unsupported file type."
-                }
+                return "ERROR: Unsupported file type provided. Please only provide .jpg .jpe .jpeg .png files."
 
             char_images = CCRPipeline.segmentImage(image_path, tracer)
 
@@ -601,7 +586,7 @@ class CCRPipeline:
             preAcc = None
             postAcc = None
 
-            if showAccuracy:
+            if computeAccuracy:
                 preAcc = CCRPipeline.accuracy(predText, image_path, gtPath, show=False)
 
             # LLM correction
@@ -611,16 +596,15 @@ class CCRPipeline:
                     correctedText = CCRPipeline.llmCorrection(image_path, predText, tracer, imageFileType)
                     if correctedText != predText:
                         corrected = True
-                except Exception:
+                except:
                     correctedText = predText
                     tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", "Fallback to original predicted text due to LLM failure."))
             else:
                 correctedText = predText
-                tracer.addReport(ASReport("CCRPIPELINE", "LLM correction skipped by user option."))
+                tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE", "LLM correction skipped by user option."))
 
-            if showAccuracy:
+            if computeAccuracy:
                 postAcc = CCRPipeline.accuracy(correctedText, image_path, gtPath, show=False)
-                print(f"Accuracy: {preAcc} -> {postAcc}")
 
             return {
                 "transcription": correctedText,
@@ -631,13 +615,7 @@ class CCRPipeline:
 
         except Exception as e:
             tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", f"Error: {e}"))
-            return {
-                "transcription": "",
-                "corrected": False,
-                "preCorrectionAccuracy": None,
-                "postCorrectionAccuracy": None,
-                "error": str(e)
-            }
+            return "ERROR: {e}"
 
 # === Entry Point ===
 

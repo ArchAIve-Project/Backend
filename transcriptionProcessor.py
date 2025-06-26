@@ -11,7 +11,7 @@ class TranscriptionProcessor:
 
     ## Usage:
     ```python
-        simplified, english, summary = TranscriptionProcessor.process(traditional_text, tracer)
+    simplified, english, summary = TranscriptionProcessor.process(traditional_text, tracer)
     ```
     """
 
@@ -33,7 +33,7 @@ class TranscriptionProcessor:
 
         ## Usage:
         ```python
-            simplified_text = CCRPipeline.tradToSimp(traditional_text, tracer)
+        simplified_text = CCRPipeline.tradToSimp(traditional_text, tracer)
         ```
         """
 
@@ -83,7 +83,7 @@ class TranscriptionProcessor:
 
         ## Usage:
         ```python
-            english_text = CCRPipeline.tradToEng(traditional_text, tracer)
+        english_text = CCRPipeline.tradToEng(traditional_text, tracer)
         ```
         """
 
@@ -137,7 +137,7 @@ class TranscriptionProcessor:
 
         ## Usage:
         ```python
-            summary = CCRPipeline.engSummary(english_text, tracer)
+        summary = CCRPipeline.engSummary(english_text, tracer)
         ```
         """
 
@@ -190,17 +190,15 @@ class TranscriptionProcessor:
 
         ## Usage:
         ```python
-            simp, eng, summ = TranscriptionProcessor.process(traditional_text, tracer)
+        simp, eng, summ = TranscriptionProcessor.process(traditional_text, tracer)
         ```
         """
         
         simplified = TranscriptionProcessor.tradToSimp(traditional_text, tracer)
-        if simplified.startswith("ERROR:"):
-            return simplified, "", ""
+        return simplified, "", ""
 
         english = TranscriptionProcessor.tradToEng(traditional_text, tracer)
-        if english.startswith("ERROR:"):
-            return simplified, english, ""
+        return simplified, english, ""
 
         summary = TranscriptionProcessor.engSummary(english, tracer)
         return simplified, english, summary
