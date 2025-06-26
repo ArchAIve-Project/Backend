@@ -250,7 +250,8 @@ class ModelStore:
             ModelContext(name="imageCaptioner", filename="SCCCICaptioner.pth"),
             ModelContext(name="cnn", filename="CNNBinary.pth"),
             ModelContext(name="ccr", filename="CCR.pth"),
-            ModelContext(name="ccrCharFilter", filename="CCRCharFilter.pth")
+            ModelContext(name="ccrCharFilter", filename="CCRCharFilter.pth"),
+            ModelContext(name="ner", filename="bert_ner_weights.pth")
         ]
         
         for mcIndex in range(len(ls)):
