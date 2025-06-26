@@ -52,15 +52,14 @@ class TranscriptionProcessor:
             if isinstance(response, str):
                 raise Exception("ERROR: Failed to carry out LLM translation from Traditional Chinese to Simplified Chinese; response: {}".format(response))
 
-            content = response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}"
-            charCount = len(content.strip())
+            charCount = len(response.content.strip())
             
             tracer.addReport(ASReport(
                 "TRANSCRIPTIONPROCESSOR TRADTOSIMP",
                 f"Simplified Chinese generated. Number of characters: {charCount}"
             ))
 
-            return content
+            return response.content.strip()
 
         except Exception as e:
             tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR TRADTOSIMP ERROR", str(e)))
@@ -106,15 +105,14 @@ class TranscriptionProcessor:
             if isinstance(response, str):
                 raise Exception("ERROR: Failed to carry out LLM translation from Traditional Chinese to English; response: {}".format(response))
             
-            content = response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}"
-            charCount = len(content.strip())
+            charCount = len(response.content.strip())
             
             tracer.addReport(ASReport(
                 "TRANSCRIPTIONPROCESSOR TRADTOENG", 
                 f"English translation generated. Number of characters: {charCount}"
             ))
             
-            return content
+            return response.content.strip()
         
         except Exception as e:
             tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR TRADTOENG ERROR", str(e)))
@@ -155,16 +153,15 @@ class TranscriptionProcessor:
             response = LLMInterface.engage(cont)
             if isinstance(response, str):
                 raise Exception("ERROR: Failed to carry out LLM summarization in English; response: {}".format(response))
-            
-            content = response.content
-            charCount = len(content.strip())
+                        
+            charCount = len(response.content.strip())
             
             tracer.addReport(ASReport(
                 "TRANSCRIPTIONPROCESSOR ENGSUMMARY", 
                 f"English summary generated. Number of characters: {charCount}"
             ))
             
-            return content
+            return response.content.strip()
         
         except Exception as e:
             tracer.addReport(ASReport("TRANSCRIPTIONPROCESSOR ENGSUMMARY ERROR", str(e)))
