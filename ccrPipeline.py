@@ -341,7 +341,6 @@ class CCRPipeline:
         recognized_chars = CCRPipeline.detectCharacters(char_images, recog_model, idx2char, ccrCharFilter, tracer)
         ```
         """
-
         result = {}
         kept_images = []
 
@@ -460,21 +459,20 @@ class CCRPipeline:
             return predicted_text  # fallback to uncorrected text
 
     @staticmethod
-    def accuracy(pred_text: str, filePath: str, gtPath: str = None) -> float:
+    def accuracy(pred_text: str, gtPath: str = None) -> float:
         """
         Calculates character-level accuracy between predicted and ground truth text
         using the Longest Common Subsequence (LCS) method.
 
         Args:
             pred_text (str): The predicted text string.
-            filePath (str): Path to the predicted file (for logging purposes).
             gtPath (str): Explicit path to ground truth .txt file. Required.
 
         Returns:
             float: Accuracy score between 0 and 1.
         """
 
-        if (not gtPath) or (not isinstance(gtPath, str)) or (not os.path.exist(gtPath)) or (not gtPath.lower().endswith('.txt')):
+        if (not gtPath) or (not isinstance(gtPath, str)) or (not os.path.exists(gtPath)) or (not gtPath.lower().endswith('.txt')):
             raise ValueError("Invalid ground truth file provided.")
 
         with open(gtPath, 'r', encoding='utf-8') as f:
@@ -587,7 +585,7 @@ class CCRPipeline:
             postAcc = None
 
             if computeAccuracy:
-                preAcc = CCRPipeline.accuracy(predText, image_path, gtPath, show=False)
+                preAcc = CCRPipeline.accuracy(predText, gtPath)
 
             # LLM correction
             corrected = False
@@ -604,7 +602,7 @@ class CCRPipeline:
                 tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE", "LLM correction skipped by user option."))
 
             if computeAccuracy:
-                postAcc = CCRPipeline.accuracy(correctedText, image_path, gtPath, show=False)
+                postAcc = CCRPipeline.accuracy(correctedText, gtPath)
 
             return {
                 "transcription": correctedText,
@@ -615,7 +613,7 @@ class CCRPipeline:
 
         except Exception as e:
             tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", f"Error: {e}"))
-            return "ERROR: {e}"
+            return f"ERROR: {e}"
 
 # === Entry Point ===
 

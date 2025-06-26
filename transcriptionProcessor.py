@@ -50,7 +50,7 @@ class TranscriptionProcessor:
         try:
             response = LLMInterface.engage(cont)
             if isinstance(response, str):
-                raise Exception("ERROR: Failed to carry out LLM correction; response: {}".format(response))
+                raise Exception("ERROR: Failed to carry out LLM translation from Traditional Chinese to Simplified Chinese; response: {}".format(response))
 
             content = response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}"
             charCount = len(content.strip())
@@ -104,7 +104,7 @@ class TranscriptionProcessor:
         try:
             response = LLMInterface.engage(cont)
             if isinstance(response, str):
-                raise Exception("ERROR: Failed to carry out LLM correction; response: {}".format(response))
+                raise Exception("ERROR: Failed to carry out LLM translation from Traditional Chinese to English; response: {}".format(response))
             
             content = response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}"
             charCount = len(content.strip())
@@ -154,9 +154,9 @@ class TranscriptionProcessor:
         try:
             response = LLMInterface.engage(cont)
             if isinstance(response, str):
-                raise Exception("ERROR: Failed to carry out LLM correction; response: {}".format(response))
+                raise Exception("ERROR: Failed to carry out LLM summarization in English; response: {}".format(response))
             
-            content = response.content if hasattr(response, 'content') else f"ERROR {str(response).strip()}"
+            content = response.content
             charCount = len(content.strip())
             
             tracer.addReport(ASReport(
@@ -195,10 +195,10 @@ class TranscriptionProcessor:
         """
         
         simplified = TranscriptionProcessor.tradToSimp(traditional_text, tracer)
-        return simplified, "", ""
 
         english = TranscriptionProcessor.tradToEng(traditional_text, tracer)
-        return simplified, english, ""
+        if english.startswith("ERROR:"):
+            return simplified, english, None
 
         summary = TranscriptionProcessor.engSummary(english, tracer)
         return simplified, english, summary
