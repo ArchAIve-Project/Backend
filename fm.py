@@ -1,7 +1,8 @@
-import os, shutil, sys, json
+import os, shutil, sys, json, pprint
 from typing import List, Dict
 from enum import Enum
 from services import FileOps, Logger, Universal
+from firebase import FireStorage
 
 class File:
     def __init__(self, filename: str, store: str, id: str=None, contentType: str=None, updated: str=None, updateMetadata: bool=False, forceExistence: bool=False):
@@ -26,6 +27,9 @@ class File:
     
     def path(self):
         return os.path.join(os.getcwd(), self.store, self.filename)
+    
+    def identifierPath(self):
+        return os.path.join(self.store, self.filename)
     
     @staticmethod
     def from_dict(data: dict) -> 'File':
@@ -114,11 +118,11 @@ class FileManager:
         except Exception as e:
             return "ERROR: Failed to load context data; error: {}".format(e)
         
-        for fileID in data:
-            if fileID == "mode": # TODO: context morphing for mode mismatch
+        for fileIDPath in data:
+            if fileIDPath == "mode": # TODO: context morphing for mode mismatch
                 continue
-            if not isinstance(data[fileID], dict):
-                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file with ID '{}' due to a value that is not of type 'dict'.".format(fileID))
+            if not isinstance(data[fileIDPath], dict):
+                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file '{}' due to a value that is not of type 'dict'.".format(fileIDPath))
             
             try:
                 file = File.from_dict(data)
@@ -129,9 +133,9 @@ class FileManager:
                 if file.store not in FileManager.stores:
                     raise Exception("Store not tracked by FileManager.")
                 
-                FileManager.context[fileID] = file
+                FileManager.context[file.identifierPath()] = file
             except Exception as e:
-                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file with ID '{}' due to error: {}".format(fileID, e))
+                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file '{}' due to error: {}".format(fileIDPath, e))
         
         FileManager.saveContext()
         FileManager.cleanupNonmatchingFiles()
@@ -142,7 +146,7 @@ class FileManager:
     def saveContext() -> bool | str:
         try:
             with open(FileManager.dataFile, "w") as f:
-                data = {file.id: file.represent() for file in FileManager.context.values()}
+                data = {file.identifierPath(): file.represent() for file in FileManager.context.values()}
                 data['mode'] = FileManager.mode
                 
                 json.dump(data, f)
@@ -150,3 +154,28 @@ class FileManager:
             return "ERROR: Failed to save context to file; error: {}".format(e)
         
         return True
+    
+    @staticmethod
+    def setup():
+        res = FileManager.createStores()
+        if res != True:
+            return "ERROR: Failed to create stores; error: {}".format(res)
+        
+        res = FileManager.loadContext()
+        if res != True:
+            return "ERROR: Failed to load context; error: {}".format(res)
+        
+        cloudFiles = FireStorage.listFiles()
+        if isinstance(cloudFiles, str):
+            return "ERROR: Failed to list files in cloud storage; error: {}".format(cloudFiles)
+        
+        cloudFilenames = [b.name for b in cloudFiles]
+        cloudFiles = {b.name: FireStorage.getFileInfo(b.name, b) for b in cloudFiles}
+        
+        for fileID in FileManager.context:
+            # Check if file does not exist on cloud. If not, if 'forceExistence', upload, get metadata, and save; else, delete from context and fs.
+            
+            # Check if file needs to be redownloaded based on 'updated' parity. update metadata is so.
+            
+            # Update metadata is 'updateMetadata'
+            pass

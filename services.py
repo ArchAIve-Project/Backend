@@ -1,12 +1,14 @@
 import os, shutil, json, base64, random, datetime, uuid, functools
 from enum import Enum
 from typing import List, Dict
+from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from firebase import FireStorage
 from passlib.hash import sha256_crypt as sha
 from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+load_dotenv()
 
 class Trigger:
     '''
