@@ -4,31 +4,10 @@ from enum import Enum
 from services import FileOps, Logger, Universal
 
 class File:
-    class Type(str, Enum): # maybe change to Store? better modularity?
-        FACESHOT = "faceshot"
-        ARTEFACT = "artefact"
-        FACE_EMBEDDINGS = "embeddings"
-        OTHERS = "others"
-        
-        def __eq__(self, value: 'File.Type'):
-            return self.value == str(value)
-        
-        def __str__(self):
-            return self.value
-        
-        @staticmethod
-        def isValid(fileType: str):
-            return fileType in [
-                str(File.Type.FACESHOT),
-                str(File.Type.ARTEFACT),
-                str(File.Type.FACE_EMBEDDINGS),
-                str(File.Type.OTHERS),
-            ]
-    
-    def __init__(self, filename: str, fileType: 'File.Type | str', id: str=None, contentType: str=None, updated: str=None, updateMetadata: bool=False, forceExistence: bool=False):
+    def __init__(self, filename: str, store: str, id: str=None, contentType: str=None, updated: str=None, updateMetadata: bool=False, forceExistence: bool=False):
         self.id = id
         self.filename = filename
-        self.fileType = fileType.value if isinstance(fileType, File.Type) else fileType
+        self.store = store
         self.contentType = contentType
         self.updated = updated
         self.updateMetadata = updateMetadata
@@ -38,7 +17,7 @@ class File:
         return {
             "id": self.id,
             "filename": self.filename,
-            "fileType": self.fileType,
+            "store": self.store,
             "contentType": self.contentType,
             "updated": self.updated,
             "updateMetadata": self.updateMetadata,
@@ -46,20 +25,13 @@ class File:
         }
     
     def path(self):
-        if self.fileType == File.Type.FACESHOT:
-            return os.path.join(os.getcwd(), "people", self.filename)
-        elif self.fileType == File.Type.ARTEFACT:
-            return os.path.join(os.getcwd(), "artefacts", self.filename)
-        elif self.fileType == File.Type.FACE_EMBEDDINGS:
-            return os.path.join(os.getcwd(), "embeddings.pth")
-        else:
-            return os.path.join(os.getcwd(), "FileStore", self.filename)
+        return os.path.join(os.getcwd(), self.store, self.filename)
     
     @staticmethod
     def from_dict(filename: str, data: dict) -> 'File':
         return File(
             filename=filename,
-            fileType=data.get("type"),
+            store=data.get("store"),
             id=data.get("id"),
             contentType=data.get("contentType"),
             updated=data.get("updated"),
@@ -68,7 +40,7 @@ class File:
         )
     
     def __str__(self):
-        return f"File(name={self.filename}, type={self.fileType}, id={self.id if self.id != None else "None"}, contentType={self.contentType if self.contentType != None else "None"}, updated={self.updated if self.updated != None else "None"}, updateMetadata={self.updateMetadata if self.updateMetadata != None else "None"}, forceExistence={self.forceExistence if self.forceExistence != None else "None"})"
+        return f"File(name={self.filename}, store={self.store}, id={self.id if self.id != None else "None"}, contentType={self.contentType if self.contentType != None else "None"}, updated={self.updated if self.updated != None else "None"}, updateMetadata={self.updateMetadata if self.updateMetadata != None else "None"}, forceExistence={self.forceExistence if self.forceExistence != None else "None"})"
 
 class FileManager:
     mode = "cloud"
@@ -101,8 +73,8 @@ class FileManager:
             return "ERROR: Failed to delete file; error: {}".format(e)
     
     @staticmethod
-    def cleanupNonmatchingFiles(explicitEmbeddingsFileCheck=True):
-        # Check non-matching files in regular stores
+    def cleanupNonmatchingFiles():
+        # Check non-matching files in all stores
         for store in FileManager.stores:
             filenames = FileOps.getFilenames(store)
             if isinstance(filenames, str):
@@ -112,10 +84,7 @@ class FileManager:
                 if filename not in FileManager.context.keys():
                     FileOps.deleteFile(os.path.join(store, filename))
         
-        # See if embedding file is non-matching
-        if FileOps.exists(os.path.join(os.getcwd(), str(File.Type.FACE_EMBEDDINGS)), type="file"):
-            if File.Type.FACE_EMBEDDINGS.value not in FileManager.context.keys():
-                FileOps.deleteFile(str(File.Type.FACE_EMBEDDINGS))
+        return True
     
     @staticmethod
     def createStores(*args: list[str]):
@@ -153,14 +122,16 @@ class FileManager:
             
             try:
                 file = File.from_dict(filename, data)
-                if (file.filename is None) or (not isinstance(file.filename, str)) or (file.fileType is None) or (not File.Type.isValid(file.fileType)):
-                    raise Exception("Filename or type is missing or invalid.")
+                if (file.filename is None) or (not isinstance(file.filename, str)) or (file.store is None):
+                    raise Exception("Filename or store is missing or invalid.")
                 if not FileManager.exists(file):
                     raise Exception("File not found.")
+                if file.store not in FileManager.stores:
+                    raise Exception("Store not tracked by FileManager.")
                 
                 FileManager.context[filename] = file
             except Exception as e:
-                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file with ID '{}' due to error: {}".format(filename, e))
+                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file '{}' due to error: {}".format(filename, e))
         
         FileManager.saveContext()
         FileManager.cleanupNonmatchingFiles()
