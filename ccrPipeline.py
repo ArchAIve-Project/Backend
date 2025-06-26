@@ -604,7 +604,7 @@ class CCRPipeline:
                 correctedText = predText
                 tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE", "LLM correction skipped by user option."))
 
-            if computeAccuracy:
+            if computeAccuracy and corrected:
                 postAcc = CCRPipeline.accuracy(correctedText, gtPath)
 
             return {
