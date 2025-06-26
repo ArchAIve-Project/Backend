@@ -31,6 +31,25 @@ class File:
     def identifierPath(self):
         return os.path.join(self.store, self.filename)
     
+    def updateData(self, cloudData: dict):
+        if not isinstance(cloudData, dict):
+            return False
+        
+        try:
+            if 'id' in cloudData:
+                self.id = cloudData['id']
+            if 'contentType' in cloudData:
+                self.contentType = cloudData['contentType']
+            if 'updated' in cloudData:
+                self.updated = cloudData['updated'].isoformat()
+            
+            self.updateMetadata = False
+            self.forceExistence = False
+        except Exception as e:
+            Logger.log("FILE UPDATEDATA ERROR: Failed to update for file '{}'; error: {}".format(self.identifierPath(), e))
+        
+        return True
+    
     @staticmethod
     def generateIDPath(store: str, filename: str):
         return os.path.join(store, filename)
@@ -77,6 +96,8 @@ class FileManager:
             res = FileOps.deleteFile(file.path())
             if res != True:
                 raise Exception(res)
+
+            return True
         except Exception as e:
             return "ERROR: Failed to delete file; error: {}".format(e)
     
@@ -159,59 +180,67 @@ class FileManager:
         
         return True
     
-    # 'people/hello/IT3101 Diagram1.drawio.png': {'contentDisposition': 'inline; '
-    #                                                                "filename*=utf-8''IT3101%20Diagram1.drawio.png",
-    #                                          'contentEncoding': None,
-    #                                          'contentType': 'image/png',
-    #                                          'created': datetime.datetime(2025, 6, 26, 6, 18, 19, 505000, tzinfo=datetime.timezone.utc),
-    #                                          'id': 'archaive-348f9.firebasestorage.app/people/hello/IT3101 '
-    #                                                'Diagram1.drawio.png/1750918699499930',
-    #                                          'metadata': {'firebaseStorageDownloadTokens': '0ca625c9-5ee5-4523-a1a3-4e60e91c1988'},
-    #                                          'name': 'people/hello/IT3101 '
-    #                                                  'Diagram1.drawio.png',
-    #                                          'owner': None,
-    #                                          'path': '/b/archaive-348f9.firebasestorage.app/o/people%2Fhello%2FIT3101%20Diagram1.drawio.png',
-    #                                          'publicURL': 'https://storage.googleapis.com/archaive-348f9.firebasestorage.app/people/hello/IT3101%20Diagram1.drawio.png',
-    #                                          'size': 26922,
-    #                                          'updated': datetime.datetime(2025, 6, 26, 6, 18, 19, 505000, tzinfo=datetime.timezone.utc)}}
-    
     @staticmethod
     def setup():
+        # Setup stores
         res = FileManager.createStores()
         if res != True:
             return "ERROR: Failed to create stores; error: {}".format(res)
         
+        # Read, validate and load context into memory
         res = FileManager.loadContext()
         if res != True:
             return "ERROR: Failed to load context; error: {}".format(res)
         
-        cloudFiles = FireStorage.listFiles(ignoreFolders=True)
+        # Fetch information on cloud files
+        cloudFiles = FireStorage.listFiles(ignoreFolders=True) # get blobs for all files only
         if isinstance(cloudFiles, str):
             return "ERROR: Failed to list files in cloud storage; error: {}".format(cloudFiles)
-        cloudFiles = list(cloudFiles)
+        cloudFiles = list(cloudFiles) # convert the HTTPIterator object from listFiles into a List[Blob]
         
-        cloudFilenames = [b.name for b in cloudFiles]
-        cloudFiles = {b.name: FireStorage.getFileInfo(b.name, b) for b in cloudFiles}
+        cloudFilenames = [b.name for b in cloudFiles] # for easy name reference. each name is like 'hello.txt', 'storeName/john.txt'
+        cloudFiles = {b.name: FireStorage.getFileInfo(b.name, b) for b in cloudFiles} # extract name-keyed (corresponds with local File.identifierPath) cloud metadata information.
         
-        for fileIDPath in FileManager.context:
+        for fileIDPath in list(FileManager.context.keys()):
             # Check if file does not exist on cloud. If not, if 'forceExistence', upload, get metadata, and save; else, delete from context and fs.
             if fileIDPath not in cloudFilenames:
                 if FileManager.context[fileIDPath].forceExistence:
+                    # Force exist mandate on file context, upload to Firebase
                     res = FireStorage.uploadFile(
                         localFilePath=FileManager.context[fileIDPath].path(),
                         filename=fileIDPath
                     )
                     if res != True:
                         return "ERROR: Failed to upload force-existed file '{}'; error: {}".format(fileIDPath, res)
-                    return "YAY! FILE FORCE EXISTED!"
+                    
+                    # Get metadata on newly uploaded file
+                    res: dict = FireStorage.getFileInfo(fileIDPath)
+                    if isinstance(res, str):
+                        return "ERROR: Failed to obtain metadata for force-existed file '{}'; error: {}".format(fileIDPath, res)
+                    
+                    # Update context metadata with fetched cloud metadata
+                    FileManager.context[fileIDPath].updateData(res)
                 else:
-                    print("file not found and not force existed!")
-                    exit()
-            else:
-                print("file found! yippeee!")
-                exit()
+                    # File not found and no force existence flag. Remove from filesystem and context
+                    res = FileManager.delete(FileManager.context[fileIDPath])
+                    if res != True:
+                        return "ERROR: Failed to delete cloud-unmatched file '{}'; error: {}".format(res)
+                    
+                    del FileManager.context[fileIDPath]                    
             
             # Check if file needs to be redownloaded based on 'updated' parity. update metadata is so.
+            reDownloaded = False
+            if FileManager.context[fileIDPath].updated != cloudFiles[fileIDPath]['updated'].isoformat():
+                # Local file needs to be updated with newer version available on cloud
+                
+                # Download the file
+                res = FireStorage.downloadFile(FileManager.context[fileIDPath].path(), fileIDPath)
+                if res != True:
+                    return "ERROR: Failed to re-download out-of-date file '{}'; error: {}".format(res)
+
+                reDownloaded = True
             
-            # Update metadata is 'updateMetadata'
-            pass
+            # If the file was redownloaded due to update parity or if the context has an updateMetadata mandate, update the context metadata
+            if FileManager.context[fileIDPath].updateMetadata or reDownloaded:
+                # Update context metadata
+                FileManager.context[fileIDPath].updateData(cloudFiles[fileIDPath])
