@@ -202,6 +202,7 @@ class FileManager:
         cloudFiles = {b.name: FireStorage.getFileInfo(b.name, b) for b in cloudFiles} # extract name-keyed (corresponds with local File.identifierPath) cloud metadata information.
         
         for fileIDPath in list(FileManager.context.keys()):
+            forceExisted = False
             # Check if file does not exist on cloud. If not, if 'forceExistence', upload, get metadata, and save; else, delete from context and fs.
             if fileIDPath not in cloudFilenames:
                 if FileManager.context[fileIDPath].forceExistence:
@@ -220,15 +221,19 @@ class FileManager:
                     
                     # Update context metadata with fetched cloud metadata
                     FileManager.context[fileIDPath].updateData(res)
+                    forceExisted = True
+                    print(f"{fileIDPath}: Force exist flag. Uploaded and updated metadata.")
                 else:
                     # File not found and no force existence flag. Remove from filesystem and context
                     res = FileManager.delete(FileManager.context[fileIDPath])
                     if res != True:
                         return "ERROR: Failed to delete cloud-unmatched file '{}'; error: {}".format(res)
                     
-                    del FileManager.context[fileIDPath]                    
+                    del FileManager.context[fileIDPath]
+                    
+                    print(f"{fileIDPath}: File not found without force existence. Deleted from system and context.")
             
-            # Check if file needs to be redownloaded based on 'updated' parity. update metadata is so.
+            # Check if file needs to be redownloaded based on 'updated' parity. update metadata is so. forceExisted naturally disables the redownloading and file metadata update.
             reDownloaded = False
             if FileManager.context[fileIDPath].updated != cloudFiles[fileIDPath]['updated'].isoformat():
                 # Local file needs to be updated with newer version available on cloud
@@ -239,8 +244,15 @@ class FileManager:
                     return "ERROR: Failed to re-download out-of-date file '{}'; error: {}".format(res)
 
                 reDownloaded = True
+                print(f"{fileIDPath}: Redownloaded file to due to newer version available.")
             
             # If the file was redownloaded due to update parity or if the context has an updateMetadata mandate, update the context metadata
             if FileManager.context[fileIDPath].updateMetadata or reDownloaded:
+                print(f"{fileIDPath}: Context data updated due to updateMetadata: {FileManager.context[fileIDPath].updateMetadata} or reDownloaded: {reDownloaded}")
                 # Update context metadata
                 FileManager.context[fileIDPath].updateData(cloudFiles[fileIDPath])
+        
+        FileManager.saveContext()
+        FileManager.cleanupNonmatchingFiles()
+        
+        return True
