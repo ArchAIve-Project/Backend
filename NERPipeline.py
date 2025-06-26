@@ -123,15 +123,8 @@ if __name__ == "__main__":
         sentence=sentence,
         tracer=tracer
     )
+    
+    print(entities)
 
     tracer.end()
     ArchSmith.persist()
-    
-    # for word, label in entities:
-    #     print((word, label))
-    
-    # a = [("Jun", "B-NAME"), ("Han", "I-NAME"), ("was", "O"), ("climbing", "B-ACTION"),
-    #  ("the", "O"), ("rock", "O"), ("on", "O"), ("the", "O"), ("The", "B-NAME"),
-    #  ("Great", "I-NAME"), ("Wall", "I-NAME"), ("Of", "I-NAME"), ("China", "I-NAME"), (".", "O")]
-    
-    # print(NERPipeline.extract_entities(a))
