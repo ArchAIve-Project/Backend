@@ -252,7 +252,7 @@ class FireStorage:
         return ('FireStorageEnabled' in os.environ and os.environ['FireStorageEnabled'] == 'True')
     
     @staticmethod
-    def listFiles(filenamesOnly: bool=False) -> List[Blob] | List[str]:
+    def listFiles(namesOnly: bool=False, ignoreFolders: bool=False) -> List[Blob] | List[str]:
         '''Returns a list of filenames in the Firebase Storage bucket.
         
         If `filenamesOnly` is True, returns a list of filenames only. (`List[str]`)
@@ -263,7 +263,11 @@ class FireStorage:
         try:
             bucket = storage.bucket()
             blobs: List[Blob] = bucket.list_blobs()
-            if filenamesOnly:
+            
+            if ignoreFolders:
+                blobs = [blob for blob in blobs if not blob.name.endswith("/")]
+            
+            if namesOnly:
                 return [blob.name for blob in blobs]
             else:
                 return blobs
