@@ -28,9 +28,9 @@ class File:
         return os.path.join(os.getcwd(), self.store, self.filename)
     
     @staticmethod
-    def from_dict(filename: str, data: dict) -> 'File':
+    def from_dict(data: dict) -> 'File':
         return File(
-            filename=filename,
+            filename=data.get("filename"),
             store=data.get("store"),
             id=data.get("id"),
             contentType=data.get("contentType"),
@@ -114,24 +114,24 @@ class FileManager:
         except Exception as e:
             return "ERROR: Failed to load context data; error: {}".format(e)
         
-        for filename in data:
-            if filename == "mode": # TODO: context morphing for mode mismatch
+        for fileID in data:
+            if fileID == "mode": # TODO: context morphing for mode mismatch
                 continue
-            if not isinstance(data[filename], dict):
-                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file '{}' due to a value that is not of type 'dict'.".format(filename))
+            if not isinstance(data[fileID], dict):
+                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file with ID '{}' due to a value that is not of type 'dict'.".format(fileID))
             
             try:
-                file = File.from_dict(filename, data)
-                if (file.filename is None) or (not isinstance(file.filename, str)) or (file.store is None):
+                file = File.from_dict(data)
+                if (file.filename is None) or (not isinstance(file.filename, str)) or (file.store is None) or (not isinstance(file.store, str)):
                     raise Exception("Filename or store is missing or invalid.")
                 if not FileManager.exists(file):
                     raise Exception("File not found.")
                 if file.store not in FileManager.stores:
                     raise Exception("Store not tracked by FileManager.")
                 
-                FileManager.context[filename] = file
+                FileManager.context[fileID] = file
             except Exception as e:
-                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file '{}' due to error: {}".format(filename, e))
+                Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file with ID '{}' due to error: {}".format(fileID, e))
         
         FileManager.saveContext()
         FileManager.cleanupNonmatchingFiles()
