@@ -37,15 +37,28 @@ class MMProcessor:
         Returns:
             dict: Dictionary containing OCR transcription, correction flag, and optional accuracy scores.
         """
-        result = CCRPipeline.transcribe(
-            image_path=image_path,
-            tracer=tracer,
-            computeAccuracy=bool(gt_path),
-            useLLMCorrection=useLLMCorrection,
-            gtPath=gt_path
-        )        
-        tracer.addReport(ASReport("MMPROCESSOR CCRPROCESS", f"Processed image {image_path}; gtPath {gt_path}; LLMCorrection set to {useLLMCorrection}"))
-        return result
+        try:
+            result = CCRPipeline.transcribe(
+                image_path=image_path,
+                tracer=tracer,
+                computeAccuracy=bool(gt_path),
+                useLLMCorrection=useLLMCorrection,
+                gtPath=gt_path
+            )
+            if isinstance(result, str) and result.startswith("ERROR"):
+                tracer.addReport(ASReport("MMPROCESSOR CCRPROCESS ERROR", result))
+                return {"transcription": result}
+
+            tracer.addReport(ASReport(
+                "MMPROCESSOR CCRPROCESS",
+                f"Processed image {image_path}; gtPath={gt_path}; LLMCorrection={useLLMCorrection}"
+            ))
+            return result
+
+        except Exception as e:
+            msg = f"Exception during CCR process: {e}"
+            tracer.addReport(ASReport("MMPROCESSOR CCRPROCESS EXCEPTION", msg))
+            return {"transcription": f"ERROR: {msg}"}
 
     @staticmethod
     def transcriptionProcess(traditional_text: str, tracer: ASTracer) -> tuple:
@@ -64,8 +77,23 @@ class MMProcessor:
         Returns:
             tuple: (simplified_chinese, english_translation, summary)
         """
-        tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTIONPROCESS", f"Translating Traditional Chinese of length {len(traditional_text.strip())}"))
-        return TranscriptionProcessor.process(traditional_text, tracer)
+        try:
+            result = TranscriptionProcessor.process(traditional_text, tracer)
+
+            if isinstance(result, tuple):
+                simplified, english, summary = result
+                if isinstance(english, str) and english.startswith("ERROR:"):
+                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION ERROR", english))
+                return simplified, english, summary
+
+            tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION ERROR", "Unexpected result structure"))
+            return traditional_text, "ERROR: Translation failed", None
+
+        except Exception as e:
+            msg = f"Exception during transcription: {e}"
+            tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION EXCEPTION", msg))
+            return traditional_text, f"ERROR: {msg}", None
+
 
     @staticmethod
     def nerProcess(enTranslation: str, tracer: ASTracer):
@@ -79,8 +107,17 @@ class MMProcessor:
         Returns:
             list: List of named entity tuples (token, label).
         """
-        tracer.addReport(ASReport("MMPROCESSOR NERPROCESS", f"Processing English translation of length {len(enTranslation.strip())}"))
-        return NERPipeline.predict(enTranslation, tracer)
+        try:
+            result = NERPipeline.predict(enTranslation, tracer)
+            if isinstance(result, str) and result.startswith("ERROR"):
+                tracer.addReport(ASReport("MMPROCESSOR NER ERROR", result))
+                return []
+            return result
+
+        except Exception as e:
+            msg = f"Exception during NER prediction: {e}"
+            tracer.addReport(ASReport("MMPROCESSOR NER EXCEPTION", msg))
+            return []
 
     @staticmethod
     def mmProcess(image_path: str, tracer: ASTracer, gt_path: str = None):
@@ -98,29 +135,45 @@ class MMProcessor:
         Returns:
             dict: Final pipeline output with all intermediate results.
         """
-        result = MMProcessor.ccrProcess(image_path=image_path, tracer=tracer, gt_path=gt_path)
+        try:
+            result = MMProcessor.ccrProcess(image_path=image_path, tracer=tracer, gt_path=gt_path)
 
-        if isinstance(result, dict) and result.get("transcription", "").lower().startswith("error"):
+            if not isinstance(result, dict) or result.get("transcription", "").lower().startswith("error"):
+                tracer.end()
+                ArchSmith.persist()
+                return {"error": result.get("transcription", "Unknown error in CCR process.")}
+
+            simCN, eng, summary = MMProcessor.transcriptionProcess(result["transcription"], tracer)
+
+            if isinstance(eng, str) and eng.startswith("ERROR"):
+                tracer.end()
+                ArchSmith.persist()
+                return {
+                    "error": eng,
+                    "image": os.path.basename(image_path),
+                    "traditional_chinese": result["transcription"],
+                    "simplified_chinese": simCN
+                }
+
+            labels = MMProcessor.nerProcess(eng, tracer)
+
             tracer.end()
             ArchSmith.persist()
+
             return {
-                "error": result["transcription"]
+                "image": os.path.basename(image_path),
+                "traditional_chinese": result["transcription"],
+                "correction_applied": result["corrected"],
+                "pre_correction_accuracy": result.get("preCorrectionAccuracy"),
+                "post_correction_accuracy": result.get("postCorrectionAccuracy"),
+                "simplified_chinese": simCN,
+                "english_translation": eng,
+                "summary": summary,
+                "ner_labels": [list(pair) for pair in labels]
             }
 
-        simCN, eng, summary = MMProcessor.transcriptionProcess(result["transcription"], tracer)
-        labels = MMProcessor.nerProcess(eng, tracer)
-
-        tracer.end()
-        ArchSmith.persist()
-
-        return {
-            "image": os.path.basename(image_path),
-            "traditional_chinese": result["transcription"],
-            "correction_applied": result["corrected"],
-            "pre_correction_accuracy": result.get("preCorrectionAccuracy"),
-            "post_correction_accuracy": result.get("postCorrectionAccuracy"),
-            "simplified_chinese": simCN,
-            "english_translation": eng,
-            "summary": summary,
-            "ner_labels": labels
-        }
+        except Exception as e:
+            tracer.addReport(ASReport("MMPROCESSOR PIPELINE ERROR", str(e)))
+            tracer.end()
+            ArchSmith.persist()
+            return {"error": f"An error occured in mmProcess: {e}"}
