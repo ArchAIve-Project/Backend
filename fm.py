@@ -309,7 +309,7 @@ class FileManager:
         cloudFile = FireStorage.getFileInfo(idPath)
         if cloudFile == None:
             # File does not exist. Delete from filesystem and context if it exists.
-            fileExists = FileOps.exists(os.path.join(os.getcwd(), idPath), type="file")
+            fileExists = FileManager.exists(File(filename, store))
             res = FileManager.delete(File(filename, store))
             if res != True:
                 return "ERROR: Failed to delete file '{}' that does not exist on cloud storage; error: {}".format(idPath, res)
