@@ -91,11 +91,24 @@ class FileManager:
         return FileOps.exists(file.path(), type="file")
     
     @staticmethod
+    def debugPrint(msg: str) -> None:
+        if os.environ.get("DEBUG_MODE") == "True":
+            print("FM DEBUG: {}".format(msg))
+    
+    @staticmethod
     def delete(file: File):
         try:
             res = FileOps.deleteFile(file.path())
             if res != True:
                 raise Exception(res)
+            
+            FileManager.debugPrint(f"'{file.identifierPath()}' deleted from system.")
+            
+            if file.identifierPath() in FileManager.context:
+                del FileManager.context[file.identifierPath()]
+                FileManager.saveContext()
+                
+                FileManager.debugPrint(f"'{file.identifierPath()}' deleted from context.")
 
             return True
         except Exception as e:
@@ -112,6 +125,8 @@ class FileManager:
             for filename in filenames:
                 if File.generateIDPath(store, filename) not in FileManager.context.keys():
                     FileOps.deleteFile(os.path.join(store, filename))
+                    
+                    FileManager.debugPrint(f"'{File.generateIDPath(store, filename)}' deleted due to unmatched context reference.")
         
         return True
     
@@ -136,6 +151,7 @@ class FileManager:
     def loadContext() -> bool | str:
         FileManager.ensureDataFile()
         
+        # Read JSON data from data file
         data: dict | None = None
         try:
             with open(FileManager.dataFile, "r") as f:
@@ -143,6 +159,7 @@ class FileManager:
         except Exception as e:
             return "ERROR: Failed to load context data; error: {}".format(e)
         
+        # Iterate through all raw dictionary file information objects and instantiate File instances for in-memory use
         for fileIDPath in data:
             if fileIDPath == "mode": # TODO: context morphing for mode mismatch
                 continue
@@ -159,8 +176,23 @@ class FileManager:
                     raise Exception("Store not tracked by FileManager.")
                 
                 FileManager.context[file.identifierPath()] = file
+                FileManager.debugPrint(f"'{file.identifierPath()}' loaded into context successfully.")
             except Exception as e:
                 Logger.log("FILEMANAGER LOADCONTEXT WARNING: Skipping file '{}' due to error: {}".format(fileIDPath, e))
+        
+        # Examine files from all stores and add File instances for them to the context.
+        # Warning: This means that File instances not loaded previously due to invalid data will be overwritten in the context.
+        for store in FileManager.stores:
+            filenames = FileOps.getFilenames(store)
+            if isinstance(filenames, str):
+                return "ERROR: Failed to obtain filenames for store '{}'; error: {}".format(store, filenames)
+            
+            for filename in filenames:
+                if File.generateIDPath(store, filename) not in FileManager.context:
+                    newFile = File(filename, store)
+                    FileManager.context[newFile.identifierPath()] = newFile
+                    
+                    FileManager.debugPrint(f"'{newFile.identifierPath()}' added to context due to an existing file in the system.")
         
         FileManager.saveContext()
         FileManager.cleanupNonmatchingFiles()
@@ -216,16 +248,16 @@ class FileManager:
                         return "ERROR: Failed to upload force-existed file '{}'; error: {}".format(fileIDPath, res)
                     
                     # Get metadata on newly uploaded file
-                    res: dict = FireStorage.getFileInfo(fileIDPath)
-                    if isinstance(res, str):
-                        return "ERROR: Failed to obtain metadata for force-existed file '{}'; error: {}".format(fileIDPath, res)
+                    res = FireStorage.getFileInfo(fileIDPath)
+                    if not isinstance(res, dict):
+                        return "ERROR: Failed to obtain metadata for force-existed file '{}'; response: {}".format(fileIDPath, res)
                     
                     # Update context metadata with fetched cloud metadata
                     FileManager.context[fileIDPath].updateData(res)
                     
                     reDownloadOrMetadataUpdateAvailable = False # No need to re-download/update metadata as file was force existed
                     
-                    print(f"{fileIDPath}: Force exist flag. Uploaded and updated metadata.")
+                    FileManager.debugPrint(f"'{fileIDPath}': Force exist flag. Uploaded and updated metadata.")
                 else:
                     # File not found and no force existence flag. Remove from filesystem and context
                     res = FileManager.delete(FileManager.context[fileIDPath])
@@ -236,9 +268,9 @@ class FileManager:
                     
                     reDownloadOrMetadataUpdateAvailable = False # No need to re-download/update metadata as file is deleted
                     
-                    print(f"{fileIDPath}: File not found without force existence. Deleted from system and context.")
+                    FileManager.debugPrint(f"'{fileIDPath}': File not found without force existence. Deleted from system and context.")
             else:
-                print(f"{fileIDPath}: File found in cloud storage.")
+                FileManager.debugPrint(f"'{fileIDPath}': File found in cloud storage.")
             
             # Check if file needs to be redownloaded based on 'updated' parity. update metadata if so.
             if reDownloadOrMetadataUpdateAvailable:
@@ -252,11 +284,11 @@ class FileManager:
                         return "ERROR: Failed to re-download out-of-date file '{}'; error: {}".format(res)
 
                     reDownloaded = True
-                    print(f"{fileIDPath}: Redownloaded file to due to newer version available.")
+                    FileManager.debugPrint(f"'{fileIDPath}': Redownloaded file to due to newer version available.")
                 
                 # If the file was redownloaded due to update parity or if the context has an updateMetadata mandate, update the context metadata
                 if FileManager.context[fileIDPath].updateMetadata or reDownloaded:
-                    print(f"{fileIDPath}: Context data updated due to updateMetadata: {FileManager.context[fileIDPath].updateMetadata} or reDownloaded: {reDownloaded}")
+                    FileManager.debugPrint(f"'{fileIDPath}': Context data updated due to updateMetadata: {FileManager.context[fileIDPath].updateMetadata} or reDownloaded: {reDownloaded}")
                     # Update context metadata
                     FileManager.context[fileIDPath].updateData(cloudFiles[fileIDPath])
         
@@ -264,3 +296,64 @@ class FileManager:
         FileManager.cleanupNonmatchingFiles()
         
         return True
+
+    @staticmethod
+    def prepFile(store: str, filename: str) -> File | str:
+        idPath = File.generateIDPath(store, filename)
+        
+        cloudFile = FireStorage.getFileInfo(idPath)
+        if cloudFile == None:
+            # File does not exist. Delete from filesystem and context if it exists.
+            res = FileOps.deleteFile(idPath)
+            if res != True:
+                return "ERROR: Failed to delete file '{}' that does not exist on cloud storage; response: {}".format(idPath, res)
+            
+            FileManager.debugPrint(f"'{idPath}' deleted from system as it was not found on cloud during file prep.")
+            
+            if idPath in FileManager.context:
+                del FileManager.context[idPath]
+                FileManager.saveContext()
+                
+                FileManager.debugPrint(f"'{idPath}' deleted from context as it was not found on cloud during file prep.")
+            
+            return "ERROR: File does not exist."
+        
+        if not isinstance(cloudFile, dict):
+            return "ERROR: Expected type 'dict' when retrieving cloud file information; response: {}".format(cloudFile)
+
+        # File exists on cloud storage.
+        
+        ## Ensure existence in the context
+        if idPath in FileManager.context:
+            # File is in context
+            
+            if cloudFile['updated'].isoformat() != FileManager.context[idPath].updated:
+                # File needs to be re-downloaded due to newer version
+                res = FireStorage.downloadFile(FileManager.context[idPath].path(), idPath)
+                if res != True:
+                    return "ERROR: Failed to download newer version of file '{}' available on cloud storage; response: {}".format(idPath, res)
+                
+                FileManager.context[idPath].updateData(cloudFile)
+                FileManager.saveContext()
+                
+                FileManager.debugPrint(f"'{idPath}' downloaded and added to context as it was found on cloud during file prep.")
+        else:
+            # File needs to be added to context
+            newFile = File(filename, store)
+            newFile.updateData(cloudFile)
+            
+            FileManager.context[newFile.identifierPath()] = newFile
+            FileManager.saveContext()
+            
+            FileManager.debugPrint(f"'{newFile.identifierPath()}' added to context as it was found on cloud during file prep.")
+        
+        ## Ensure existence in the filesystem
+        if not FileManager.exists(FileManager.context[idPath]):
+            # File is missing and needs to be downloaded
+            res = FireStorage.downloadFile(FileManager.context[idPath].path(), idPath)
+            if res != True:
+                return "ERROR: Failed to download missing file '{}' from cloud storage; response: {}".format(idPath, res)
+            
+            FileManager.debugPrint(f"'{idPath}' downloaded as it was found on cloud during file prep.")
+        
+        return FileManager.context[idPath]

@@ -289,8 +289,11 @@ class FireStorage:
         return True
     
     @staticmethod
-    def getFileInfo(filename: str, blob: Blob=None, metadataOnly=True) -> dict | Blob:
-        '''Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead.'''
+    def getFileInfo(filename: str, blob: Blob=None, metadataOnly=True) -> dict | Blob | None | str:
+        '''Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead.
+        
+        `None` will be returned if the file does not exist. A string prefixed with 'ERROR: ' will be returned if an error occurred in the process.
+        '''
         if not FireStorage.checkPermissions():
             return "ERROR: FireStorage service operation permission denied."
         try:
@@ -298,7 +301,7 @@ class FireStorage:
                 bucket = storage.bucket()
                 blob = bucket.get_blob(filename)
                 if blob is None:
-                    return "ERROR: File not found in cloud storage."
+                    return None
             
             if metadataOnly:
                 return {
