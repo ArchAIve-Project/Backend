@@ -110,13 +110,13 @@ class RealESRGAN:
 
                 tracer.addReport(ASReport(
                     source="REAL ESRGAN UPSCALE IMAGE",
-                    message=f"Upscaled image saved to '{outputPath}'.",
-                    extraData={"input": path, "output": outputPath}
+                    message=f"Upscaled image saved to '{savePath}'.",
+                    extraData={"input": path, "output": savePath}
                 ))
 
-                enhancedOutputs.append(outputPath) 
+                enhancedOutputs.append(savePath) 
 
-                results.append({"input": path, "output": outputPath, "status": "success"})
+                results.append({"input": path, "output": savePath, "status": "success"})
 
             except Exception as e:
                 tracer.addReport(ASReport(
