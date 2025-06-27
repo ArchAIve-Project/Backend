@@ -8,7 +8,7 @@ from addons import ASTracer, ASReport, ArchSmith, ModelStore
 
 class RealESRGAN:
     '''
-    Real ESRGAN is a designed for restoring images with real-world degradations, 
+    Real ESRGAN is designed for restoring images with real-world degradations, 
     making it more practical for real-world applications compared to ESRGAN.
     '''
     DEVICE = torch.device("mps" if torch.backends.mps.is_available()
@@ -40,8 +40,9 @@ class RealESRGAN:
 
     def upscaleImage(self, inputPath, outputPath: str, tracer: ASTracer):
         """
-        Performs upscaling on single image file or directory of images.
-        Returns an upscaled image in Output Folder with _upscaled of every image done.
+        Performs super-resolution upscaling on single image file or directory of images.
+        Results are saved in Output Folder with _upscaled at the end of every image processed.
+        Automatically determines whether to use 2x or 4x scaling based on image size.
         """
 
         # Check if model exist before image processing
@@ -103,9 +104,9 @@ class RealESRGAN:
 
                 base = os.path.splitext(os.path.basename(path))[0]
                 ext = os.path.splitext(path)[1]
-                outputPath = os.path.join(outputPath, f"{base}_upscaled{ext}")
+                savePath = os.path.join(outputPath, f"{base}_upscaled{ext}")
+                Image.fromarray(output).save(savePath)
 
-                Image.fromarray(output).save(outputPath)
 
                 tracer.addReport(ASReport(
                     source="REAL ESRGAN UPSCALE IMAGE",
