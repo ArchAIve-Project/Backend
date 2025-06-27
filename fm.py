@@ -345,7 +345,12 @@ class FileManager:
             FileManager.context[newFile.identifierPath()] = newFile
             FileManager.saveContext()
             
-            FileManager.debugPrint(f"'{newFile.identifierPath()}' added to context as it was found on cloud during file prep.")
+            # File needs to be downloaded to ensure that the file is the same as cloud, otherwise it could a same filename but different data issue
+            res = FireStorage.downloadFile(newFile.path(), newFile.identifierPath())
+            if res != True:
+                return "ERROR: Failed to re-download file '{}' from cloud storage for data integrity; error: {}".format(newFile.identifierPath(), res)
+            
+            FileManager.debugPrint(f"'{newFile.identifierPath()}' added to context and re-downloaded for data integrity as it was found on cloud during file prep.")
         
         ## Ensure existence in the filesystem
         if not FileManager.exists(FileManager.context[idPath]):
