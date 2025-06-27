@@ -74,6 +74,7 @@ class FileManager:
     dataFile = "fmContext.json"
     stores = ["FileStore", "people", "artefacts"]
     context: Dict[str, File] = {}
+    initialised = False
     
     @staticmethod
     def ensureDataFile():
@@ -292,11 +293,17 @@ class FileManager:
         
         FileManager.saveContext()
         FileManager.cleanupNonmatchingFiles()
+        FileManager.initialised = True
         
         return True
 
     @staticmethod
     def prepFile(store: str, filename: str) -> File | str:
+        if not FileManager.initialised:
+            return "ERROR: FileManager has not been setup yet."
+        if store not in FileManager.stores:
+            return "ERROR: Store '{}' is not tracked by FileManager.".format(store)
+        
         idPath = File.generateIDPath(store, filename)
         
         cloudFile = FireStorage.getFileInfo(idPath)
@@ -362,3 +369,34 @@ class FileManager:
             FileManager.debugPrint(f"'{idPath}' downloaded as it was found on cloud during file prep.")
         
         return FileManager.context[idPath]
+
+    @staticmethod
+    def save(store: str, filename: str) -> File:
+        if not FileManager.initialised:
+            return "ERROR: FileManager has not been setup yet."
+        if store not in FileManager.stores:
+            return "ERROR: Store '{}' is not tracked by FileManager.".format(store)
+        
+        targetFile: File = None
+        if File.generateIDPath(store, filename) in FileManager.context:
+            targetFile = FileManager.context[File.generateIDPath(store, filename)]
+        else:
+            targetFile = File(filename, store)
+        
+        if not FileManager.exists(targetFile):
+            return "ERROR: File '{}' does not exist.".format(targetFile.identifierPath())
+        
+        res = FireStorage.uploadFile(targetFile.path(), targetFile.identifierPath())
+        if res != True:
+            return "ERROR: Failed to upload file '{}' to cloud storage; response: {}".format(targetFile.identifierPath(), res)
+        
+        fileInfo = FireStorage.getFileInfo(targetFile.identifierPath())
+        if not isinstance(fileInfo, dict):
+            return "ERROR: Expected type 'dict' when retrieving information on uploaded file; response: {}".format(fileInfo)
+        
+        targetFile.updateData(fileInfo)
+        
+        FileManager.context[targetFile.identifierPath()] = targetFile
+        FileManager.saveContext()
+        
+        return targetFile
