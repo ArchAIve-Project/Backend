@@ -206,7 +206,7 @@ class FileManager:
                 data = {file.identifierPath(): file.represent() for file in FileManager.context.values()}
                 data['mode'] = FileManager.mode
                 
-                json.dump(data, f)
+                json.dump(data, f, indent=4)
         except Exception as e:
             return "ERROR: Failed to save context to file; error: {}".format(e)
         
@@ -264,8 +264,6 @@ class FileManager:
                     if res != True:
                         return "ERROR: Failed to delete cloud-unmatched file '{}'; error: {}".format(res)
                     
-                    del FileManager.context[fileIDPath]
-                    
                     reDownloadOrMetadataUpdateAvailable = False # No need to re-download/update metadata as file is deleted
                     
                     FileManager.debugPrint(f"'{fileIDPath}': File not found without force existence. Deleted from system and context.")
@@ -304,11 +302,13 @@ class FileManager:
         cloudFile = FireStorage.getFileInfo(idPath)
         if cloudFile == None:
             # File does not exist. Delete from filesystem and context if it exists.
+            fileExists = FileOps.exists(os.path.join(os.getcwd(), idPath), type="file")
             res = FileOps.deleteFile(idPath)
             if res != True:
                 return "ERROR: Failed to delete file '{}' that does not exist on cloud storage; response: {}".format(idPath, res)
             
-            FileManager.debugPrint(f"'{idPath}' deleted from system as it was not found on cloud during file prep.")
+            if fileExists:
+                FileManager.debugPrint(f"'{idPath}' deleted from system as it was not found on cloud during file prep.")
             
             if idPath in FileManager.context:
                 del FileManager.context[idPath]
@@ -336,7 +336,7 @@ class FileManager:
                 FileManager.context[idPath].updateData(cloudFile)
                 FileManager.saveContext()
                 
-                FileManager.debugPrint(f"'{idPath}' downloaded and added to context as it was found on cloud during file prep.")
+                FileManager.debugPrint(f"'{idPath}' downloaded and updated in context as a newer version was found on cloud during file prep.")
         else:
             # File needs to be added to context
             newFile = File(filename, store)
