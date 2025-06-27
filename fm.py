@@ -99,7 +99,7 @@ class FileManager:
     @staticmethod
     def delete(file: File):
         try:
-            res = FileOps.deleteFile(file.path())
+            res = FileOps.deleteFile(file.identifierPath())
             if res != True:
                 raise Exception(res)
             
@@ -310,17 +310,12 @@ class FileManager:
         if cloudFile == None:
             # File does not exist. Delete from filesystem and context if it exists.
             fileExists = FileOps.exists(os.path.join(os.getcwd(), idPath), type="file")
-            res = FileOps.deleteFile(idPath)
+            res = FileManager.delete(File(filename, store))
             if res != True:
-                return "ERROR: Failed to delete file '{}' that does not exist on cloud storage; response: {}".format(idPath, res)
+                return "ERROR: Failed to delete file '{}' that does not exist on cloud storage; error: {}".format(idPath, res)
             
             if fileExists:
                 FileManager.debugPrint(f"'{idPath}' deleted from system as it was not found on cloud during file prep.")
-            
-            if idPath in FileManager.context:
-                del FileManager.context[idPath]
-                FileManager.saveContext()
-                
                 FileManager.debugPrint(f"'{idPath}' deleted from context as it was not found on cloud during file prep.")
             
             return "ERROR: File does not exist."
