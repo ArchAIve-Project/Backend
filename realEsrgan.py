@@ -33,12 +33,14 @@ class RealESRGAN:
             tile_pad=10,
             pre_pad=0,
             half=False,
-            device=RealESRGAN.DEVICE
+            device=RealESRGAN.DEVICE,
+            verbose=False
         )
 
         return upsampler
 
-    def upscaleImage(self, inputPath, outputPath: str, tracer: ASTracer):
+    @staticmethod
+    def upscaleImage(inputPath, outputPath: str, tracer: ASTracer):
         """
         Performs super-resolution upscaling on single image file or directory of images.
         Results are saved in Output Folder with _upscaled at the end of every image processed.
@@ -46,10 +48,10 @@ class RealESRGAN:
         """
 
         # Check if model exist before image processing
-        ctx = ModelStore.getModel("realESRGAN")
-        if not ctx or not ctx.model:
+        upsampler = ModelStore.getModel("realESRGAN").model
+        if upsampler is None:
             raise Exception("Model not found or not loaded in ModelStore.")
-        self.upsampler = ctx.model
+
 
         # Handle input types like the image classifier 
         # if dir or file path is provided
@@ -59,7 +61,7 @@ class RealESRGAN:
                 imagePaths = [
                     os.path.join(inputPath, f)
                     for f in os.listdir(inputPath)
-                    if f.lower().endswith(('.png', '.jpg', '.jpeg'))
+                    if os.path.isfile(path) and path.lower().endswith(('.jpg', '.png'))
                 ]
             #file    
             elif os.path.isfile(inputPath):
@@ -86,7 +88,19 @@ class RealESRGAN:
             raise ValueError("Input must be a file path, directory path, or list of file paths")
 
         # Ensure output folder exists, creates the folder if does not exist
-        os.makedirs(outputPath, exist_ok=True)
+        try:
+            os.makedirs(outputPath, exist_ok=True)
+        except Exception as e:
+            tracer.addReport(ASReport(
+                source="REAL ESRGAN UPSCALE IMAGE ERROR",
+                message=f"Failed to create output directory: {e}",
+                extraData={"output_path": outputPath, "exception": str(e)}
+            ))
+            return {
+                "successful": [],
+                "all_results": [{"error": f"Failed to create output directory: {e}"}]
+            }
+
 
         enhancedOutputs = [] # store success only
         results = [] # store to see which image fails/sucess
@@ -99,7 +113,7 @@ class RealESRGAN:
                 with torch.no_grad():
                     h, w = img.shape[:2]
                     outscale = 4 if max(h, w) < 800 else 2  # 4x for small, 2x for big
-                    output, _ = self.upsampler.enhance(img, outscale=outscale)
+                    output, _ = upsampler.enhance(img, outscale=outscale)
 
 
                 base = os.path.splitext(os.path.basename(path))[0]
