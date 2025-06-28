@@ -354,15 +354,10 @@ class FileManager:
         
         cloudFile = FireStorage.getFileInfo(idPath)
         if cloudFile == None:
-            # File does not exist. Delete from filesystem and context if it exists.
-            fileExists = FileManager.existsInSystem(File(filename, store))
+            # File does not exist. Delete from filesystem and context if it exists            
             res = FileManager.removeLocally(File(filename, store))
             if res != True:
                 return "ERROR: Failed to delete file '{}' that does not exist on cloud storage; error: {}".format(idPath, res)
-            
-            if fileExists:
-                FileManager.debugPrint(f"'{idPath}' deleted from system as it was not found on cloud during file prep.")
-                FileManager.debugPrint(f"'{idPath}' deleted from context as it was not found on cloud during file prep.")
             
             return "ERROR: File does not exist."
         
@@ -396,7 +391,7 @@ class FileManager:
             # File needs to be downloaded to ensure that the file is the same as cloud, otherwise it could a same filename but different data issue
             res = FireStorage.downloadFile(newFile.path(), newFile.identifierPath())
             if res != True:
-                return "ERROR: Failed to re-download file '{}' from cloud storage for data integrity; error: {}".format(newFile.identifierPath(), res)
+                return "ERROR: Failed to re-download file '{}' from cloud storage for data integrity; response: {}".format(newFile.identifierPath(), res)
             
             FileManager.debugPrint(f"'{newFile.identifierPath()}' added to context and re-downloaded for data integrity as it was found on cloud during file prep.")
         
@@ -455,7 +450,7 @@ class FileManager:
         
         res = FileManager.removeLocally(file)
         if res != True:
-            return "ERROR: Failed to remove file '{}' locally; error: {}".format(file.identifierPath(), res)
+            return "ERROR: Failed to offload file '{}' locally; error: {}".format(file.identifierPath(), res)
         
         FileManager.debugPrint(f"'{file.identifierPath()}' removed locally by offload call.")
         
