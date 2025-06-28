@@ -5,7 +5,69 @@ from services import FileOps, Logger, Universal
 from firebase import FireStorage
 
 class File:
+    """
+    Represents a file that is managed and synchronised with Firebase Cloud Storage.
+
+    The File class is primarily used to represent a file by its metadata and path. It can
+    be used independently of the local filesystem (e.g., to get signed URLs, fetch cloud metadata).
+
+    Example 1:
+    ```python
+    f = File("image.jpg", "artefacts")
+    if f.exists()[0]:
+        print(f.getSignedURL())
+        print(f.getPublicURL())
+        print(f.disablePublicURL())
+        print(f.path())
+    ```
+    
+    Example 2 (let's say the file is on cloud and you want to retrive it's information):
+    ```python
+    f = File("image.jpg", "artefacts")
+    f.fetchData()
+    print(f)
+    ```
+    
+    Usage with `FileManager`:
+    
+    Example 1:
+    ```python
+    FileManager.setup()
+    
+    with open("myStore/file.txt", "w") as f:
+        f.write("Hello, world!")
+    
+    file = FileManager.save("myStore", "file.txt")
+    print(file.getSignedURL())
+    ```
+    
+    Example 2 (let's say a file is available on cloud but not locally):
+    ```python
+    FileManager.setup()
+    
+    f = FileManager.prepFile("myStore", "file.txt") # downloads the file into local context and system
+    if isinstance(f, str):
+        print("Something went wrong:", f)
+    
+    print(f.getSignedURL())
+    print(f.getBytes())
+    ```
+    """
+    
     def __init__(self, filename: str, store: str, id: str=None, contentType: str=None, updated: str=None, updateMetadata: bool=False, forceExistence: bool=False):
+        """
+        Initializes a File instance with optional cloud metadata and flags.
+
+        Args:
+            filename (str): Name of the file.
+            store (str): Store/folder the file belongs to.
+            id (str, optional): Firebase file ID.
+            contentType (str, optional): MIME type.
+            updated (str, optional): ISO timestamp of last update.
+            updateMetadata (bool, optional): Force metadata update.
+            forceExistence (bool, optional): Mandate cloud existence on setup.
+        """ 
+        
         self.id = id
         self.filename = filename
         self.store = store
@@ -14,7 +76,14 @@ class File:
         self.updateMetadata = updateMetadata
         self.forceExistence = forceExistence
     
-    def represent(self):
+    def represent(self) -> dict:
+        """
+        Returns the metadata of the file as a dictionary.
+
+        Returns:
+            dict: Dictionary representation of the file.
+        """
+        
         return {
             "id": self.id,
             "filename": self.filename,
@@ -25,13 +94,37 @@ class File:
             "forceExistence": self.forceExistence
         }
     
-    def path(self):
+    def path(self) -> str:
+        """
+        Returns the local filesystem path of the file.
+
+        Returns:
+            str: Absolute local path.
+        """
+        
         return os.path.join(os.getcwd(), self.store, self.filename)
     
-    def identifierPath(self):
+    def identifierPath(self) -> str:
+        """
+        Returns the unique Firebase identifier path ("store/filename").
+
+        Returns:
+            str: Identifier path.
+        """
+        
         return os.path.join(self.store, self.filename)
     
-    def updateData(self, cloudData: dict):
+    def updateData(self, cloudData: dict) -> bool:
+        """
+        Updates metadata using the data retrieved from Firebase.
+
+        Args:
+            cloudData (dict): Metadata dictionary from Firebase.
+
+        Returns:
+            bool: True if updated successfully, False otherwise.
+        """
+        
         if not isinstance(cloudData, dict):
             return False
         
@@ -51,9 +144,23 @@ class File:
         return True
     
     def exists(self):
+        """
+        Checks if the file exists in Firebase and the in-memory context. Uses `FileManager.exists` internally.
+
+        Returns:
+             Tuple[bool, bool] | str: (cloud_exists, context_exists) or error message.
+        """
+        
         return FileManager.exists(self)
     
-    def fetchData(self):
+    def fetchData(self) -> bool | str:
+        """
+        Fetches the latest metadata from Firebase and updates the self in-place.
+
+        Returns:
+             bool | str: True if successful, else error string.
+        """
+        
         res = FireStorage.getFileInfo(self.identifierPath())
         if isinstance(res, str):
             return "ERROR: Failed to get file information from cloud storage; response: {}".format(res)
@@ -66,6 +173,15 @@ class File:
         return True
     
     def getPublicURL(self) -> str:
+        """
+        Makes the file ***public*** and retrieves its public URL. An object's public URL does not change. Use this with caution.
+        
+        Using signed URLs is recommended instead.
+
+        Returns:
+            str: Public URL or error message.
+        """
+        
         exists = self.exists()
         if isinstance(exists, str):
             return exists
@@ -83,7 +199,14 @@ class File:
         
         return res
     
-    def disablePublicURL(self) -> str:
+    def disablePublicURL(self) -> bool | str:
+        """
+        Revokes public access to the file in Firebase. Public URLs will not work.
+
+        Returns:
+             bool | str: True if successful, else error message.
+        """
+        
         exists = self.exists()
         if isinstance(exists, str):
             return exists
@@ -98,6 +221,17 @@ class File:
         return True
     
     def getSignedURL(self, expiration: datetime.timedelta=None, useCache: bool=True) -> str:
+        """
+        Retrieves a signed (private) URL for the file. This URL cannot be revoked and will only stop working when it expires.
+
+        Args:
+            expiration (datetime.timedelta, optional): Time before URL expiry from current time.
+            useCache (bool, optional): Use cached version if available.
+
+        Returns:
+            str: Signed URL or error message.
+        """
+        
         exists = self.exists()
         if isinstance(exists, str):
             return exists
@@ -111,7 +245,14 @@ class File:
         
         return res
     
-    def getBytes(self):
+    def getBytes(self) -> bytes | str:
+        """
+        Downloads the file as raw bytes.
+
+        Returns:
+             bytes | str: File content in bytes, or error message.
+        """
+        
         blob = FireStorage.getFileInfo(self.identifierPath(), metadataOnly=False)
         if isinstance(blob, str):
             return "ERROR: Failed to retrive information from cloud storage; response: {}".format(blob)
@@ -122,10 +263,27 @@ class File:
     
     @staticmethod
     def generateIDPath(store: str, filename: str):
+        """
+        Generates a Firebase-style path from store and filename.
+
+        Returns:
+            str: `store` and `filename` joined with `os.path.join`.
+        """
+        
         return os.path.join(store, filename)
     
     @staticmethod
     def from_dict(data: dict) -> 'File':
+        """
+        Reconstructs a File object from a dictionary.
+
+        Args:
+            data (dict): Dictionary with file fields.
+
+        Returns:
+            File: Reconstructed File instance.
+        """
+        
         return File(
             filename=data.get("filename"),
             store=data.get("store"),
@@ -140,6 +298,65 @@ class File:
         return f"File(name={self.filename}, store={self.store}, id={self.id if self.id != None else "None"}, contentType={self.contentType if self.contentType != None else "None"}, updated={self.updated if self.updated != None else "None"}, updateMetadata={self.updateMetadata if self.updateMetadata != None else "None"}, forceExistence={self.forceExistence if self.forceExistence != None else "None"})"
 
 class FileManager:
+    """
+    FileManager is a static interface for managing file synchronisation
+    between the local filesystem and Firebase Cloud Storage.
+
+    This class acts as a single source of file context and state management across 
+    both local and cloud environments. It assumes Firebase as the source of truth
+    and maintains a local context map (in-memory and JSON file-based) to represent 
+    files currently recognised by the system.
+
+    Responsibilities:
+    - Ensure local folders (called "stores") exist to house files. Store names are in `FileManager.stores`
+    - Maintain a JSON context file (`fmContext.json` or `FileManager.dataFile`) that maps file identifiers
+      to metadata.
+    - Reconcile file states during setup: download out-of-date files from Firebase,
+      upload local files marked as `forceExistence`, and clean orphaned files.
+    - Provide utility methods to prep, save, delete, or offload files while keeping
+      the context in sync.
+    - Serve as the bridge between the local system and Firebase via `FireStorage`,
+      a wrapper on the Firebase Admin SDK.
+
+    Stores are logical folders (e.g., "artefacts", "people") tracked by name, and
+    each file belongs to one store. All files must be identified by a unique 
+    "identifier path" of the form: `store/filename`.
+
+    Example 1:
+    ```python
+    # Step 1: Setup (must be called once before usage)
+    FileManager.setup()
+
+    # Step 2: Save a local file to Firebase and register it
+    FileManager.save("artefacts", "ancient_mask.jpg")
+
+    # Step 3: Prepare a file from Firebase into the local context, i.e make it available in the system and FileManager context.
+    # If the file already existed on Firebase but not locally, you can can use this make sure it's downloaded and ready for use.
+    file = FileManager.prepFile("artefacts", "ancient_mask.jpg")
+
+    # Step 4: Get signed URL, or other operations
+    url = file.getSignedURL()
+    ```
+    
+    Example 2 (Save and then offload a file):
+    ```python
+    # Step 1: Setup the FileManager
+    FileManager.setup()
+
+    # Step 2: Save a new file that was created in a store
+    file = FileManager.save("artefacts", "fragile_scroll.jpg")
+
+    # Step 3: Use the file (e.g., get signed URL)
+    print(file.getSignedURL())
+
+    # Step 4: Offload file locally (it remains on cloud)
+    FileManager.offload(file)
+    
+    # Step 5: Continue doing file operations. They work because the file is still on cloud.
+    print(file.getPublicURL())
+    ```
+    """
+    
     mode = "cloud"
     dataFile = "fmContext.json"
     stores = ["FileStore", "people", "artefacts"]
@@ -148,6 +365,13 @@ class FileManager:
     
     @staticmethod
     def ensureDataFile():
+        """
+        Ensures that the `FileManager.dataFile` exists.
+
+        Returns:
+            bool: Always returns True after creating or verifying the file.
+        """
+        
         if not os.path.isfile(os.path.join(os.getcwd(), FileManager.dataFile)):
             with open(FileManager.dataFile, "w") as f:
                 json.dump({
@@ -158,11 +382,30 @@ class FileManager:
     
     @staticmethod
     def existsInSystem(file: File) -> bool:
-        # Check if a File object exists
+        """
+        Checks if the file exists on the local filesystem.
+
+        Args:
+            file (File): File to check.
+
+        Returns:
+            bool: True if file exists.
+        """
+        
         return FileOps.exists(file.path(), type="file")
     
     @staticmethod
-    def exists(file: File):
+    def exists(file: File) -> 'tuple[bool, bool] | str':
+        """
+        Checks if a file exists both in Firebase and in the context.
+
+        Args:
+            file (File): File to check.
+
+        Returns:
+             Tuple[bool, bool] | str: (cloud, context) flags or error.
+        """
+        
         cloudFile = FireStorage.getFileInfo(file.identifierPath())
         if isinstance(cloudFile, str):
             return "ERROR: Failed to get file information from cloud storage; response: {}".format(cloudFile)
@@ -185,11 +428,28 @@ class FileManager:
     
     @staticmethod
     def debugPrint(msg: str) -> None:
+        """
+        Prints a debug message if DEBUG_MODE is enabled.
+
+        Args:
+            msg (str): Message to print.
+        """
+        
         if os.environ.get("DEBUG_MODE") == "True":
             print("FM DEBUG: {}".format(msg))
     
     @staticmethod
-    def removeLocally(file: File):
+    def removeLocally(file: File) -> bool | str:
+        """
+        Removes the file from the system and context, if present in either.
+
+        Args:
+            file (File): File to remove.
+
+        Returns:
+            bool | str: True if successful, else error message.
+        """
+        
         try:
             res = FileOps.deleteFile(file.identifierPath())
             if res != True:
@@ -209,6 +469,16 @@ class FileManager:
     
     @staticmethod
     def delete(file: File) -> bool | str:
+        """
+        Deletes the file from Firebase and cleans up locally/contextually.
+
+        Args:
+            file (File): File to delete.
+
+        Returns:
+             bool | str: True if successful, else error.
+        """
+        
         fileObject = FireStorage.getFileInfo(file.identifierPath())
         if isinstance(fileObject, str):
             return "ERROR: Failed to get information for file '{}' from cloud storage; response: {}".format(file.identifierPath(), fileObject)
@@ -230,7 +500,14 @@ class FileManager:
         return True
     
     @staticmethod
-    def cleanupNonmatchingFiles():
+    def cleanupNonmatchingFiles() -> bool | str:
+        """
+        Deletes local files from all stores that are not referenced in the current context.
+
+        Returns:
+             bool | str: True if successful, else error.
+        """
+        
         # Check non-matching files in all stores
         for store in FileManager.stores:
             filenames = FileOps.getFilenames(store)
@@ -246,7 +523,17 @@ class FileManager:
         return True
     
     @staticmethod
-    def createStores(*args: list[str]):
+    def createStores(*args: list[str]) -> bool | str:
+        """
+        Creates local folders for each store provided.
+
+        Args:
+            *args: Store names. If none provided, creates all known stores.
+
+        Returns:
+             bool | str: True if successful, else error.
+        """
+        
         toCreate = FileManager.stores if len(args) == 0 else args
         
         for store in toCreate:
@@ -264,6 +551,13 @@ class FileManager:
     
     @staticmethod
     def loadContext() -> bool | str:
+        """
+        Loads the FileManager context from the data file and validates it.
+
+        Returns:
+             bool | str: True if successful, else error.
+        """
+        
         FileManager.ensureDataFile()
         
         # Read JSON data from data file
@@ -316,6 +610,13 @@ class FileManager:
     
     @staticmethod
     def saveContext() -> bool | str:
+        """
+        Saves the current context to the JSON file.
+
+        Returns:
+             bool | str: True if successful, else error.
+        """
+        
         try:
             with open(FileManager.dataFile, "w") as f:
                 data = {file.identifierPath(): file.represent() for file in FileManager.context.values()}
@@ -328,7 +629,45 @@ class FileManager:
         return True
     
     @staticmethod
-    def setup():
+    def setup() -> bool | str:
+        """
+        Sets up the FileManager system by synchronising local context with Firebase Cloud Storage.
+
+        This is the **initialisation entrypoint** and must be called once before using any
+        other FileManager methods like `save`, `prepFile`, or `getFromContext`.
+
+        The setup process involves the following steps:
+        1. Ensures all defined file stores (folders) exist on the local filesystem.
+        2. Loads the file context from the JSON file (`FileManager.dataFile`), including:
+        - Files previously tracked and valid (those existing in both the system and the context).
+        - New local files that exist in the filesystem but are not in the context (auto-added).
+        - Cleanup of invalid or orphaned entries.
+        3. Fetches metadata from Firebase Cloud Storage for all remote files.
+        4. For each file in context:
+        - If `forceExistence=True` and the file is missing in Firebase, it is uploaded.
+        - If file exists on cloud but is outdated locally, it is re-downloaded.
+        - If marked with `updateMetadata=True`, metadata is refreshed from Firebase.
+        5. Files that do not exist in Firebase and are not marked with `forceExistence`
+        are deleted from both the system and context.
+        6. Final context is written back to the context JSON file.
+
+        Returns:
+            bool | str: Returns True if setup was successful. Returns an error string if any
+                        operation (file upload, download, sync, etc.) fails.
+
+        Raises:
+            None directly, but Firebase errors or I/O errors are caught and reported as strings.
+
+        Example:
+        ```python
+        result = FileManager.setup()
+        if result == True:
+            print("FileManager initialised.")
+        else:
+            print("Error during setup:", result)
+        ```
+        """
+        
         # Setup stores
         res = FileManager.createStores()
         if res != True:
@@ -413,6 +752,17 @@ class FileManager:
 
     @staticmethod
     def prepFile(store: str, filename: str) -> File | str:
+        """
+        Prepares a file in the local context if it exists on cloud.
+
+        Args:
+            store (str): Store the file belongs to.
+            filename (str): Name of the file.
+
+        Returns:
+             File | str: File if successful, else error.
+        """
+        
         if not FileManager.initialised:
             return "ERROR: FileManager has not been setup yet."
         if store not in FileManager.stores:
@@ -453,13 +803,13 @@ class FileManager:
             newFile = File(filename, store)
             newFile.updateData(cloudFile)
             
-            FileManager.context[newFile.identifierPath()] = newFile
-            FileManager.saveContext()
-            
             # File needs to be downloaded to ensure that the file is the same as cloud, otherwise it could a same filename but different data issue
             res = FireStorage.downloadFile(newFile.path(), newFile.identifierPath())
             if res != True:
                 return "ERROR: Failed to re-download file '{}' from cloud storage for data integrity; response: {}".format(newFile.identifierPath(), res)
+            
+            FileManager.context[newFile.identifierPath()] = newFile
+            FileManager.saveContext()
             
             FileManager.debugPrint(f"'{newFile.identifierPath()}' added to context and re-downloaded for data integrity as it was found on cloud during file prep.")
         
@@ -475,7 +825,18 @@ class FileManager:
         return FileManager.context[idPath]
 
     @staticmethod
-    def save(store: str, filename: str) -> File:
+    def save(store: str, filename: str) -> File | str:
+        """
+        Saves a file from the local system to Firebase.
+
+        Args:
+            store (str): Store the file is in.
+            filename (str): File name.
+
+        Returns:
+             File | str: Updated File or error string.
+        """
+        
         if not FileManager.initialised:
             return "ERROR: FileManager has not been setup yet."
         if store not in FileManager.stores:
@@ -506,7 +867,17 @@ class FileManager:
         return targetFile
     
     @staticmethod
-    def offload(file: File) -> bool:
+    def offload(file: File) -> bool | str:
+        """
+        Deletes a file from the local system but not Firebase.
+
+        Args:
+            file (File): File to offload.
+
+        Returns:
+             bool | str: True if successful, else error.
+        """
+        
         if not FileManager.initialised:
             return "ERROR: FileManager has not been setup yet."
         
@@ -526,5 +897,15 @@ class FileManager:
     
     @staticmethod
     def getFromContext(store: str, filename: str):
+        """Retrieves a file from the context (i.e `FileManager.context`).
+
+        Args:
+            store (str): The store the file is in.
+            filename (str): The name of the file.
+
+        Returns:
+              File | None: The requested file or None if not found.
+        """
+        
         idPath = File.generateIDPath(store, filename)
         return FileManager.context.get(idPath)
