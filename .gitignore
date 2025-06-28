@@ -15,3 +15,5 @@ fmContext.json
 people/
 artefacts/
 FileStore/
+GroundTruths/
+UpscaledOutput/

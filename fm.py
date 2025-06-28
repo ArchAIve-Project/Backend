@@ -87,9 +87,33 @@ class FileManager:
         return True
     
     @staticmethod
-    def exists(file: File) -> bool:
+    def existsInSystem(file: File) -> bool:
         # Check if a File object exists
         return FileOps.exists(file.path(), type="file")
+    
+    @staticmethod
+    def exists(file: File):
+        cloudFiles = FireStorage.listFiles(ignoreFolders=True)
+        if isinstance(cloudFiles, str):
+            return "ERROR: Failed to get list files on cloud storage; response: {}".format(cloudFiles)
+        
+        cloud = False
+        context = False
+        if file.identifierPath() in [b.name for b in cloudFiles]:
+            cloud = True
+        
+        if not cloud:
+            res = FileManager.removeLocally(file)
+            if res != True:
+                return "ERROR: Failed to remove file '{}' locally that was not found on cloud; error: {}".format(res)
+            
+            FileManager.debugPrint(f"'{file.identifierPath()}' was removed locally as it was not found on cloud during exists call.")
+        
+        # Check if file exists in context.
+        if file.identifierPath() in FileManager.context:
+            context = True
+        
+        return cloud, context
     
     @staticmethod
     def debugPrint(msg: str) -> None:
@@ -97,23 +121,45 @@ class FileManager:
             print("FM DEBUG: {}".format(msg))
     
     @staticmethod
-    def delete(file: File):
+    def removeLocally(file: File):
         try:
             res = FileOps.deleteFile(file.identifierPath())
             if res != True:
                 raise Exception(res)
             
-            FileManager.debugPrint(f"'{file.identifierPath()}' deleted from system.")
+            FileManager.debugPrint(f"'{file.identifierPath()}' removed from system.")
             
             if file.identifierPath() in FileManager.context:
                 del FileManager.context[file.identifierPath()]
                 FileManager.saveContext()
                 
-                FileManager.debugPrint(f"'{file.identifierPath()}' deleted from context.")
+                FileManager.debugPrint(f"'{file.identifierPath()}' removed from context.")
 
             return True
         except Exception as e:
-            return "ERROR: Failed to delete file; error: {}".format(e)
+            return "ERROR: Failed to remove file locally; error: {}".format(e)
+    
+    @staticmethod
+    def delete(file: File) -> bool | str:
+        fileObject = FireStorage.getFileInfo(file.identifierPath())
+        if isinstance(fileObject, str):
+            return "ERROR: Failed to get information for file '{}' from cloud storage; response: {}".format(file.identifierPath(), fileObject)
+        if fileObject is None:
+            res = FileManager.removeLocally(file)
+            if res != True:
+                return "ERROR: Failed to remove file '{}' locally; error: {}".format(file.identifierPath(), res)
+            
+            return True
+        
+        res = FireStorage.deleteFile(file.identifierPath())
+        if res != True:
+            return "ERROR: Failed to delete file '{}' from cloud storage; response: {}".format(res)
+        
+        res = FileManager.removeLocally(file)
+        if res != True:
+            return "ERROR: Failed to remove file '{}' locally; error: {}".format(file.identifierPath(), res)
+        
+        return True
     
     @staticmethod
     def cleanupNonmatchingFiles():
@@ -171,7 +217,7 @@ class FileManager:
                 file = File.from_dict(data[fileIDPath])
                 if (file.filename is None) or (not isinstance(file.filename, str)) or (file.store is None) or (not isinstance(file.store, str)):
                     raise Exception("Filename or store is missing or invalid.")
-                if not FileManager.exists(file):
+                if not FileManager.existsInSystem(file):
                     raise Exception("File not found.")
                 if file.store not in FileManager.stores:
                     raise Exception("Store not tracked by FileManager.")
@@ -261,7 +307,7 @@ class FileManager:
                     FileManager.debugPrint(f"'{fileIDPath}': Force exist flag. Uploaded and updated metadata.")
                 else:
                     # File not found and no force existence flag. Remove from filesystem and context
-                    res = FileManager.delete(FileManager.context[fileIDPath])
+                    res = FileManager.removeLocally(FileManager.context[fileIDPath])
                     if res != True:
                         return "ERROR: Failed to delete cloud-unmatched file '{}'; error: {}".format(res)
                     
@@ -309,8 +355,8 @@ class FileManager:
         cloudFile = FireStorage.getFileInfo(idPath)
         if cloudFile == None:
             # File does not exist. Delete from filesystem and context if it exists.
-            fileExists = FileManager.exists(File(filename, store))
-            res = FileManager.delete(File(filename, store))
+            fileExists = FileManager.existsInSystem(File(filename, store))
+            res = FileManager.removeLocally(File(filename, store))
             if res != True:
                 return "ERROR: Failed to delete file '{}' that does not exist on cloud storage; error: {}".format(idPath, res)
             
@@ -355,7 +401,7 @@ class FileManager:
             FileManager.debugPrint(f"'{newFile.identifierPath()}' added to context and re-downloaded for data integrity as it was found on cloud during file prep.")
         
         ## Ensure existence in the filesystem
-        if not FileManager.exists(FileManager.context[idPath]):
+        if not FileManager.existsInSystem(FileManager.context[idPath]):
             # File is missing and needs to be downloaded
             res = FireStorage.downloadFile(FileManager.context[idPath].path(), idPath)
             if res != True:
@@ -378,7 +424,7 @@ class FileManager:
         else:
             targetFile = File(filename, store)
         
-        if not FileManager.exists(targetFile):
+        if not FileManager.existsInSystem(targetFile):
             return "ERROR: File '{}' does not exist.".format(targetFile.identifierPath())
         
         res = FireStorage.uploadFile(targetFile.path(), targetFile.identifierPath())
@@ -395,3 +441,22 @@ class FileManager:
         FileManager.saveContext()
         
         return targetFile
+    
+    @staticmethod
+    def offload(file: File) -> bool:
+        if not FileManager.initialised:
+            return "ERROR: FileManager has not been setup yet."
+        
+        fileExists = FileManager.exists(file)
+        if isinstance(fileExists, str):
+            return "ERROR: Failed to check cloud and context existence of file '{}'; error: {}".format(file.identifierPath(), fileExists)
+        if not fileExists[0]:
+            return "ERROR: File does not exist."
+        
+        res = FileManager.removeLocally(file)
+        if res != True:
+            return "ERROR: Failed to remove file '{}' locally; error: {}".format(file.identifierPath(), res)
+        
+        FileManager.debugPrint(f"'{file.identifierPath()}' removed locally by offload call.")
+        
+        return True
