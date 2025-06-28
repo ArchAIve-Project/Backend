@@ -1,4 +1,4 @@
-import os, shutil, sys, json, pprint
+import os, shutil, sys, json, pprint, datetime
 from typing import List, Dict
 from enum import Enum
 from services import FileOps, Logger, Universal
@@ -49,6 +49,55 @@ class File:
             Logger.log("FILE UPDATEDATA ERROR: Failed to update for file '{}'; error: {}".format(self.identifierPath(), e))
         
         return True
+    
+    def exists(self):
+        return FileManager.exists(self)
+    
+    def getPublicURL(self) -> str:
+        exists = self.exists()
+        if isinstance(exists, str):
+            return exists
+        exists = exists[0]
+        if not exists:
+            return "ERROR: File does not exist."
+        
+        res = FireStorage.changeFileACL(self.identifierPath(), private=False)
+        if res != True:
+            return "ERROR: Failed to enable public access; response: {}".format(res)
+        
+        res = FireStorage.getFilePublicURL(self.identifierPath())
+        if res.startswith("ERROR"):
+            return "ERROR: Failed to retrieved public URL; response: {}".format(res)
+        
+        return res
+    
+    def disablePublicURL(self) -> str:
+        exists = self.exists()
+        if isinstance(exists, str):
+            return exists
+        exists = exists[0]
+        if not exists:
+            return "ERROR: File does not exist."
+        
+        res = FireStorage.changeFileACL(self.identifierPath(), private=True)
+        if res != True:
+            return "ERROR: Failed to disable public access; response: {}".format(res)
+        
+        return True
+    
+    def getSignedURL(self, expiration: datetime.timedelta=None, useCache: bool=True) -> str:
+        exists = self.exists()
+        if isinstance(exists, str):
+            return exists
+        exists = exists[0]
+        if not exists:
+            return "ERROR: File does not exist."
+        
+        res = FireStorage.getFileSignedURL(self.identifierPath(), expiration=expiration, allowCache=useCache, updateCache=useCache)
+        if res.startswith("ERROR"):
+            return "ERROR: Failed to get signed URL; response: {}".format(res)
+        
+        return res
     
     @staticmethod
     def generateIDPath(store: str, filename: str):
