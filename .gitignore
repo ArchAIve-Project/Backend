@@ -11,3 +11,10 @@ archsmith.json
 Companydata/
 ccr img/
 test.json
+fmContext.json
+people/
+artefacts/
+FileStore/
+GroundTruths/
+UpscaledOutput/
+outputs/
