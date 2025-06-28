@@ -7,6 +7,9 @@ from addons import ModelStore, ASTracer, ASReport, ArchSmith
 
 # ======== NER Pipeline ========
 class NERPipeline:
+    
+    loaded = False
+
     LABEL_LIST = [
         'B-ACT', 'B-DATE', 'B-LOC', 'B-MISC', 'B-ORG', 'B-PERSON',
         'I-ACT', 'I-DATE', 'I-LOC', 'I-MISC', 'I-ORG', 'I-PERSON', 'O'
@@ -35,6 +38,7 @@ class NERPipeline:
         model = BertForTokenClassification(config)
         state_dict = torch.load(model_path, map_location=torch.device("cpu"))
         model.load_state_dict(state_dict.get("model_state_dict", state_dict))
+        NERPipeline.loaded = True
         model.eval()
 
         return model
@@ -73,6 +77,9 @@ class NERPipeline:
 
     @staticmethod
     def predict(sentence: str, tracer: ASTracer):
+        if not NERPipeline.loaded:
+            return "ERROR: NER pipeline has not been loaded. Call load_model() first."
+        
         inputs = NERPipeline.tokenizer(sentence, return_tensors="pt", truncation=True, is_split_into_words=False)
         word_ids = inputs.word_ids(batch_index=0)
 
