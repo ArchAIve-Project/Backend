@@ -372,7 +372,7 @@ class FileManager:
             bool: Always returns True after creating or verifying the file.
         """
         
-        if not os.path.isfile(os.path.join(os.getcwd(), FileManager.dataFile)):
+        if not FileOps.exists(os.path.join(os.getcwd(), FileManager.dataFile), type="file"):
             with open(FileManager.dataFile, "w") as f:
                 json.dump({
                     "mode": FileManager.mode
@@ -435,7 +435,7 @@ class FileManager:
             msg (str): Message to print.
         """
         
-        if os.environ.get("DEBUG_MODE") == "True":
+        if os.environ.get("FM_DEBUG_MODE", os.environ.get("DEBUG_MODE", "False")) == "True":
             print("FM DEBUG: {}".format(msg))
     
     @staticmethod
