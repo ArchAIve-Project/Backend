@@ -1,6 +1,6 @@
 from ccrPipeline import CCRPipeline
 from transcriptionProcessor import TranscriptionProcessor
-from addons import ArchSmith, ASTracer, ASReport
+from addons import ASTracer, ASReport
 from NERPipeline import NERPipeline
 import os
 
@@ -83,22 +83,22 @@ class MMProcessor:
             if isinstance(result, tuple):
                 simplified, english, summary = result
                 if isinstance(simplified, str) and simplified.startswith("ERROR:"):
-                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION SIMPLIFIED ERROR", simplified))
+                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTIONPROCESS SIMPLIFIED ERROR", simplified))
 
                 if isinstance(english, str) and english.startswith("ERROR:"):
-                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION ENGLISH ERROR", english))
+                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTIONPROCESS ENGLISH ERROR", english))
 
                 if isinstance(summary, str) and summary.startswith("ERROR:"):
-                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION SUMMARY ERROR", summary))
+                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTIONPROCESS SUMMARY ERROR", summary))
                     
                 return simplified, english, summary
 
-            tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION ERROR", "Unexpected result structure"))
+            tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTIONPROCESS ERROR", "Unexpected result structure", result))
             return traditional_text, "ERROR: Translation failed", None
 
         except Exception as e:
-            msg = f"Exception during transcription: {e}"
-            tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION EXCEPTION", msg))
+            msg = f"Exception during transcription process: {e}"
+            tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTIONPROCESS ERROR", msg))
             return traditional_text, f"ERROR: {msg}", None
 
 
@@ -117,13 +117,13 @@ class MMProcessor:
         try:
             result = NERPipeline.predict(enTranslation, tracer)
             if isinstance(result, str) and result.startswith("ERROR"):
-                tracer.addReport(ASReport("MMPROCESSOR NER ERROR", result))
+                tracer.addReport(ASReport("MMPROCESSOR NERPROCESS ERROR", result))
                 return []
             return result
 
         except Exception as e:
             msg = f"Exception during NER prediction: {e}"
-            tracer.addReport(ASReport("MMPROCESSOR NER EXCEPTION", msg))
+            tracer.addReport(ASReport("MMPROCESSOR NERPROCESS ERROR", msg))
             return []
 
     @staticmethod
@@ -134,53 +134,84 @@ class MMProcessor:
         - Converts and translates the recognized text.
         - Extracts named entities from the English output.
 
-        Args:
-            image_path (str): Path to the input image.
-            tracer (ASTracer): Tracer object for pipeline tracking.
-            gt_path (str, optional): Optional ground truth path for computing accuracy.
-
         Returns:
-            dict: Final pipeline output with all intermediate results.
+            dict: Final pipeline output with all intermediate results and safe fallbacks.
         """
+        errors = []
+        tradCNText = simCN = eng = summary = None
+        corrected = pre_acc = post_acc = None
+        labels = None
+
         try:
-            result = MMProcessor.ccrProcess(image_path=image_path, tracer=tracer, gt_path=gt_path)
+            # OCR
+            try:
+                ccr_output = MMProcessor.ccrProcess(image_path=image_path, tracer=tracer, gt_path=gt_path)
+                tradCNText = ccr_output.get("transcription")
+                corrected = ccr_output.get("corrected", False)
+                pre_acc = ccr_output.get("preCorrectionAccuracy")
+                post_acc = ccr_output.get("postCorrectionAccuracy")
 
-            if not isinstance(result, dict) or result.get("transcription", "").lower().startswith("error"):
-                tracer.end()
-                ArchSmith.persist()
-                return {"error": result.get("transcription", "Unknown error in CCR process.")}
+                if isinstance(tradCNText, str) and tradCNText.startswith("ERROR"):
+                    errors.append(tradCNText)
+                    tradCNText = None
+            except Exception as e:
+                msg = f"OCR sub-process crashed: {e}"
+                tracer.addReport(ASReport("MMPROCESSOR MMPROCESS ERROR", msg))
+                errors.append(f"ERROR: {msg}")
 
-            simCN, eng, summary = MMProcessor.transcriptionProcess(result["transcription"], tracer)
+            # Transcription
+            if tradCNText:
+                try:
+                    simCN, eng, summary = MMProcessor.transcriptionProcess(tradCNText, tracer)
 
-            if isinstance(eng, str) and eng.startswith("ERROR"):
-                tracer.end()
-                ArchSmith.persist()
-                return {
-                    "error": eng,
-                    "image": os.path.basename(image_path),
-                    "traditional_chinese": result["transcription"],
-                    "simplified_chinese": simCN
-                }
+                    if isinstance(simCN, str) and simCN.startswith("ERROR"):
+                        errors.append(simCN)
+                        simCN = None
+                    if isinstance(eng, str) and eng.startswith("ERROR"):
+                        errors.append(eng)
+                        eng = None
+                    if isinstance(summary, str) and summary.startswith("ERROR"):
+                        errors.append(summary)
+                        summary = None
+                except Exception as e:
+                    msg = f"Transcription sub-process crashed: {e}"
+                    tracer.addReport(ASReport("MMPROCESSOR MMPROCESS ERROR", msg))
+                    errors.append(f"ERROR: {msg}")
 
-            labels = MMProcessor.nerProcess(eng, tracer)
+            # NER
+            if summary:
+                try:
+                    ner_output = MMProcessor.nerProcess(summary, tracer)
+                    if isinstance(ner_output, str) and ner_output.startswith("ERROR"):
+                        errors.append(ner_output)
+                    else:
+                        labels = [list(pair) for pair in ner_output]
+                except Exception as e:
+                    msg = f"NER sub-process crashed: {e}"
+                    tracer.addReport(ASReport("MMPROCESSOR MMPROCESS ERROR", msg))
+                    errors.append(f"ERROR: {msg}")
 
-            tracer.end()
-            ArchSmith.persist()
+            # Report if anything failed
+            if errors:
+                tracer.addReport(ASReport(
+                    source="MMPROCESSOR PROCESS ERROR",
+                    message="One or more sub-processes failed.",
+                    extraData={"msgs": errors}
+                ))
 
             return {
                 "image": os.path.basename(image_path),
-                "traditional_chinese": result["transcription"],
-                "correction_applied": result["corrected"],
-                "pre_correction_accuracy": result.get("preCorrectionAccuracy"),
-                "post_correction_accuracy": result.get("postCorrectionAccuracy"),
+                "traditional_chinese": tradCNText,
+                "correction_applied": corrected,
+                "pre_correction_accuracy": pre_acc,
+                "post_correction_accuracy": post_acc,
                 "simplified_chinese": simCN,
                 "english_translation": eng,
                 "summary": summary,
-                "ner_labels": [list(pair) for pair in labels]
+                "ner_labels": labels,
+                "errors": errors if errors else None
             }
 
         except Exception as e:
-            tracer.addReport(ASReport("MMPROCESSOR PIPELINE ERROR", str(e)))
-            tracer.end()
-            ArchSmith.persist()
+            tracer.addReport(ASReport("MMPROCESSOR MMPROCESS ERROR", str(e)))
             return {"error": f"An error occured in mmProcess: {e}"}

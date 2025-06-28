@@ -557,11 +557,11 @@ class CCRPipeline:
         try:
             ccr_model_ctx = ModelStore.getModel("ccr")
             if not ccr_model_ctx or not ccr_model_ctx.model:
-                return "CCR model not loaded"
+                return "ERROR: CCR model not loaded"
 
             ccr_filter_ctx = ModelStore.getModel("ccrCharFilter")
             if not ccr_filter_ctx or not ccr_filter_ctx.model:
-                return "CCR Char Filter model not loaded"
+                return "ERROR: CCR Char Filter model not loaded"
 
             if CCRPipeline.idx2char is None:
                 CCRPipeline.idx2char = CCRPipeline.load_label_mappings()
