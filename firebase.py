@@ -34,10 +34,12 @@ class FireConn:
         if not FireConn.checkPermissions():
             return "ERROR: Firebase connection permissions are not granted."
         if not os.path.exists("serviceAccountKey.json"):
-            return "ERROR: Failed to connect to Firebase. The file serviceAccountKey.json was not found. Please re-read instructions for the Firebase addon."
+            return "ERROR: Failed to connect to Firebase. The file serviceAccountKey.json was not found."
         else:
             if 'RTDB_URL' not in os.environ:
-                return "ERROR: Failed to connect to Firebase. RTDB_URL environment variable not set in .env file. Please re-read instructions for the Firebase addon."
+                return "ERROR: Failed to connect to Firebase. RTDB_URL environment variable not set in .env file."
+            if 'STORAGE_URL' not in os.environ:
+                return "ERROR: Failed to connect to Firebase. STORAGE_URL environment variable not set in .env file."
             try:
                 ## Firebase
                 cred_obj = credentials.Certificate(os.path.join(os.getcwd(), "serviceAccountKey.json"))
@@ -228,9 +230,9 @@ class FireStorage:
     
     Methods:
     - `checkPermissions()`: Returns True if permission is granted, otherwise returns False.
-    - `listFiles(filenamesOnly: bool=False)`: Returns a list of filenames in the Firebase Storage bucket. If `filenamesOnly` is True, returns a list of filenames only. (`List[str]`). If not, returns a `google.api_core.page_iterator.HTTPIterator` of `Blob` objects.
+    - `listFiles(namesOnly: bool=False)`: Returns a list of filenames in the Firebase Storage bucket. If `namesOnly` is True, returns a list of filenames only. (`List[str]`). If not, returns a `google.api_core.page_iterator.HTTPIterator` of `Blob` objects.
     - `clearStorage()`: Deletes all files in the Firebase Storage bucket. Returns True upon successful deletion.
-    - `getFileInfo(filename: str, metadataOnly=True)`: Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead.
+    - `getFileInfo(filename: str, blob: Blob=None, metadataOnly=True)`: Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead. Provide a blob directly to avoid fetching it again from the storage. Returns `None` if the file does not exist, or a string prefixed with 'ERROR: ' if an error occurred in the process.
     - `getFileSignedURL(filename: str, expiration: datetime.timedelta=None, allowCache: bool=True, updateCache: bool=True)`: Returns the signed URL of a file in Firebase Storage. If `allowCache` is True, caches the URL for 1 hour by default. If `updateCache` is True, updates the cache with the new URL.
     - `getFilePublicURL(filename: str)`: Returns the public URL of a file in Firebase Storage.
     - `changeFileACL(filename: str, private: bool=True)`: Changes the ACL of a file in Firebase Storage to private or public. Returns True upon successful change.
@@ -250,10 +252,10 @@ class FireStorage:
         return ('FireStorageEnabled' in os.environ and os.environ['FireStorageEnabled'] == 'True')
     
     @staticmethod
-    def listFiles(filenamesOnly: bool=False) -> List[Blob] | List[str]:
+    def listFiles(namesOnly: bool=False, ignoreFolders: bool=False) -> List[Blob] | List[str]:
         '''Returns a list of filenames in the Firebase Storage bucket.
         
-        If `filenamesOnly` is True, returns a list of filenames only. (`List[str]`)
+        If `namesOnly` is True, returns a list of filenames only. (`List[str]`)
         If not, though the type hint is `List[Blob]`, a `google.api_core.page_iterator.HTTPIterator` of `Blob` objects is returned, which can be iterated over to get the `Blob` objects.
         '''
         if not FireStorage.checkPermissions():
@@ -261,7 +263,11 @@ class FireStorage:
         try:
             bucket = storage.bucket()
             blobs: List[Blob] = bucket.list_blobs()
-            if filenamesOnly:
+            
+            if ignoreFolders:
+                blobs = [blob for blob in blobs if not blob.name.endswith("/")]
+            
+            if namesOnly:
                 return [blob.name for blob in blobs]
             else:
                 return blobs
@@ -283,13 +289,20 @@ class FireStorage:
         return True
     
     @staticmethod
-    def getFileInfo(filename: str, metadataOnly=True) -> dict | Blob:
-        '''Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead.'''
+    def getFileInfo(filename: str, blob: Blob=None, metadataOnly=True) -> dict | Blob | None | str:
+        '''Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead.
+        
+        `None` will be returned if the file does not exist. A string prefixed with 'ERROR: ' will be returned if an error occurred in the process.
+        '''
         if not FireStorage.checkPermissions():
             return "ERROR: FireStorage service operation permission denied."
         try:
-            bucket = storage.bucket()
-            blob = bucket.blob(filename)
+            if blob is None:
+                bucket = storage.bucket()
+                blob = bucket.get_blob(filename)
+                if blob is None:
+                    return None
+            
             if metadataOnly:
                 return {
                     "id": blob.id,
@@ -312,11 +325,12 @@ class FireStorage:
     
     @staticmethod
     def getFileSignedURL(filename: str, expiration: datetime.timedelta=None, allowCache: bool=True, updateCache: bool=True) -> str:
-        if expiration is None:
-            expiration = datetime.timedelta(hours=1)
         '''Returns the signed URL of a file in Firebase Storage.'''
         if not FireStorage.checkPermissions():
             return "ERROR: FireStorage service operation permission denied."
+        
+        if expiration is None:
+            expiration = datetime.timedelta(hours=1)
         
         if FireStorage.signedURLCache.get(filename) != None and allowCache:
             cachedData = FireStorage.signedURLCache[filename]
@@ -345,7 +359,7 @@ class FireStorage:
             
             return url
         except Exception as e:
-            return "ERROR: Error occurred in getting file URL from cloud storage; error: {}".format(e)
+            return "ERROR: Error in generating signed URL for file in cloud storage; error: {}".format(e)
     
     @staticmethod
     def getFilePublicURL(filename: str) -> str:
