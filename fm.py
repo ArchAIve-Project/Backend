@@ -53,6 +53,18 @@ class File:
     def exists(self):
         return FileManager.exists(self)
     
+    def fetchData(self):
+        res = FireStorage.getFileInfo(self.identifierPath())
+        if isinstance(res, str):
+            return "ERROR: Failed to get file information from cloud storage; response: {}".format(res)
+        if res is None:
+            return "ERROR: File does not exist."
+        if not isinstance(res, dict):
+            return "ERROR: Expected type 'dict' in file information retrieval; response: {}".format(res)
+        
+        self.updateData(res)
+        return True
+    
     def getPublicURL(self) -> str:
         exists = self.exists()
         if isinstance(exists, str):
@@ -142,14 +154,12 @@ class FileManager:
     
     @staticmethod
     def exists(file: File):
-        cloudFiles = FireStorage.listFiles(ignoreFolders=True)
-        if isinstance(cloudFiles, str):
-            return "ERROR: Failed to get list files on cloud storage; response: {}".format(cloudFiles)
+        cloudFile = FireStorage.getFileInfo(file.identifierPath())
+        if isinstance(cloudFile, str):
+            return "ERROR: Failed to get file information from cloud storage; response: {}".format(cloudFile)
         
-        cloud = False
+        cloud = cloudFile is not None
         context = False
-        if file.identifierPath() in [b.name for b in cloudFiles]:
-            cloud = True
         
         if not cloud:
             res = FileManager.removeLocally(file)
