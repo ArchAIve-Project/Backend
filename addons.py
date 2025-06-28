@@ -297,7 +297,7 @@ class ModelStore:
                 ModelStore.registerLoadModelCallbacks(**callbackArgs)
             ModelStore.loadModels(*callbackArgs.keys())
         
-        print("MODELSTORE: Setup complete. {} model(s) loaded.".format(len(ModelStore.context)))
+        print("MODELSTORE: Setup complete. {} model(s) available.".format(len(ModelStore.context)))
     
     @staticmethod
     def getModel(name: str) -> ModelContext | None:
