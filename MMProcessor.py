@@ -6,7 +6,7 @@ import os
 
 class MMProcessor:
     '''
-    MMProcessor orchestrates the full multi-modal OCR + NLP pipeline.
+    MMProcessor orchestrates the full OCR + NLP pipeline.
 
     This class provides static methods that:
     - Perform Optical Character Recognition (OCR) on traditional Chinese text.
@@ -57,7 +57,7 @@ class MMProcessor:
 
         except Exception as e:
             msg = f"Exception during CCR process: {e}"
-            tracer.addReport(ASReport("MMPROCESSOR CCRPROCESS EXCEPTION", msg))
+            tracer.addReport(ASReport("MMPROCESSOR CCRPROCESS ERROR", msg))
             return {"transcription": f"ERROR: {msg}"}
 
     @staticmethod
@@ -82,8 +82,15 @@ class MMProcessor:
 
             if isinstance(result, tuple):
                 simplified, english, summary = result
+                if isinstance(simplified, str) and simplified.startswith("ERROR:"):
+                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION SIMPLIFIED ERROR", simplified))
+
                 if isinstance(english, str) and english.startswith("ERROR:"):
-                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION ERROR", english))
+                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION ENGLISH ERROR", english))
+
+                if isinstance(summary, str) and summary.startswith("ERROR:"):
+                    tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION SUMMARY ERROR", summary))
+                    
                 return simplified, english, summary
 
             tracer.addReport(ASReport("MMPROCESSOR TRANSCRIPTION ERROR", "Unexpected result structure"))
