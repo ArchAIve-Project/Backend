@@ -230,9 +230,9 @@ class FireStorage:
     
     Methods:
     - `checkPermissions()`: Returns True if permission is granted, otherwise returns False.
-    - `listFiles(filenamesOnly: bool=False)`: Returns a list of filenames in the Firebase Storage bucket. If `filenamesOnly` is True, returns a list of filenames only. (`List[str]`). If not, returns a `google.api_core.page_iterator.HTTPIterator` of `Blob` objects.
+    - `listFiles(namesOnly: bool=False)`: Returns a list of filenames in the Firebase Storage bucket. If `namesOnly` is True, returns a list of filenames only. (`List[str]`). If not, returns a `google.api_core.page_iterator.HTTPIterator` of `Blob` objects.
     - `clearStorage()`: Deletes all files in the Firebase Storage bucket. Returns True upon successful deletion.
-    - `getFileInfo(filename: str, metadataOnly=True)`: Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead.
+    - `getFileInfo(filename: str, blob: Blob=None, metadataOnly=True)`: Returns a metadata dictionary of a file in Firebase Storage. Set `metadataOnly` to False to obtain the `Blob` object instead. Provide a blob directly to avoid fetching it again from the storage. Returns `None` if the file does not exist, or a string prefixed with 'ERROR: ' if an error occurred in the process.
     - `getFileSignedURL(filename: str, expiration: datetime.timedelta=None, allowCache: bool=True, updateCache: bool=True)`: Returns the signed URL of a file in Firebase Storage. If `allowCache` is True, caches the URL for 1 hour by default. If `updateCache` is True, updates the cache with the new URL.
     - `getFilePublicURL(filename: str)`: Returns the public URL of a file in Firebase Storage.
     - `changeFileACL(filename: str, private: bool=True)`: Changes the ACL of a file in Firebase Storage to private or public. Returns True upon successful change.
@@ -255,7 +255,7 @@ class FireStorage:
     def listFiles(namesOnly: bool=False, ignoreFolders: bool=False) -> List[Blob] | List[str]:
         '''Returns a list of filenames in the Firebase Storage bucket.
         
-        If `filenamesOnly` is True, returns a list of filenames only. (`List[str]`)
+        If `namesOnly` is True, returns a list of filenames only. (`List[str]`)
         If not, though the type hint is `List[Blob]`, a `google.api_core.page_iterator.HTTPIterator` of `Blob` objects is returned, which can be iterated over to get the `Blob` objects.
         '''
         if not FireStorage.checkPermissions():
