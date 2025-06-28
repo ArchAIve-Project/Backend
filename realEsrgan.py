@@ -61,7 +61,7 @@ class RealESRGAN:
                 imagePaths = [
                     os.path.join(inputPath, f)
                     for f in os.listdir(inputPath)
-                    if os.path.isfile(path) and path.lower().endswith(('.jpg', '.png'))
+                        if os.path.isfile(os.path.join(inputPath, f)) and f.lower().endswith(('.jpg', '.png', '.jpeg'))
                 ]
             #file    
             elif os.path.isfile(inputPath):
@@ -96,10 +96,7 @@ class RealESRGAN:
                 message=f"Failed to create output directory: {e}",
                 extraData={"output_path": outputPath, "exception": str(e)}
             ))
-            return {
-                "successful": [],
-                "all_results": [{"error": f"Failed to create output directory: {e}"}]
-            }
+            return "ERROR: Failed to create output directory: {}".format(e)
 
 
         enhancedOutputs = [] # store success only
