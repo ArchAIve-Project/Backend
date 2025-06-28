@@ -48,9 +48,10 @@ class RealESRGAN:
         """
 
         # Check if model exist before image processing
-        upsampler = ModelStore.getModel("realESRGAN").model
-        if upsampler is None:
-            raise Exception("Model not found or not loaded in ModelStore.")
+        upsampler = ModelStore.getModel("realESRGAN")
+        if upsampler is None or upsampler.model is None:
+            return "ERROR: 'realESRGAN' model not found or not loaded in ModelStore."
+        upsampler = upsampler.model
 
 
         # Handle input types like the image classifier 
@@ -148,7 +149,7 @@ if __name__ == "__main__":
 
     tracer = ArchSmith.newTracer("Test run of Real ESRGAN upscaling")
 
-    RealESRGAN().upscaleImage(
+    RealESRGAN.upscaleImage(
         inputPath="Companydata/HF/02 Unidentified Photos (NYP)/41 19900617 Zhu Rongji 上海市市长朱镕基先生莅临本会 (2).jpg",  # folder or file or list
         outputPath="Companydata/Output",
         tracer=tracer
