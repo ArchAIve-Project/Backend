@@ -111,6 +111,15 @@ class File:
         
         return res
     
+    def getBytes(self):
+        blob = FireStorage.getFileInfo(self.identifierPath(), metadataOnly=False)
+        if isinstance(blob, str):
+            return "ERROR: Failed to retrive information from cloud storage; response: {}".format(blob)
+        if blob is None:
+            return "ERROR: File does not exist."
+        
+        return blob.download_as_bytes()
+    
     @staticmethod
     def generateIDPath(store: str, filename: str):
         return os.path.join(store, filename)
@@ -514,3 +523,8 @@ class FileManager:
         FileManager.debugPrint(f"'{file.identifierPath()}' removed locally by offload call.")
         
         return True
+    
+    @staticmethod
+    def getFromContext(store: str, filename: str):
+        idPath = File.generateIDPath(store, filename)
+        return FileManager.context.get(idPath)
