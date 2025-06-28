@@ -138,9 +138,7 @@ class MMProcessor:
             dict: Final pipeline output with all intermediate results and safe fallbacks.
         """
         errors = []
-        tradCNText = simCN = eng = summary = None
-        corrected = pre_acc = post_acc = None
-        labels = None
+        tradCNText = simCN = eng = summary = corrected = pre_acc = post_acc = labels = None
 
         try:
             # OCR
