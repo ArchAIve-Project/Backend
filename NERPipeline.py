@@ -6,7 +6,8 @@ from transformers import (
 from addons import ModelStore, ASTracer, ASReport, ArchSmith
 
 # ======== NER Pipeline ========
-class NERPipeline:
+class NERPipeline:    
+    loaded = False
     LABEL_LIST = [
         'B-ACT', 'B-DATE', 'B-LOC', 'B-MISC', 'B-ORG', 'B-PERSON',
         'I-ACT', 'I-DATE', 'I-LOC', 'I-MISC', 'I-ORG', 'I-PERSON', 'O'
@@ -36,11 +37,48 @@ class NERPipeline:
         state_dict = torch.load(model_path, map_location=torch.device("cpu"))
         model.load_state_dict(state_dict.get("model_state_dict", state_dict))
         model.eval()
+        
+        NERPipeline.loaded = True
 
         return model
 
     @staticmethod
+    def extract_entities(pairs):
+        entities = []
+        current_entity = ""
+        current_type = None
+
+        for word, tag in pairs:
+            if tag == "O":
+                if current_entity:
+                    entities.append((current_entity.strip(), current_type))
+                    current_entity = ""
+                    current_type = None
+            elif tag.startswith("B-"):
+                if current_entity:
+                    entities.append((current_entity.strip(), current_type))
+                current_entity = word
+                current_type = tag[2:]
+            elif tag.startswith("I-"):
+                if current_type == tag[2:]:
+                    current_entity += " " + word
+                else:
+                    # Handle improper I- without B-
+                    if current_entity:
+                        entities.append((current_entity.strip(), current_type))
+                    current_entity = word
+                    current_type = tag[2:]
+
+        if current_entity:
+            entities.append((current_entity.strip(), current_type))
+
+        return entities
+
+    @staticmethod
     def predict(sentence: str, tracer: ASTracer):
+        if not NERPipeline.loaded:
+            return "ERROR: NER pipeline has not been loaded. Call load_model() first."
+
         inputs = NERPipeline.tokenizer(sentence, return_tensors="pt", truncation=True, is_split_into_words=False)
         word_ids = inputs.word_ids(batch_index=0)
 
@@ -75,21 +113,24 @@ class NERPipeline:
         )
         tracer.addReport(report)
 
-        return result
+        # Extract entities from the result
+        entities = NERPipeline.extract_entities(result)
+
+        return entities
 
 if __name__ == "__main__":
     ModelStore.setup(ner=NERPipeline.load_model)
 
-    tracer = ArchSmith.newTracer("NER testing :)")
+    tracer = ArchSmith.newTracer("NER testing :")
 
-    sentence = "Qin Shi Huang was the first emperor of a unified China."
-    predictions = NERPipeline.predict(
+    sentence = "Jun Han was climbing the rock on the The Great Wall Of China"
+    
+    entities = NERPipeline.predict(
         sentence=sentence,
         tracer=tracer
     )
+    
+    print(entities)
 
     tracer.end()
     ArchSmith.persist()
-
-    for word, label in predictions:
-        print(f"{word}: {label}")

@@ -219,9 +219,8 @@ class CCRPipeline:
         # Read the image in color
         img = cv2.imread(image_path, cv2.IMREAD_COLOR)
         if img is None:
-            error_msg = f"Could not read image: {image_path}"
-            tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE ERROR", error_msg))
-            raise FileNotFoundError(error_msg)
+            tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE ERROR", f"Could not read image: {image_path}"))
+            return f"Could not read image: {image_path}"
 
         # Convert the image to grayscale and apply binarization (inverse + Otsu)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -473,7 +472,7 @@ class CCRPipeline:
         """
 
         if (not gtPath) or (not isinstance(gtPath, str)) or (not os.path.exists(gtPath)) or (not gtPath.lower().endswith('.txt')):
-            raise ValueError("Invalid ground truth file provided.")
+            return "Invalid ground truth file provided."
 
         with open(gtPath, 'r', encoding='utf-8') as f:
             gt_text = f.read().strip()
@@ -553,16 +552,16 @@ class CCRPipeline:
         """
         
         if computeAccuracy and not gtPath:
-            raise ValueError("Ground truth file is required for accuracy computation.")
+            return "ERROR: Ground truth file is required for accuracy computation."
 
         try:
             ccr_model_ctx = ModelStore.getModel("ccr")
             if not ccr_model_ctx or not ccr_model_ctx.model:
-                raise ValueError("CCR model not loaded")
+                return "ERROR: CCR model not loaded"
 
             ccr_filter_ctx = ModelStore.getModel("ccrCharFilter")
             if not ccr_filter_ctx or not ccr_filter_ctx.model:
-                raise ValueError("CCR Char Filter model not loaded")
+                return "ERROR: CCR Char Filter model not loaded"
 
             if CCRPipeline.idx2char is None:
                 CCRPipeline.idx2char = CCRPipeline.load_label_mappings()
