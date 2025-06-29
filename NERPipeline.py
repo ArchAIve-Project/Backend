@@ -6,10 +6,8 @@ from transformers import (
 from addons import ModelStore, ASTracer, ASReport, ArchSmith
 
 # ======== NER Pipeline ========
-class NERPipeline:
-    
+class NERPipeline:    
     loaded = False
-
     LABEL_LIST = [
         'B-ACT', 'B-DATE', 'B-LOC', 'B-MISC', 'B-ORG', 'B-PERSON',
         'I-ACT', 'I-DATE', 'I-LOC', 'I-MISC', 'I-ORG', 'I-PERSON', 'O'
@@ -38,8 +36,9 @@ class NERPipeline:
         model = BertForTokenClassification(config)
         state_dict = torch.load(model_path, map_location=torch.device("cpu"))
         model.load_state_dict(state_dict.get("model_state_dict", state_dict))
-        NERPipeline.loaded = True
         model.eval()
+        
+        NERPipeline.loaded = True
 
         return model
 
@@ -79,7 +78,7 @@ class NERPipeline:
     def predict(sentence: str, tracer: ASTracer):
         if not NERPipeline.loaded:
             return "ERROR: NER pipeline has not been loaded. Call load_model() first."
-        
+
         inputs = NERPipeline.tokenizer(sentence, return_tensors="pt", truncation=True, is_split_into_words=False)
         word_ids = inputs.word_ids(batch_index=0)
 
@@ -126,7 +125,7 @@ if __name__ == "__main__":
 
     sentence = "Jun Han was climbing the rock on the The Great Wall Of China"
     
-    _, entities = NERPipeline.predict(
+    entities = NERPipeline.predict(
         sentence=sentence,
         tracer=tracer
     )
