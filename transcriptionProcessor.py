@@ -50,7 +50,7 @@ class TranscriptionProcessor:
         try:
             response = LLMInterface.engage(cont)
             if isinstance(response, str):
-                raise Exception("ERROR: Failed to carry out LLM translation from Traditional Chinese to Simplified Chinese; response: {}".format(response))
+                return "ERROR: Failed to carry out LLM translation from Traditional Chinese to Simplified Chinese; response: {}".format(response)
 
             charCount = len(response.content.strip())
             
@@ -103,7 +103,7 @@ class TranscriptionProcessor:
         try:
             response = LLMInterface.engage(cont)
             if isinstance(response, str):
-                raise Exception("ERROR: Failed to carry out LLM translation from Traditional Chinese to English; response: {}".format(response))
+                return "ERROR: Failed to carry out LLM translation from Traditional Chinese to English; response: {}".format(response)
             
             charCount = len(response.content.strip())
             
@@ -152,7 +152,7 @@ class TranscriptionProcessor:
         try:
             response = LLMInterface.engage(cont)
             if isinstance(response, str):
-                raise Exception("ERROR: Failed to carry out LLM summarization in English; response: {}".format(response))
+                return "ERROR: Failed to carry out LLM summarization in English; response: {}".format(response)
                         
             charCount = len(response.content.strip())
             
