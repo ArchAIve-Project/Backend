@@ -445,7 +445,7 @@ class CCRPipeline:
             response = LLMInterface.engage(cont)
 
             if isinstance(response, str):
-                return "ERROR: Failed to carry out LLM correction; response: {}".format(response)
+                raise Exception("ERROR: Failed to carry out LLM correction; response: {}".format(response))
 
             corrected = response.content.strip()
             textCount = len(corrected)
@@ -552,7 +552,7 @@ class CCRPipeline:
         """
         
         if computeAccuracy and not gtPath:
-            return "Ground truth file is required for accuracy computation."
+            return "ERROR: Ground truth file is required for accuracy computation."
 
         try:
             ccr_model_ctx = ModelStore.getModel("ccr")

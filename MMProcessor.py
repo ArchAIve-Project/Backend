@@ -116,18 +116,17 @@ class MMProcessor:
         """
         try:
             result = NERPipeline.predict(enTranslation, tracer)
-            if isinstance(result, str) and result.startswith("ERROR"):
-                tracer.addReport(ASReport("MMPROCESSOR NERPROCESS ERROR", result))
-                return []
+            if isinstance(result, str):
+                raise Exception(f"Unexpected response: {result}")
             return result
 
         except Exception as e:
             msg = f"Exception during NER prediction: {e}"
             tracer.addReport(ASReport("MMPROCESSOR NERPROCESS ERROR", msg))
-            return []
+            return f"ERROR: {msg}"
 
     @staticmethod
-    def mmProcess(image_path: str, tracer: ASTracer, gt_path: str = None):
+    def mmProcess(image_path: str, tracer: ASTracer, gt_path: str = None, useLLMCorrection: bool = True):
         """
         Executes the complete multi-modal pipeline:
         - Performs OCR and optional correction.
@@ -143,7 +142,7 @@ class MMProcessor:
         try:
             # OCR
             try:
-                ccr_output = MMProcessor.ccrProcess(image_path=image_path, tracer=tracer, gt_path=gt_path)
+                ccr_output = MMProcessor.ccrProcess(image_path=image_path, tracer=tracer, gt_path=gt_path, useLLMCorrection=useLLMCorrection)
                 tradCNText = ccr_output.get("transcription")
                 corrected = ccr_output.get("corrected", False)
                 pre_acc = ccr_output.get("preCorrectionAccuracy")
@@ -212,4 +211,4 @@ class MMProcessor:
 
         except Exception as e:
             tracer.addReport(ASReport("MMPROCESSOR MMPROCESS ERROR", str(e)))
-            return {"error": f"An error occured in mmProcess: {e}"}
+            return {"errors": [f"An error occurred in MMProcess: {e}"]}
