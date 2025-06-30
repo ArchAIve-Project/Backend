@@ -718,7 +718,7 @@ class ArchSmith:
             
             ArchSmith.autoPersistCount = 0
             ArchSmith.persist()
-            Logger.log("ARCHSMITH AUTOPERSIST: Automatic persistence triggered. Post-persist cache size: {}".format(len(ArchSmith.cache)))
+            Logger.log("ARCHSMITH AUTOPERSIST: Automatic persistence triggered. Post-persist cache size: {}".format(len(ArchSmith.cache)), debugPrintExplicitDeny=True)
         
         return True # Threshold not reached, no action taken
     
