@@ -38,13 +38,25 @@ class MetadataGenerator:
             )
         else:
             prediction = predictions[0]
+            imageType: str = prediction[1]
+            if imageType not in ['cc', 'hf']:
+                tracer.addReport(
+                    ASReport(
+                        "METADATAGENERATOR GENERATE ERROR",
+                        "ImageClassifier returned an unsupported image type: {}. Cannot proceed.".format(imageType),
+                        extraData={"response": predictions}
+                    )
+                )
+                return "ERROR: Unsupported image type returned by ImageClassifier."
+            
             tracer.addReport(
                 ASReport(
                     "METADATAGENERATOR GENERATE",
-                    "ImageClassifier returned image type: {}".format(prediction[1])
+                    "ImageClassifier returned image type: {}. Triggering {}.".format(imageType, "MMProcessor" if imageType == 'cc' else "HFProcessor"),
                 )
             )
-            if prediction[1] == 'cc':
+
+            if imageType == 'cc':
                 output = MMProcessor.mmProcess(fullPath, tracer)
                 
                 tracer.addReport(
