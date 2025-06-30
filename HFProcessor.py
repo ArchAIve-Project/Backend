@@ -7,6 +7,7 @@ from facenet_pytorch import MTCNN, InceptionResnetV1
 from matplotlib import pyplot as plt
 from PIL import Image, ImageDraw
 from addons import ArchSmith, ASReport, ASTracer, ModelStore
+from ai import LLMInterface
 from firebase import FireConn
 from fm import FileManager
 # from realEsrgan import RealESRGAN
@@ -237,13 +238,13 @@ class HFProcessor:
     
     # Image Captioning
     @staticmethod
-    def captioningProcess(imagePath: str, tracer: ASTracer) -> str:
+    def captioningProcess(imagePath: str, tracer: ASTracer, useLLMCaptionImprovement: bool=True) -> str:
         """
         Generates a caption for the given image.
         Returns a string caption or an error message.
         """
         try:
-            caption = ImageCaptioning.generateCaption(imagePath, tracer=tracer)
+            caption = ImageCaptioning.generateCaption(imagePath, tracer=tracer, useLLMImprovement=useLLMCaptionImprovement)
             if caption.startswith("ERROR"):
                 raise Exception(caption)
             
@@ -258,10 +259,10 @@ class HFProcessor:
             return f"ERROR: Failed to generate caption for image '{imagePath}': {e}"
     
     @staticmethod
-    def process(imagePath: str, tracer: ASTracer) -> dict | str:
+    def process(imagePath: str, tracer: ASTracer, useLLMCaptionImprovement: bool=True) -> dict | str:
         filenames = FaceRecognition.processImage(imagePath, tracer)
         
-        caption = HFProcessor.captioningProcess(imagePath, tracer)
+        caption = HFProcessor.captioningProcess(imagePath, tracer, useLLMCaptionImprovement)
         if caption.startswith("ERROR"):
             tracer.addReport(
                 ASReport(
@@ -299,6 +300,7 @@ class HFProcessor:
 if __name__ == "__main__":
     FireConn.connect()
     FileManager.setup()
+    LLMInterface.initDefaultClients()
 
     ModelStore.setup(
         imageCaptioner=ImageCaptioning.loadModel
@@ -309,7 +311,7 @@ if __name__ == "__main__":
     input("breakpoint")
     print()
     tracer = ArchSmith.newTracer("HF Processor testing")
-    output = HFProcessor.process("Companydata/44 19930428 Wang Daohan (4).jpg", tracer)
+    output = HFProcessor.process("Companydata/44 19930428 Wang Daohan (4).jpg", tracer, useLLMCaptionImprovement=False)
     tracer.end()
     ArchSmith.persist()
     
