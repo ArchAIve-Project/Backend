@@ -112,7 +112,7 @@ class File:
             str: Identifier path.
         """
         
-        return os.path.join(self.store, self.filename)
+        return f"{self.store}/{self.filename}"
     
     def updateData(self, cloudData: dict) -> bool:
         """
@@ -270,7 +270,7 @@ class File:
             str: `store` and `filename` joined with `os.path.join`.
         """
         
-        return os.path.join(store, filename)
+        return f"{store}/{filename}"
     
     @staticmethod
     def from_dict(data: dict) -> 'File':
