@@ -1,6 +1,7 @@
 import os
 import torch
 from torch import nn
+from torchvision import transforms
 from torch.nn import functional as F
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from matplotlib import pyplot as plt
@@ -137,13 +138,12 @@ class FaceRecognition:
         for faceCrop in faceCrops:
             try:
                 # Save to Local
+                local = False
+                cloud = False
                 try:
                     uniqueId = uuid.uuid4().hex
                     faceCrop.save(f"people/face_{uniqueId}.jpg")
-                    tracer.addReport(ASReport(
-                        source="FACEPROCESSOR PROCESSIMAGE",
-                        message=f"Face {uniqueId} saved locally successfully."
-                    ))
+                    local = True
                 except Exception as e:
                     tracer.addReport(ASReport(
                         source="FACEPROCESSOR PROCESSIMAGE ERROR",
@@ -155,22 +155,24 @@ class FaceRecognition:
                 try:
                     saveResult = FileManager.save("people", f"face_{uniqueId}.jpg")
                     if isinstance(saveResult, str):
-                        tracer.addReport(ASReport(
-                            source="FACEPROCESSOR PROCESSIMAGE ERROR",
-                            message=f"Error saving face {uniqueId} to Firebase: {saveResult}"
-                        ))
-                    else:
-                        tracer.addReport(ASReport(
-                            source="FACEPROCESSOR PROCESSIMAGE",
-                            message=f"Face {uniqueId} saved to Firebase successfully."
-                        ))
+                        raise Exception(f"Unexpected response from FileManager: {saveResult}")
+                    
+                    cloud = True
                 except Exception as e:
                     tracer.addReport(ASReport(
                         source="FACEPROCESSOR PROCESSIMAGE ERROR",
                         message=f"Exception saving face {uniqueId} to Firebase: {e}"
                     ))
+
+                tracer.addReport(
+                    ASReport(
+                        source="FACEPROCESSOR PROCESSIMAGE",
+                        message=f"Face {uniqueId} processing complete. See extra data for save status.",
+                        extraData={"local": local, "cloud": cloud}
+                    )
+                )
                 
-                filenames.append(f"face_{uniqueId}.jpg") 
+                filenames.append(f"face_{uniqueId}.jpg")
             except Exception as e:
                 tracer.addReport(ASReport(
                     source="FACEPROCESSOR PROCESSIMAGE ERROR",
@@ -196,15 +198,14 @@ class FaceRecognition:
         try:
             # Detect face tensors from both images
             face1 = Image.open(imgPath1).convert("RGB")
-            face1 = FaceRecognition.mtcnn(face1)
+            face1 = transforms.Compose([transforms.Resize((160, 160)), transforms.ToTensor()])(face1)
 
-            faces2 = FaceRecognition.detect_face_boxes(imgPath2)
-            if faces2 is None or len(faces2) == 0:
-                return f"ERROR: No face found in second image ({imgPath2})"
+            face2 = Image.open(imgPath2).convert("RGB")
+            face2 = transforms.Compose([transforms.Resize((160, 160)), transforms.ToTensor()])(face2)
 
             # Get the first face embedding from each image
-            emb1 = FaceRecognition.get_face_embedding(faces1[0])
-            emb2 = FaceRecognition.get_face_embedding(faces2[0])
+            emb1 = FaceRecognition.get_face_embedding(face1)
+            emb2 = FaceRecognition.get_face_embedding(face2)
 
             sim = FaceEmbedding.similarity(FaceEmbedding(emb1), FaceEmbedding(emb2))
             result = sim > 0.7
@@ -270,6 +271,17 @@ class HFProcessor:
             )
             caption = None
         
+        tracer.addReport(
+            ASReport(
+                source="HFPROCESSOR PROCESS",
+                message=f"Processed image '{imagePath}'.",
+                extraData={
+                    "faces": len(filenames),
+                    "caption": caption if caption else "No caption generated."
+                }
+            )
+        )
+        
         return {
             "faceFiles": filenames,
             "caption": caption
@@ -298,6 +310,8 @@ if __name__ == "__main__":
     print()
     tracer = ArchSmith.newTracer("HF Processor testing")
     output = HFProcessor.process("Companydata/44 19930428 Wang Daohan (4).jpg", tracer)
+    tracer.end()
+    ArchSmith.persist()
     
     print("Output:", output)
     
