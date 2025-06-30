@@ -546,3 +546,7 @@ class FileOps:
             return True
         except Exception as e:
             return "ERROR: Failed to remove file '{}'; error: {}".format(relativePath, e)
+    
+    @staticmethod
+    def getFileExtension(path: str):
+        return os.path.splitext(path)[1].replace(".", "")
