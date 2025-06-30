@@ -3,14 +3,17 @@ from services import FileOps
 from firebase import FireConn
 from addons import ArchSmith, ASTracer, ASReport, ModelStore, ModelContext
 from ai import LLMInterface
+from fm import FileManager
 from ccrPipeline import CCRPipeline
 from cnnclassifier import ImageClassifier
 from NERPipeline import NERPipeline
+from captioner import ImageCaptioning, Vocabulary
 from MMProcessor import MMProcessor
+from HFProcessor import HFProcessor
 
 class MetadataGenerator:
     @staticmethod
-    def generate(relativeImagePath: str):
+    def generate(relativeImagePath: str, allowLLMForCorrection: bool=True, allowLLMForCaptionImprovement: bool=True) -> dict | str:
         fullPath = os.path.join(os.getcwd(), relativeImagePath)
         
         if not FileOps.exists(fullPath, type="file"):
@@ -57,29 +60,47 @@ class MetadataGenerator:
             )
 
             if imageType == 'cc':
-                output = MMProcessor.mmProcess(fullPath, tracer)
+                output = MMProcessor.mmProcess(fullPath, tracer, useLLMCorrection=allowLLMForCorrection)
                 
                 tracer.addReport(
                     ASReport(
                         "METADATAGENERATOR GENERATE",
-                        "MMProcessor returned data: {}".format(output)
+                        "MMProcessor returned output.",
+                        extraData={"response": output}
                     )
                 )
             else:
-                output = "Human Figure Processor is a WIP."
+                output = HFProcessor.process(fullPath, tracer, useLLMCaptionImprovement=allowLLMForCaptionImprovement)
+                
+                tracer.addReport(
+                    ASReport(
+                        "METADATAGENERATOR GENERATE",
+                        "HFProcessor returned output.",
+                        extraData={"response": output}
+                    )
+                )
         
         tracer.end()
         ArchSmith.persist()
         return output if output else "ERROR: No valid output generated."
 
 if __name__ == "__main__":
+    FireConn.connect()
+    FileManager.setup()
     ModelStore.setup(
         ccr=CCRPipeline.loadChineseClassifier,
         ccrCharFilter=CCRPipeline.loadBinaryClassifier,
         ner=NERPipeline.load_model,
-        cnn=ImageClassifier.load_model
+        cnn=ImageClassifier.load_model,
+        imageCaptioner=ImageCaptioning.loadModel
     )
     LLMInterface.initDefaultClients()
     
-    output = MetadataGenerator.generate("Companydata/-173.jpg")
+    output = MetadataGenerator.generate("Companydata/Sample Image.jpg")
     print(output)
+    
+    while True:
+        try:
+            exec(input(">>> "))
+        except Exception as e:
+            print(f"Error: {e}")

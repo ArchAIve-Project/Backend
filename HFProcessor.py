@@ -42,11 +42,13 @@ class FaceEmbedding:
 class FaceRecognition:
     mtcnn: MTCNN = None
     resnet: InceptionResnetV1 = None
+    initialised = False
 
     @staticmethod
     def setup() -> None:
         FaceRecognition.mtcnn = MTCNN(keep_all=True, device=DEVICE)
         FaceRecognition.resnet = InceptionResnetV1(pretrained='vggface2').eval().to(DEVICE)
+        FaceRecognition.initialised = True
     
     @staticmethod
     def detect_face_boxes(img_path) -> torch.Tensor | None | str:
@@ -260,6 +262,9 @@ class HFProcessor:
     
     @staticmethod
     def process(imagePath: str, tracer: ASTracer, useLLMCaptionImprovement: bool=True) -> dict | str:
+        if not FaceRecognition.initialised:
+            HFProcessor.setup()
+        
         filenames = FaceRecognition.processImage(imagePath, tracer)
         
         caption = HFProcessor.captioningProcess(imagePath, tracer, useLLMCaptionImprovement)
