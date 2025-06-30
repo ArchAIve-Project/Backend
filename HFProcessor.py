@@ -11,6 +11,7 @@ from fm import FileManager, File
 from realEsrgan import RealESRGAN
 from captioner import ImageCaptioning, Vocabulary
 import pickle
+import uuid
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -51,11 +52,20 @@ class FaceRecognition:
     @staticmethod
     def detect_face_boxes(img_path) -> torch.Tensor:
         if not os.path.exists(img_path):
-            print(f"[ERROR] File does not exist: {img_path}")
+            print(f"File does not exist: {img_path}")
             return None
 
-        img = Image.open(img_path)
+        try:
+            img = Image.open(img_path)
+        except Exception as e:
+            print(f"Failed to open image: {e}")
+            return None
+
         faces = FaceRecognition.mtcnn(img)
+        if faces is None or len(faces) == 0:
+            print(f"No faces detected in image: {img_path}")
+            return None
+
         return faces
 
     @staticmethod
@@ -120,28 +130,76 @@ class HFProcessor:
     @staticmethod
     def processImage(img_path: str, tracer: ASTracer):
         faceCrops = FaceRecognition.detect_face_crops(img_path)
-        tracer.addReport(
-            ASReport(
-                source="FACEPROCESSOR PROCESSIMAGE",
-                message="Detected {} faces in image '{}'.".format(len(faceCrops), img_path)
+        if not faceCrops:
+            tracer.addReport(
+                ASReport(
+                    source="FACEPROCESSOR PROCESSIMAGE ERROR",
+                    message=f"No faces detected in image '{img_path}'."
+                )
             )
-        )
+        else:
+            tracer.addReport(
+                ASReport(
+                    source="FACEPROCESSOR PROCESSIMAGE",
+                    message=f"Detected {len(faceCrops)} faces in image '{img_path}'."
+                )
+            )
         
-        face_index = 0
+        try:
+            os.makedirs("people", exist_ok=True)
+        except Exception as e:
+             tracer.addReport(ASReport(
+            source="FACEPROCESSOR 'PEOPLE' DIRECTORY CREATION ERROR",
+            message=f"Failed to create 'people' directory: {e}"
+        ))
+
         for faceCrop in faceCrops:
-            faceCrop.save(f"people/face_{face_index}.jpg")
-            saveResult = FileManager.save("people", f"face_{face_index}.jpg")
-            if isinstance(saveResult, str):
-                tracer.addReport(ASReport("FACEPROCESSOR PROCESSIMAGE ERROR", f"Error saving face {face_index}: {saveResult}"))
-            else:
-                tracer.addReport(ASReport("FACEPROCESSOR PROCESSIMAGE", f"Face {face_index} saved successfully."))
-            face_index += 1
+            try:
+                # Save to Local
+                try:
+                    uniqueId = str(uuid.uuid4())
+                    faceCrop.save(f"people/face_{uniqueId}.jpg")
+                    tracer.addReport(ASReport(
+                        source="FACEPROCESSOR PROCESSIMAGE",
+                        message=f"Face {uniqueId} saved locally successfully."
+                    ))
+                except Exception as e:
+                    tracer.addReport(ASReport(
+                        source="FACEPROCESSOR PROCESSIMAGE ERROR",
+                        message=f"Failed to save face {uniqueId} locally: {e}"
+                    ))
+                    continue
+                
+                # Save to Firebase
+                try:
+                    saveResult = FileManager.save("people", f"face_{uniqueId}.jpg")
+                    if isinstance(saveResult, str):
+                        tracer.addReport(ASReport(
+                            source="FACEPROCESSOR PROCESSIMAGE ERROR",
+                            message=f"Error saving face {uniqueId} to Firebase: {saveResult}"
+                        ))
+                    else:
+                        tracer.addReport(ASReport(
+                            source="FACEPROCESSOR PROCESSIMAGE",
+                            message=f"Face {uniqueId} saved to Firebase successfully."
+                        ))
+                except Exception as e:
+                    tracer.addReport(ASReport(
+                        source="FACEPROCESSOR PROCESSIMAGE ERROR",
+                        message=f"Exception saving face {uniqueId} to Firebase: {e}"
+                    ))
+                    
+            except Exception as e:
+                tracer.addReport(ASReport(
+                source="FACEPROCESSOR PROCESSIMAGE ERROR",
+                message=f"Exception while processing face {uniqueId}: {e}"
+                ))
         
-        print("{} faces detected and saved.".format(face_index))
+        print("{} faces detected and saved.".format(uniqueId))
     
     # Compare with local file
     @staticmethod
-    def compareImages(img_path1: str, img_path2: str, tracer= ASTracer) -> bool | str:
+    def compareImages(imgPath1: str, imgPath2: str, tracer: ASTracer) -> bool | str:
         """
         Compares two face images and checks if they belong to the same person.
 
@@ -154,21 +212,21 @@ class HFProcessor:
         """
         try:
             # Detect face tensors from both images
-            faces1 = FaceRecognition.detect_face_boxes(img_path1)
+            faces1 = FaceRecognition.detect_face_boxes(imgPath1)
             if faces1 is None or len(faces1) == 0:
                 tracer.addReport(
                      ASReport(
                         source="FACEPROCESSOR COMPARE IMAGE 1 ERROR", 
-                        message="ERROR: No face found in first image ({img_path1})"
+                        message="ERROR: No face found in first image ({imgPath1})"
                     )
                 )
 
-            faces2 = FaceRecognition.detect_face_boxes(img_path2)
+            faces2 = FaceRecognition.detect_face_boxes(imgPath2)
             if faces2 is None or len(faces2) == 0:
                 tracer.addReport(
                      ASReport(
                         source="FACEPROCESSOR COMPARE IMAGE 2 ERROR", 
-                        message="ERROR: No face found in second image ({img_path2})"
+                        message="ERROR: No face found in second image ({imgPath2})"
                     )
                 )
 
@@ -181,7 +239,7 @@ class HFProcessor:
 
             tracer.addReport(ASReport(
                 source="FACEPROCESSOR COMPAREIMAGES",
-                message=f"Compared faces from '{img_path1}' and '{img_path2}' — Match: {result}",
+                message=f"Compared faces from '{imgPath1}' and '{imgPath2}' — Match: {result}",
                 extraData={"similarity": f"{sim:.4f}"}
             ))
 
@@ -190,23 +248,40 @@ class HFProcessor:
         except Exception as e:
             tracer.addReport(ASReport(
                 "FACEPROCESSOR COMPAREIMAGES EXCEPTION",
-                "ERROR: Exception occurred while comparing images"))
+                "ERROR: Exception occurred while comparing images"
+            ))
+            return "ERROR: Exception occurred while comparing images; {}".format(e)
 
     # Compare with firebase file
     @staticmethod
-    def compareImagesFirebase(store: str, file1: str, file2: str):
-        
+    def compareImagesFirebase(file1: str, file2: str, store: str = "people"):
+
         f1 = FileManager.prepFile(store, file1)
         f2 = FileManager.prepFile(store, file2)
 
-        if isinstance(f1, str): return f1
-        if isinstance(f2, str): return f2
+        if isinstance(f1, str):
+            tracer.addReport(
+                ASReport(
+                    source="FACEPROCESSOR COMPAREFIREBASE ERROR",
+                    message=f"Failed to prep file1: {f1}"
+                )
+            )
+            return f1
 
-        return HFProcessor.compareImages(f1.path(), f2.path())
+        if isinstance(f2, str):
+            tracer.addReport(
+                ASReport(
+                    source="FACEPROCESSOR COMPAREFIREBASE ERROR",
+                    message=f"Failed to prep file2: {f2}"
+                )
+            )
+            return f2
+
+        return HFProcessor.compareImages(f1.path(), f2.path(), tracer)
     
     # Image Captioning
     @staticmethod
-    def Captioning(image_path: str) -> str:
+    def captioningProcess(imagePath: str, tracer: ASTracer) -> str:
         """
         Generates a caption for the given image.
         Returns a string caption or an error message.
@@ -220,10 +295,14 @@ class HFProcessor:
             with open(ImageCaptioning.VOCAB_PATH, "rb") as f:
                 ImageCaptioning.vocab = pickle.load(f)
 
-        # Optional: create tracer if you want to record reports
-        tracer = ASTracer("Image Captioning")
+        tracer.addReport(
+            ASReport(
+            source="IMAGECAPTIONING CAPTIONINGPROCESS",
+            message=f"Generating caption for image '{imagePath}'"
+            )
+        )
 
-        return ImageCaptioning.generateCaption(image_path, tracer=tracer)
+        return ImageCaptioning.generateCaption(imagePath, tracer=tracer)
 
 if __name__ == "__main__":
     FireConn.connect()
@@ -243,16 +322,17 @@ if __name__ == "__main__":
         )
     )
     
-    inputImage = "Companydata/HF/02 Unidentified Photos (NYP)/51 20001020 Joint Secretary to Governemnt of India.jpg"
+    inputImage = "Companydata/HF/Tay Beng Chuan/2.5.95中国国际商会上海商会代表团.jpg"
 
-    RealESRGAN.upscaleImage(inputImage,"Companydata/Output",tracer=tracer)
+    # RealESRGAN.upscaleImage(inputImage,"Companydata/Output",tracer=tracer)
 
     HFProcessor.processImage(inputImage, tracer)
-    result = HFProcessor.compareImages("people/face_2.jpg", "people/face_3.jpg")
-    result = HFProcessor.compareImagesFirebase("people","face_2.jpg", "face_3.jpg")
+
+    # result = HFProcessor.compareImages("people/face_2.jpg", "people/face_3.jpg") 
+    result = HFProcessor.compareImagesFirebase("face_6f1aa70b-aa58-4a09-b0f9-6527b0684aba.jpg", "face_cd7d61e1-5b6c-416d-912d-510ed9a87d50.jpg")
     print("Face Match Result:", result)
 
-    caption = HFProcessor.Captioning(inputImage)
+    caption = HFProcessor.captioningProcess(inputImage)
     print(f"Caption Result: {caption}")
     
     tracer.end()
