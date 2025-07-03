@@ -3,7 +3,7 @@ from transformers import AutoTokenizer, AutoModelForTokenClassification
 from addons import ModelStore, ASTracer, ASReport, ArchSmith
 
 # ======== NER Pipeline ========
-class NERPipeline:    
+class NERPipeline:
     loaded = False
     MODEL_NAME = "boltuix/EntityBERT"
     id2label = None
@@ -45,12 +45,12 @@ class NERPipeline:
                         entities.append((current_entity.strip(), current_type))
                     current_entity = word
                     current_type = tag[2:]
-        
+
         if current_entity:
             entities.append((current_entity.strip(), current_type))
-        
+
         return entities
-    
+
     @staticmethod
     def get_words_and_labels(inputs, predictions, word_ids, id2label):
         words = []
@@ -64,28 +64,26 @@ class NERPipeline:
 
         for token, pred_label_id, word_id in zip(tokens, predictions, word_ids):
             if word_id is None:
-                continue 
+                continue  # skip special tokens like CLS, SEP
 
             label = id2label[pred_label_id]
 
             if word_id != previous_word_id:
-                # New word
                 if current_word:
                     words.append(current_word)
                     labels.append(current_label)
 
-                if token.startswith("Ġ"):
-                    current_word = token[1:]
-                else:
-                    current_word = token
-
+                # Remove BERT-style subword prefix "##"
+                current_word = token.replace("##", "")
                 current_label = label
                 previous_word_id = word_id
             else:
                 # Continuation of the same word
-                current_word += token
+                if token.startswith("##"):
+                    current_word += token[2:]
+                else:
+                    current_word += token
 
-        # Add last word
         if current_word:
             words.append(current_word)
             labels.append(current_label)
@@ -97,13 +95,13 @@ class NERPipeline:
         if not NERPipeline.loaded:
             return "ERROR: NER pipeline has not been loaded. Call load_model() first."
 
-        inputs = NERPipeline.tokenizer(sentence, return_tensors="pt", truncation=True, is_split_into_words=False)
+        inputs = NERPipeline.tokenizer(sentence, return_tensors="pt", truncation=False, is_split_into_words=False)
         word_ids = inputs.word_ids(batch_index=0)
 
         model_ctx = ModelStore.getModel("ner")
         if model_ctx is None or model_ctx.model is None:
             return "ERROR: NER model not loaded."
-        
+
         model = model_ctx.model
 
         with torch.no_grad():
@@ -111,17 +109,14 @@ class NERPipeline:
 
         predictions = torch.argmax(outputs.logits, dim=2)[0].tolist()
 
-        # Use get_words_and_labels to get aligned words and labels
         word_label_pairs = NERPipeline.get_words_and_labels(inputs, predictions, word_ids, NERPipeline.id2label)
 
-        report = ASReport(
+        tracer.addReport(ASReport(
             source="NERPipeline",
             message=f"Predicted: {len(word_label_pairs)} tokens",
             extraData={"sentence": sentence}
-        )
-        tracer.addReport(report)
+        ))
 
-        # Extract entities from the aligned (word, label) pairs
         entities = NERPipeline.extract_entities(word_label_pairs)
 
         return entities
@@ -136,34 +131,48 @@ if __name__ == "__main__":
 The original regulations of this Chamber of Commerce were
 mailed out on the tenth day of October, designating it as the date for discussion during the winter
 solstice meeting. Because gathering on that day was inconvenient, a new date and venue were
-set.\n\nAt two o'clock in the afternoon on the tenth day of October, the assembly convened to
-deliberate upon the following important matters:\n\n1. The location for holding meetings must be
+set.
+
+At two o'clock in the afternoon on the tenth day of October, the assembly convened to
+deliberate upon the following important matters:
+
+1. The location for holding meetings must be
 officially announced beforehand; the procedures for commercial affairs management must be clearly
-defined.\n2. Issues including commissions at the meeting place and uncollected taxes should be
-publicly displayed and categorized as routine business.\n3. Regarding personnel appointments within
+defined.
+2. Issues including commissions at the meeting place and uncollected taxes should be
+publicly displayed and categorized as routine business.
+3. Regarding personnel appointments within
 the Chamber's council, any changes or adjustments shall be finalized by the twentieth day of next
-year's twelfth lunar month.\n4. Advance voting for elections must be completed ten days prior to the
+year's twelfth lunar month.
+4. Advance voting for elections must be completed ten days prior to the
 annual general meeting, which is scheduled for the designated week containing the tenth day of the
-tenth lunar month, with official notices to be issued accordingly.\n5. Whether candidates are
-qualified for council membership requires deliberation and confirmation by existing members.\n6. A
-revised draft outlining operational rules and regulations needs to be discussed and approved.\n7. On
+tenth lunar month, with official notices to be issued accordingly.
+5. Whether candidates are
+qualified for council membership requires deliberation and confirmation by existing members.
+6. A
+revised draft outlining operational rules and regulations needs to be discussed and approved.
+7. On
 this day, it was resolved that businesses seeking registration but facing practical difficulties
-should formally submit petitions through the Chamber.\n8. Mr. Huang Zhanjie, Lin Huá, and Wang Bing
-jointly submitted proposals regarding registration exemptions and related matters.\n9. Additionally,
+should formally submit petitions through the Chamber.
+8. Mr. Huang Zhanjie, Lin Huá, and Wang Bing
+jointly submitted proposals regarding registration exemptions and related matters.
+9. Additionally,
 it was proposed that public commissions and major shipping fees currently under consideration should
-either be uniformly standardized or temporarily suspended until further study.\n10. Given the
+either be uniformly standardized or temporarily suspended until further study.
+10. Given the
 complexity of these issues, it was agreed that the Standing Committee should conduct thorough
-investigations and prepare concrete proposals for future deliberation.\n11. Furthermore, discussions
+investigations and prepare concrete proposals for future deliberation.
+11. Furthermore, discussions
 addressed whether members of the comprador association and other entities not yet formally
 registered should immediately apply for official recognition according to current bylaws, despite
 existing implementation challenges.
 """
-    
+
     entities = NERPipeline.predict(
         sentence=sentence,
         tracer=tracer
     )
-    
+
     print(entities)
 
     tracer.end()
