@@ -539,14 +539,22 @@ class ASTracer:
         }
     
     def __str__(self):
-        return f"""<ASTracer Instance:
-ID: {self.id}
-Purpose: {self.purpose}
-Created: {self.created}
-Started: {self.started}
-Finished: {self.finished}
-Reports:{("\n---\n- " + ("\n- ".join(str(report) for report in self.reports)) + "\n---") if self.reports else " None"}
-Thread Info: {self.threadInfo} />"""
+        return """<ASTracer Instance:
+ID: {}
+Purpose: {}
+Created: {}
+Started: {}
+Finished: {}
+Reports:{}
+Thread Info: {} />""".format(
+            self.id,
+            self.purpose,
+            self.created,
+            self.started,
+            self.finished,
+            ("\n---\n- " + ("\n- ".join(str(report) for report in self.reports)) + "\n---") if self.reports else " None",
+            self.threadInfo
+        )
     
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'ASTracer':
@@ -718,7 +726,7 @@ class ArchSmith:
             
             ArchSmith.autoPersistCount = 0
             ArchSmith.persist()
-            Logger.log("ARCHSMITH AUTOPERSIST: Automatic persistence triggered. Post-persist cache size: {}".format(len(ArchSmith.cache)))
+            Logger.log("ARCHSMITH AUTOPERSIST: Automatic persistence triggered. Post-persist cache size: {}".format(len(ArchSmith.cache)), debugPrintExplicitDeny=True)
         
         return True # Threshold not reached, no action taken
     
