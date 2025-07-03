@@ -1,7 +1,8 @@
 from flask import Blueprint, send_file, make_response
-from fm import FileManager
+from fm import FileManager, File
 from utils import JSONRes, ResType
 import mimetypes
+from services import Logger
 import os
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
@@ -58,25 +59,25 @@ def getImage(store, filename):
         });
         ```
     """
+    # Extract the file extension and validate against allowed image extensions
+    ext = os.path.splitext(localPath)[1].lower()
+    if ext not in VALID_IMAGE_EXTENSIONS:
+        return JSONRes.new(400, ResType.error, f"Invalid image extension '{ext}'")
     
     FileManager.setup()
     fileObj = FileManager.prepFile(store, filename)
 
     # If retrieval failed, return JSON error response with 404 status
-    if isinstance(fileObj, str) and fileObj.startswith("ERROR"):
-        return JSONRes.new(404, ResType.error, fileObj)
+    if not isinstance(fileObj, File):
+        Logger.log(f"CDN GETIMAGE ERROR: {fileObj}")
+        # Return 404 only if it's the specific "file not found" case
+        if str(fileObj).strip().lower() == "error: file does not exist.":
+            return JSONRes.new(404, ResType.error, "Requested file not found.")
+
+        return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
 
     # Get the local filesystem path of the retrieved file object
     localPath = fileObj.path()
-
-    # Verify that the file actually exists locally; else return 404 error
-    if not os.path.isfile(localPath):
-        return JSONRes.new(404, ResType.error, "File does not exist locally")
-
-    # Extract the file extension and validate against allowed image extensions
-    ext = os.path.splitext(localPath)[1].lower()
-    if ext not in VALID_IMAGE_EXTENSIONS:
-        return JSONRes.new(400, ResType.error, f"Invalid image extension '{ext}'")
 
     # Guess the MIME type based on the file extension; fallback to generic binary
     mime_type = mimetypes.guess_type(localPath)[0] or 'application/octet-stream'
@@ -90,4 +91,5 @@ def getImage(store, filename):
 
         return response
     except Exception as e:
-        return JSONRes.new(500, ResType.error, f"Error sending file: {e}")
+        Logger.log(f"CDN GETIMAGE ERROR: {e}")
+        return JSONRes.new(500, ResType.error, f"Error sending file.")

@@ -110,6 +110,8 @@ class NERPipeline:
         predictions = torch.argmax(outputs.logits, dim=2)[0].tolist()
 
         word_label_pairs = NERPipeline.get_words_and_labels(inputs, predictions, word_ids, NERPipeline.id2label)
+        
+        print(word_label_pairs)
 
         tracer.addReport(ASReport(
             source="NERPipeline",
@@ -131,19 +133,25 @@ if __name__ == "__main__":
 
     tracer = ArchSmith.newTracer("NER testing :")
 
-    sentence = """
-    The original bylaws of this Chamber stipulated October 10th as the date for the winter session, but due to the Empress Dowager's birthday celebration, it was rescheduled with special arrangement.
-    On the tenth day of the eleventh lunar month at two o'clock in the afternoon, a meeting will convene to discuss important matters listed below:
+    # sentence = """
+    # The original bylaws of this Chamber stipulated October 10th as the date for the winter session, but due to the Empress Dowager's birthday celebration, it was rescheduled with special arrangement.
+    # On the tenth day of the eleventh lunar month at two o'clock in the afternoon, a meeting will convene to discuss important matters listed below:
 
-    1. To deliberate on the procedures proposed by the government of Singapore regarding commercial registration.
-    2. To consider whether the public notice delineating the nine-eight commission and large vessel taxes in Singapore should be implemented.
-    3. To elect the members of the Chamber’s committee for next year, with nominations beginning on the tenth day of the first lunar month and concluding with the annual meeting on April 10th.
-    4. To determine if individuals are eligible to serve as committee members.
-    5. To review the administrative charter concerning merchants returning to their hometowns. During the meeting, it was resolved that the commercial registration requirements were inconvenient for merchants and should be addressed through a petition submitted by the Chamber to the British authorities. The draft of the petition was prepared by three gentlemen: Lin Bingxiang, Lin Zhu Hua, and Huang Jiangyong.
+    # 1. To deliberate on the procedures proposed by the government of Singapore regarding commercial registration.
+    # 2. To consider whether the public notice delineating the nine-eight commission and large vessel taxes in Singapore should be implemented.
+    # 3. To elect the members of the Chamber’s committee for next year, with nominations beginning on the tenth day of the first lunar month and concluding with the annual meeting on April 10th.
+    # 4. To determine if individuals are eligible to serve as committee members.
+    # 5. To review the administrative charter concerning merchants returning to their hometowns. During the meeting, it was resolved that the commercial registration requirements were inconvenient for merchants and should be addressed through a petition submitted by the Chamber to the British authorities. The draft of the petition was prepared by three gentlemen: Lin Bingxiang, Lin Zhu Hua, and Huang Jiangyong.
 
-    Additionally, there was discussion on whether the nine-eight commission and large vessel taxes in Singapore should be restructured, given the current situation. It was agreed that further deliberation was necessary and that the matter should be referred back to the organizing committee for further consideration and a subsequent meeting to finalize the decision.
-    Further, the issue of electing honorary members and revising the current bylaws to accommodate these changes was also discussed.
-    """
+    # Additionally, there was discussion on whether the nine-eight commission and large vessel taxes in Singapore should be restructured, given the current situation. It was agreed that further deliberation was necessary and that the matter should be referred back to the organizing committee for further consideration and a subsequent meeting to finalize the decision.
+    # Further, the issue of electing honorary members and revising the current bylaws to accommodate these changes was also discussed.
+    # """
+    
+    sentence = """The Charity Hospital will cover half the costs. A letter will be sent to the Fuzhou Chamber of Commerce to assess the situation regarding Tian'an Temple.
+    
+    The subscription of shares in Chinese banks will proceed, with Kwang Yick and Hai Tung banks given a seven-day extension to respond about their $100,000 subscriptions.
+        
+    Doctors Deng Dingfan and Wu Zhonghua have arrived with letters for the association's introduction."""
 
     entities = NERPipeline.predict(
         sentence=sentence,
