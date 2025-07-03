@@ -69,6 +69,9 @@ if __name__ == "__main__":
     from api import apiBP
     app.register_blueprint(apiBP)
     
+    from cdn import cdnBP
+    app.register_blueprint(cdnBP)
+    
     print()
     print("MAIN BOOT: Pre-processing complete. Starting server...")
     print()
