@@ -9,7 +9,7 @@ cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 VALID_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
 
 @cdnBP.route('/image/<store>/<filename>')
-def get_image(store, filename):
+def getImage(store, filename):
     """
     Serve an image file from the specified storage 'store' and 'filename'.
 
@@ -41,7 +41,7 @@ def get_image(store, filename):
         with responseType set to 'blob'. For example:
 
         ```js
-        server.get('<backendBaseURL>/cdn/image/people/face_693eb27d9de94bc59102ff7756b5073a.jpg', {
+        server.get('<backendBaseURL>/cdn/image/<store>/<imageName>', {
             responseType: 'blob',
         }).then(res => {
             const blob = res.data?.data;
@@ -60,30 +60,30 @@ def get_image(store, filename):
     """
     
     FileManager.setup()
-    file_obj = FileManager.prepFile(store, filename)
+    fileObj = FileManager.prepFile(store, filename)
 
     # If retrieval failed, return JSON error response with 404 status
-    if isinstance(file_obj, str) and file_obj.startswith("ERROR"):
-        return JSONRes.new(404, ResType.error, file_obj)
+    if isinstance(fileObj, str) and fileObj.startswith("ERROR"):
+        return JSONRes.new(404, ResType.error, fileObj)
 
     # Get the local filesystem path of the retrieved file object
-    local_path = file_obj.path()
+    localPath = fileObj.path()
 
     # Verify that the file actually exists locally; else return 404 error
-    if not os.path.isfile(local_path):
+    if not os.path.isfile(localPath):
         return JSONRes.new(404, ResType.error, "File does not exist locally")
 
     # Extract the file extension and validate against allowed image extensions
-    ext = os.path.splitext(local_path)[1].lower()
+    ext = os.path.splitext(localPath)[1].lower()
     if ext not in VALID_IMAGE_EXTENSIONS:
         return JSONRes.new(400, ResType.error, f"Invalid image extension '{ext}'")
 
     # Guess the MIME type based on the file extension; fallback to generic binary
-    mime_type = mimetypes.guess_type(local_path)[0] or 'application/octet-stream'
+    mime_type = mimetypes.guess_type(localPath)[0] or 'application/octet-stream'
 
     try:
         # Prepare a Flask response
-        response = make_response(send_file(local_path, mimetype=mime_type))
+        response = make_response(send_file(localPath, mimetype=mime_type))
 
         # Set headers to disable caching so clients always get the latest file
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
