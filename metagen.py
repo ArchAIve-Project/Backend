@@ -96,7 +96,7 @@ if __name__ == "__main__":
     )
     LLMInterface.initDefaultClients()
     
-    output = MetadataGenerator.generate("Companydata/Sample Image.jpg")
+    output = MetadataGenerator.generate("Companydata/-182.jpg")
     print(output)
     
     while True:
