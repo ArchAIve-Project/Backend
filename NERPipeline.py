@@ -117,7 +117,11 @@ class NERPipeline:
             extraData={"sentence": sentence}
         ))
 
-        entities = NERPipeline.extract_entities(word_label_pairs)
+        # Extract all entities
+        all_entities = NERPipeline.extract_entities(word_label_pairs)
+
+        # Filter out CARDINAL entities
+        entities = [ent for ent in all_entities if ent[1] != "CARDINAL"]
 
         return entities
 
@@ -128,45 +132,18 @@ if __name__ == "__main__":
     tracer = ArchSmith.newTracer("NER testing :")
 
     sentence = """
-The original regulations of this Chamber of Commerce were
-mailed out on the tenth day of October, designating it as the date for discussion during the winter
-solstice meeting. Because gathering on that day was inconvenient, a new date and venue were
-set.
+    The original bylaws of this Chamber stipulated October 10th as the date for the winter session, but due to the Empress Dowager's birthday celebration, it was rescheduled with special arrangement.
+    On the tenth day of the eleventh lunar month at two o'clock in the afternoon, a meeting will convene to discuss important matters listed below:
 
-At two o'clock in the afternoon on the tenth day of October, the assembly convened to
-deliberate upon the following important matters:
+    1. To deliberate on the procedures proposed by the government of Singapore regarding commercial registration.
+    2. To consider whether the public notice delineating the nine-eight commission and large vessel taxes in Singapore should be implemented.
+    3. To elect the members of the Chamber’s committee for next year, with nominations beginning on the tenth day of the first lunar month and concluding with the annual meeting on April 10th.
+    4. To determine if individuals are eligible to serve as committee members.
+    5. To review the administrative charter concerning merchants returning to their hometowns. During the meeting, it was resolved that the commercial registration requirements were inconvenient for merchants and should be addressed through a petition submitted by the Chamber to the British authorities. The draft of the petition was prepared by three gentlemen: Lin Bingxiang, Lin Zhu Hua, and Huang Jiangyong.
 
-1. The location for holding meetings must be
-officially announced beforehand; the procedures for commercial affairs management must be clearly
-defined.
-2. Issues including commissions at the meeting place and uncollected taxes should be
-publicly displayed and categorized as routine business.
-3. Regarding personnel appointments within
-the Chamber's council, any changes or adjustments shall be finalized by the twentieth day of next
-year's twelfth lunar month.
-4. Advance voting for elections must be completed ten days prior to the
-annual general meeting, which is scheduled for the designated week containing the tenth day of the
-tenth lunar month, with official notices to be issued accordingly.
-5. Whether candidates are
-qualified for council membership requires deliberation and confirmation by existing members.
-6. A
-revised draft outlining operational rules and regulations needs to be discussed and approved.
-7. On
-this day, it was resolved that businesses seeking registration but facing practical difficulties
-should formally submit petitions through the Chamber.
-8. Mr. Huang Zhanjie, Lin Huá, and Wang Bing
-jointly submitted proposals regarding registration exemptions and related matters.
-9. Additionally,
-it was proposed that public commissions and major shipping fees currently under consideration should
-either be uniformly standardized or temporarily suspended until further study.
-10. Given the
-complexity of these issues, it was agreed that the Standing Committee should conduct thorough
-investigations and prepare concrete proposals for future deliberation.
-11. Furthermore, discussions
-addressed whether members of the comprador association and other entities not yet formally
-registered should immediately apply for official recognition according to current bylaws, despite
-existing implementation challenges.
-"""
+    Additionally, there was discussion on whether the nine-eight commission and large vessel taxes in Singapore should be restructured, given the current situation. It was agreed that further deliberation was necessary and that the matter should be referred back to the organizing committee for further consideration and a subsequent meeting to finalize the decision.
+    Further, the issue of electing honorary members and revising the current bylaws to accommodate these changes was also discussed.
+    """
 
     entities = NERPipeline.predict(
         sentence=sentence,
