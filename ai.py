@@ -541,16 +541,26 @@ class InteractionContext:
         return params
     
     def __str__(self):        
-        return f"""<InteractionContext Instance:
-Provider: {self.provider}
-Variant: {self.variant}
-History:{("\n---\n- " + ("\n- ".join(str(interaction) for interaction in self.history)) + "\n---") if self.history else " None"}
-Tools:{("\n---\n- " + ("\n- ".join(str(tool) for tool in self.tools)) + "\n---") if self.tools else " None"}
-Temperature: {self.temperature}
-Presence Penalty: {self.presence_penalty}
-Top P: {self.top_p}
-Pre-Tool Invocation Callback: {"Yes" if self.preToolInvocationCallback else "No"}
-Post-Tool Invocation Callback: {"Yes" if self.postToolInvocationCallback else "No"} />"""
+        return """<InteractionContext Instance:
+Provider: {}
+Variant: {}
+History:{}
+Tools:{}
+Temperature: {}
+Presence Penalty: {}
+Top P: {}
+Pre-Tool Invocation Callback: {}
+Post-Tool Invocation Callback: {} />""".format(
+            self.provider,
+            self.variant,
+            ("\n---\n- " + ("\n- ".join(str(interaction) for interaction in self.history)) + "\n---") if self.history else " None",
+            ("\n---\n- " + ("\n- ".join(str(tool) for tool in self.tools)) + "\n---") if self.tools else " None",
+            self.temperature,
+            self.presence_penalty,
+            self.top_p,
+            "Yes" if self.preToolInvocationCallback else "No",
+            "Yes" if self.postToolInvocationCallback else "No"
+        )
 
 class LLMInterface:
     """
