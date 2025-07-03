@@ -295,7 +295,15 @@ class File:
         )
     
     def __str__(self):
-        return f"File(name={self.filename}, store={self.store}, id={self.id if self.id != None else "None"}, contentType={self.contentType if self.contentType != None else "None"}, updated={self.updated if self.updated != None else "None"}, updateMetadata={self.updateMetadata if self.updateMetadata != None else "None"}, forceExistence={self.forceExistence if self.forceExistence != None else "None"})"
+        return "File(name={}, store={}, id={}, contentType={}, updated={}, updateMetadata={}, forceExistence={})".format(
+            self.filename,
+            self.store,
+            self.id if self.id != None else "None",
+            self.contentType if self.contentType != None else "None",
+            self.updated if self.updated != None else "None",
+            self.updateMetadata if self.updateMetadata != None else "None",
+            self.forceExistence if self.forceExistence != None else "None"
+        )
 
 class FileManager:
     """
@@ -693,6 +701,10 @@ class FileManager:
             # Check if file does not exist on cloud. If not, if 'forceExistence', upload, get metadata, and save; else, delete from context and fs.
             if fileIDPath not in cloudFilenames:
                 if FileManager.context[fileIDPath].forceExistence:
+                    if not FileManager.existsInSystem(FileManager.context[fileIDPath]):
+                        FileManager.debugPrint(f"'{fileIDPath}': Force exist flag set but file does not exist locally. Cannot upload.")
+                        continue
+                    
                     # Force exist mandate on file context, upload to Firebase
                     res = FireStorage.uploadFile(
                         localFilePath=FileManager.context[fileIDPath].path(),
@@ -736,7 +748,7 @@ class FileManager:
                         return "ERROR: Failed to re-download out-of-date file '{}'; error: {}".format(res)
 
                     reDownloaded = True
-                    FileManager.debugPrint(f"'{fileIDPath}': Redownloaded file to due to newer version available.")
+                    FileManager.debugPrint(f"'{fileIDPath}': Redownloaded file due to newer version available.")
                 
                 # If the file was redownloaded due to update parity or if the context has an updateMetadata mandate, update the context metadata
                 if FileManager.context[fileIDPath].updateMetadata or reDownloaded:
