@@ -5,9 +5,14 @@ from flask import Flask, request, jsonify, url_for, render_template, redirect
 from flask_cors import CORS
 from emailer import Emailer
 from ai import LLMInterface
-from addons import ModelStore, ModelContext, ArchSmith, ASTracer, ASReport
-from services import Universal, Logger, Encryption, ThreadManager
-from database import DI, Ref, DIError, JSONRes, ResType, FireConn, FireRTDB
+from addons import ModelStore, ArchSmith
+from services import Universal, Logger, ThreadManager
+from database import DI, DIError, JSONRes, ResType, FireConn
+from ccrPipeline import CCRPipeline
+from NERPipeline import NERPipeline
+from cnnclassifier import ImageClassifier
+from captioner import ImageCaptioning, Vocabulary
+from metagen import MetadataGenerator
 
 app = Flask(__name__)
 CORS(app)
@@ -56,7 +61,14 @@ if __name__ == "__main__":
     print("THREADMANAGER: Default background scheduler initialised.")
     
     # Setup ModelStore
-    ModelStore.setup()
+    ModelStore.setup(
+        autoLoad=False,
+        ccr=CCRPipeline.loadChineseClassifier,
+        ccrCharFilter=CCRPipeline.loadBinaryClassifier,
+        ner=NERPipeline.load_model,
+        cnn=ImageClassifier.load_model,
+        imageCaptioner=ImageCaptioning.loadModel
+    )
     
     # Setup LLMInterface
     res = LLMInterface.initDefaultClients()
@@ -74,5 +86,3 @@ if __name__ == "__main__":
     print()
 
     app.run(host='0.0.0.0', port=8000)
-
-    
