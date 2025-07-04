@@ -9,13 +9,13 @@ cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
 VALID_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
 
-@cdnBP.route('/artefact/<filename>')
+@cdnBP.route('/artefacts/<filename>')
 def getArtefactImage(filename):
     """
     Serve an artefact image from the 'artefacts' store.
     """
     FileManager.setup()
-    fileObj = FileManager.prepFile("artefact", filename)
+    fileObj = FileManager.prepFile("artefacts", filename)
 
     if not isinstance(fileObj, File):
         Logger.log(f"CDN GETARTEFACT ERROR: {fileObj}")
