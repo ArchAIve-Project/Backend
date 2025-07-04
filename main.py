@@ -4,6 +4,7 @@ load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
 from flask_cors import CORS
 from emailer import Emailer
+from fm import FileManager, File
 from ai import LLMInterface
 from addons import ModelStore, ModelContext, ArchSmith, ASTracer, ASReport
 from services import Universal, Logger, Encryption, ThreadManager
@@ -46,6 +47,7 @@ if __name__ == "__main__":
     # Logging services
     Logger.setup()
     ArchSmith.setup()
+    FileManager.setup()
     
     # Check Emailer context
     Emailer.checkContext()
