@@ -7,8 +7,6 @@ import os
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
-VALID_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
-
 @cdnBP.route('/artefacts/<filename>')
 def getArtefactImage(filename):
     """
@@ -24,9 +22,6 @@ def getArtefactImage(filename):
         return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
 
     localPath = fileObj.path()
-    ext = os.path.splitext(localPath)[1].lower()
-    if ext not in VALID_IMAGE_EXTENSIONS:
-        return JSONRes.new(400, ResType.error, f"Invalid image extension '{ext}'")
 
     mime_type = mimetypes.guess_type(localPath)[0] or 'application/octet-stream'
     try:
@@ -52,9 +47,6 @@ def getFaceImage(filename):
         return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
 
     localPath = fileObj.path()
-    ext = os.path.splitext(localPath)[1].lower()
-    if ext not in VALID_IMAGE_EXTENSIONS:
-        return JSONRes.new(400, ResType.error, f"Invalid image extension '{ext}'")
 
     mime_type = mimetypes.guess_type(localPath)[0] or 'application/octet-stream'
     try:
@@ -81,9 +73,6 @@ def getAsset(filename):
         return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
 
     localPath = fileObj.path()
-    ext = os.path.splitext(localPath)[1].lower()
-    if ext not in VALID_IMAGE_EXTENSIONS:
-        return JSONRes.new(400, ResType.error, f"Invalid image extension '{ext}'")
 
     mime_type = mimetypes.guess_type(localPath)[0] or 'application/octet-stream'
     try:
