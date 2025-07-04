@@ -81,8 +81,7 @@ class Artefact(DIRepresentable):
                     artefacts[id] = Artefact.rawLoad(data[id])
             
             return list(artefacts.values())
-            
-
+        
     @staticmethod
     def ref(id: str) -> Ref:
         return Ref("artefacts", id)
@@ -124,14 +123,16 @@ class MMData(DIRepresentable):
     def rawLoad(data: dict[str, any], artefactID: str) -> 'MMData':
         requiredParams = ['image', 'tradCN', 'correctionApplies','preCorrectionAcc','simplifiedCNN','english','summary','nerLabels']
         for reqParam in requiredParams:
-            if reqParam not in data:
-                data[reqParam]= None
+            if reqParam == 'public': 
+                data['public'] = False 
+            else:
+                data[reqParam] = None
 
         return MMData(
             artefactID=artefactID,                
             image=data['image'],
             tradCN=data['tradCN'],
-            correctionApplies=data['correctionApplies'],
+            correctionApplies=data['correctionApplies'] == 'True',
             preCorrectionAcc=data['preCorrectionAcc'],                
             postCorrectionAcc=data['postCorrectionAcc'],
             simplifiedCNN=data['simplifiedCNN'],
@@ -156,3 +157,53 @@ class MMData(DIRepresentable):
     def ref(artefactID: str) -> Ref:
         return Ref("artefacts", artefactID, "mmData")
     
+class HFData(DIRepresentable):
+    def __init__(self, artefactID: str, faceFiles: list[str], caption: str):
+        self.artefactID = artefactID
+        self.faceFiles = faceFiles
+        self.caption = caption
+        self.originRef = HFData.ref(artefactID)
+
+    def save(self) -> bool:
+        return DI.save(self.represent(), self.originRef)
+
+    def destroy(self):
+        return DI.save(None, self.originRef)
+
+    def represent(self) -> dict[str, any]:
+        return {
+            "faceFiles": self.faceFiles,
+            "caption": self.caption
+        }
+
+    @staticmethod
+    def rawLoad(data: dict[str, any], artefactID: str) -> 'HFData':
+        requiredParams = ['faceFiles', 'caption']
+        for reqParam in requiredParams:
+            if reqParam not in data:
+                if reqParam == 'faceFiles':
+                    data['faceFiles'] = []
+                else:
+                    data[reqParam] = None
+
+        return HFData(
+            artefactID=artefactID, 
+            faceFiles=data['faceFiles'],
+            caption=data['caption'])
+
+    @staticmethod
+    def load(artefactID: str) -> 'HFData | None':
+        data = DI.load(HFData.ref(artefactID))
+        if data is None:
+            return None
+        if isinstance(data, DIError):
+            raise Exception("HFData LOAD ERROR: DIError occurred: {}".format(data))
+        if not isinstance(data, dict):
+            raise Exception("HFData LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+
+        return HFData.rawLoad(data, artefactID)
+
+    @staticmethod
+    def ref(artefactID: str) -> Ref:
+        return Ref("artefacts", artefactID, "hfData")
+
