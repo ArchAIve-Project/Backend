@@ -1,6 +1,7 @@
 from database import DI, DIRepresentable, DIError
 from utils import Ref
 from services import Universal
+from typing import List
 
 class Artefact(DIRepresentable):
     def __init__(self, name: str, image: str, public: bool = False, created: str=None, id: str = None):
@@ -14,7 +15,22 @@ class Artefact(DIRepresentable):
         self.image = image
         self.public = public
         self.created = created
-        self.originRef = self.ref(self.id)
+        self.originRef = Artefact.ref(self.id)
+    
+    def save(self) -> bool:
+        return DI.save(self.represent(), self.originRef)
+    
+    def destroy(self):
+        return DI.save(None, self.originRef)
+    
+    def represent(self) -> dict:
+        return {
+            'id': self.id,
+            'public': self.public,
+            'name': self.name,
+            'image': self.image,
+            'created': self.created
+        }
 
     @staticmethod
     def rawLoad(data):
@@ -39,11 +55,9 @@ class Artefact(DIRepresentable):
         )
 
     @staticmethod
-    def load(id: str = None) -> 'Artefact' :
-        if id is None:
-            raise Exception("ARTEFACT LOAD ERROR: No ID provided.")
-        if id != None:
-            data = DI.load(Artefact.ref("artefacts", id)) 
+    def load(id: str = None) -> 'List[Artefact] | Artefact | None':
+        if id is not None:
+            data = DI.load(Artefact.ref(id))
             if isinstance(data, DIError):
                 raise Exception("ARTEFACT LOAD ERROR: DIError occurred: {}".format(data))
             if data is None:
@@ -52,28 +66,93 @@ class Artefact(DIRepresentable):
                 raise Exception("ARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
             
             return Artefact.rawLoad(data)
+        else:
+            data = DI.load(Ref("artefacts"))
+            if data == None:
+                return None
+            if isinstance(data, DIError):
+                raise Exception("ARTEFACT LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("ARTEFACT LOAD ERROR: Failed to load dictionary artefacts data; response: {}".format(data))
+
+            artefacts: Dict[str, Artefact] = {}
+            for id in data:
+                if isinstance(data[id], dict):
+                    artefacts[id] = Artefact.rawLoad(data[id])
+            
+            return list(artefacts.values())
+            
 
     @staticmethod
-    def ref(id:str) -> Ref:
-        return Ref("artefact", id)
-    
+    def ref(id: str) -> Ref:
+        return Ref("artefacts", id)
+
+class MMData(DIRepresentable):
+    def __init__(self, artefactID: str, image: str, tradCN: str, preCorrectionAcc: str, postCorrectionAcc : str, simplifiedCNN : str, english : str, summary: str, nerLabels: str, correctionApplies: bool = False):
+        self.artefactID = artefactID
+        self.image = image
+        self.tradCN = tradCN
+        self.correctionApplies = correctionApplies
+        self.preCorrectionAcc = preCorrectionAcc
+        self.postCorrectionAcc = postCorrectionAcc
+        self.simplifiedCNN = simplifiedCNN
+        self.english = english
+        self.summary = summary
+        self.nerLabels = nerLabels
+        self.originRef = MMData.ref(artefactID)
+
     def save(self) -> bool:
         return DI.save(self.represent(), self.originRef)
     
     def destroy(self):
         return DI.save(None, self.originRef)
 
-if __name__ == "__main__":
+    def represent(self) -> dict[str, any]:
+        return {
+            "image": self.image,
+            "tradCN": self.tradCN,
+            "correctionApplies": self.correctionApplies,
+            "preCorrectionAcc": self.preCorrectionAcc,
+            "postCorrectionAcc": self.postCorrectionAcc,
+            "simplifiedCNN": self.simplifiedCNN,
+            "english": self.english,
+            "summary": self.summary,
+            "nerLabels": self.nerLabels
+        }
 
-    DI.setup()
+    @staticmethod
+    def rawLoad(data: dict[str, any], artefactID: str) -> 'MMData':
+        requiredParams = ['image', 'tradCN', 'correctionApplies','preCorrectionAcc','simplifiedCNN','english','summary','nerLabels']
+        for reqParam in requiredParams:
+            if reqParam not in data:
+                data[reqParam]= None
 
-    testArtefact = Artefact(
-        name= 'test Artefact',
-        image= 'test.jpg'  
-    )
+        return MMData(
+            artefactID=artefactID,                
+            image=data['image'],
+            tradCN=data['tradCN'],
+            correctionApplies=data['correctionApplies'],
+            preCorrectionAcc=data['preCorrectionAcc'],                
+            postCorrectionAcc=data['postCorrectionAcc'],
+            simplifiedCNN=data['simplifiedCNN'],
+            english=data['english'],
+            summary=data['summary'],
+            nerLabels=data['nerLabels']
+        )
+        
+    @staticmethod
+    def load(artefactID: str) -> 'MMData | None' :
+        data = DI.load(MMData.ref(artefactID))
+        if data == None:
+            return None
+        if isinstance(data, DIError):
+            raise Exception("MMDATA LOAD ERROR: DIError occurred: {}".format(data))
+        if not isinstance(data, dict):
+            raise Exception("MMDATA LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
-    print("Created Artefact:", testArtefact.represent())
-    
-    testArtefact.save()
-    print("Saved Artefact with ID:", testArtefact.id)
+        return MMData.rawLoad(data, artefactID)
+
+    @staticmethod
+    def ref(artefactID: str) -> Ref:
+        return Ref("artefacts", artefactID, "mmData")
     
