@@ -92,26 +92,14 @@ class Artefact(DIRepresentable):
         return Ref("artefacts", id)
 
 class Metadata(DIRepresentable):
-    def __init__(self, artefactID: str=None, dataObject: 'MMData | HFData'=None, rawDict: dict=None):
+    def __init__(self, artefactID: str=None, dataObject: 'MMData | HFData'=None):
         self.raw: MMData | HFData | None = None
+
         if dataObject is not None:
             if not (isinstance(dataObject, MMData) or isinstance(dataObject, HFData)):
                 raise Exception("METADATA INIT ERROR: Expected data type 'MMData | HFData' for parameter 'dataObject'.")
 
             self.raw = dataObject
-        elif rawDict is not None:
-            if not isinstance(rawDict, dict):
-                raise Exception("METADATA INIT ERROR: Expected data type 'dict' for parameter 'rawDict'.")
-            
-            data: MMData | HFData = None
-            if 'traditional_chinese' in rawDict:
-                data = MMData.rawLoad(rawDict, artefactID)
-            elif 'faceFiles' in rawDict:
-                data = HFData.rawLoad(rawDict, artefactID)
-            else:
-                raise Exception("METADATA INIT ERROR: Unable to determine metadata type from raw dictionary data.")
-            
-            self.raw = data
         
         self.originRef = Metadata.ref(artefactID)
         
@@ -135,7 +123,7 @@ class Metadata(DIRepresentable):
     
     @staticmethod
     def rawLoad(artefactID: str, data: dict) -> 'Metadata':
-        if 'traditional_chinese' in data:
+        if 'tradCN' in data:
             return Metadata(artefactID, MMData.rawLoad(data, artefactID))
         elif 'faceFiles' in data:
             return Metadata(artefactID, HFData.rawLoad(data, artefactID))
@@ -153,6 +141,35 @@ class Metadata(DIRepresentable):
             raise Exception("METADATA LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
         return Metadata.rawLoad(data, artefactID)
+    
+    @staticmethod
+    def fromMetagen(metagenDict: dict) -> 'Metadata':
+        # 1. identify whether it is mm data or hf data
+        # 2. manually feed in the values to either constructor to product a MMData | HFData object
+        # 3. Pass the data object to Metadata constructor
+        # 4. Return the Metadata object
+        if 'traditional_chinese' in metagenDict:
+            mm = MMData(
+                artefactID=metagenDict.get('artefactID'),
+                tradCN=metagenDict.get('traditional_chinese'),
+                preCorrectionAcc=metagenDict.get('pre_correction_accuracy'),
+                postCorrectionAcc=metagenDict.get('post_correction_accuracy'),
+                simplifiedCN=metagenDict.get('simplified_chinese'),
+                english=metagenDict.get('english_translation'),
+                summary=metagenDict.get('summary'),
+                nerLabels=metagenDict.get('ner_labels'),
+                correctionApplied=metagenDict.get('correction_applied', False)
+            )
+            return Metadata(mm.artefactID, mm)
+        elif 'faceFiles' in metagenDict:
+            hf = HFData(
+                artefactID=metagenDict.get('artefactID'),
+                faceFiles=metagenDict.get('faceFiles'),
+                caption=metagenDict.get('caption')
+            )
+            return Metadata(hf.artefactID, hf)
+        else:
+            raise Exception("METADATA FROM METAGEN ERROR: Unable to determine metadata type from metagen dictionary data.")
 
     @staticmethod
     def ref(artefactID: str) -> Ref:
@@ -160,16 +177,16 @@ class Metadata(DIRepresentable):
 
 
 class MMData(DIRepresentable):
-    def __init__(self, artefactID: str, traditional_chinese: str, pre_correction_accuracy: str, post_correction_accuracy: str, simplified_chinese: str, english_translation: str, summary: str, ner_labels: str, correction_applied: bool = False):
+    def __init__(self, artefactID: str, tradCN: str, preCorrectionAcc: str, postCorrectionAcc: str, simplifiedCN: str, english: str, summary: str, nerLabels: str, correctionApplied: bool = False):
         self.artefactID = artefactID
-        self.traditional_chinese = traditional_chinese
-        self.correction_applied = correction_applied
-        self.pre_correction_accuracy = pre_correction_accuracy
-        self.post_correction_accuracy = post_correction_accuracy
-        self.simplified_chinese = simplified_chinese
-        self.english_translation = english_translation
+        self.tradCN = tradCN
+        self.correctionApplied = correctionApplied
+        self.preCorrectionAcc = preCorrectionAcc
+        self.postCorrectionAcc = postCorrectionAcc
+        self.simplifiedCN = simplifiedCN
+        self.english = english
         self.summary = summary
-        self.ner_labels = ner_labels
+        self.nerLabels = nerLabels
         self.originRef = MMData.ref(artefactID)
 
     def save(self) -> bool:
@@ -180,39 +197,39 @@ class MMData(DIRepresentable):
 
     def represent(self) -> dict[str, any]:
         return {
-            "traditional_chinese": self.traditional_chinese,
-            "correction_applied": self.correction_applied,
-            "pre_correction_accuracy": self.pre_correction_accuracy,
-            "post_correction_accuracy": self.post_correction_accuracy,
-            "simplified_chinese": self.simplified_chinese,
-            "english_translation": self.english_translation,
+            "tradCN": self.tradCN,
+            "correctionApplied": self.correctionApplied,
+            "preCorrectionAcc": self.preCorrectionAcc,
+            "postCorrectionAcc": self.postCorrectionAcc,
+            "simplifiedCN": self.simplifiedCN,
+            "english": self.english,
             "summary": self.summary,
-            "ner_labels": self.ner_labels
+            "nerLabels": self.nerLabels
         }
 
     @staticmethod
     def rawLoad(data: dict[str, any], artefactID: str) -> 'MMData':
-        requiredParams = ['traditional_chinese', 'correction_applied','pre_correction_accuracy','simplified_chinese','english_translation','summary','ner_labels']
+        requiredParams = ['tradCN', 'correctionApplied','preCorrectionAcc','simplifiedCN','english','summary','nerLabels']
         for reqParam in requiredParams:
             if reqParam not in data:
-                if reqParam == 'correction_applied':
-                    data['correction_applied'] = False
+                if reqParam == 'correctionApplied':
+                    data['correctionApplied'] = False
                 else:
                     data[reqParam] = None
 
-        if not isinstance(data['correction_applied'], bool):
-            data['correction_applied'] = False
+        if not isinstance(data['correctionApplied'], bool):
+            data['correctionApplied'] = False
 
         return MMData(
             artefactID=artefactID,
-            traditional_chinese=data['traditional_chinese'],
-            correction_applied=data['correction_applied'],
-            pre_correction_accuracy=data['pre_correction_accuracy'],
-            post_correction_accuracy=data['post_correction_accuracy'],
-            simplified_chinese=data['simplified_chinese'],
-            english_translation=data['english_translation'],
+            tradCN=data['tradCN'],
+            correctionApplied=data['correctionApplied'],
+            preCorrectionAcc=data['preCorrectionAcc'],
+            postCorrectionAcc=data['postCorrectionAcc'],
+            simplifiedCN=data['simplifiedCN'],
+            english=data['english'],
             summary=data['summary'],
-            ner_labels=data['ner_labels']
+            nerLabels=data['nerLabels']
         )
         
     @staticmethod
