@@ -111,8 +111,6 @@ class NERPipeline:
 
         word_label_pairs = NERPipeline.get_words_and_labels(inputs, predictions, word_ids, NERPipeline.id2label)
         
-        print(word_label_pairs)
-
         tracer.addReport(ASReport(
             source="NERPipeline",
             message=f"Predicted: {len(word_label_pairs)} tokens",
