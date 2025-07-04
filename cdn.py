@@ -3,7 +3,6 @@ from fm import FileManager, File
 from utils import JSONRes, ResType
 import mimetypes
 from services import Logger
-import os
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
