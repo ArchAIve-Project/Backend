@@ -93,3 +93,92 @@ def getImage(store, filename):
     except Exception as e:
         Logger.log(f"CDN GETIMAGE ERROR: {e}")
         return JSONRes.new(500, ResType.error, f"Error sending file.")
+
+@cdnBP.route('/artefact/<filename>')
+def getArtefactImage(filename):
+    """
+    Serve an artefact image from the 'artefacts' store.
+    """
+    FileManager.setup()
+    fileObj = FileManager.prepFile("artefacts", filename)
+
+    if not isinstance(fileObj, File):
+        Logger.log(f"CDN GETARTEFACT ERROR: {fileObj}")
+        if str(fileObj).strip().lower() == "error: file does not exist.":
+            return JSONRes.new(404, ResType.error, "Requested file not found.")
+        return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
+
+    localPath = fileObj.path()
+    ext = os.path.splitext(localPath)[1].lower()
+    if ext not in VALID_IMAGE_EXTENSIONS:
+        return JSONRes.new(400, ResType.error, f"Invalid image extension '{ext}'")
+
+    mime_type = mimetypes.guess_type(localPath)[0] or 'application/octet-stream'
+    try:
+        response = make_response(send_file(localPath, mimetype=mime_type))
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
+    except Exception as e:
+        Logger.log(f"CDN GETARTEFACT ERROR: {e}")
+        return JSONRes.new(500, ResType.error, "Error sending file.")
+
+@cdnBP.route('/face/<filename>')
+def getFaceImage(filename):
+    """
+    Serve a face image from the 'people' store.
+    """
+    FileManager.setup()
+    fileObj = FileManager.prepFile("people", filename)
+
+    if not isinstance(fileObj, File):
+        Logger.log(f"CDN GETFACE ERROR: {fileObj}")
+        if str(fileObj).strip().lower() == "error: file does not exist.":
+            return JSONRes.new(404, ResType.error, "Requested file not found.")
+        return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
+
+    localPath = fileObj.path()
+    ext = os.path.splitext(localPath)[1].lower()
+    if ext not in VALID_IMAGE_EXTENSIONS:
+        return JSONRes.new(400, ResType.error, f"Invalid image extension '{ext}'")
+
+    mime_type = mimetypes.guess_type(localPath)[0] or 'application/octet-stream'
+    try:
+        response = make_response(send_file(localPath, mimetype=mime_type))
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
+    except Exception as e:
+        Logger.log(f"CDN GETFACE ERROR: {e}")
+        return JSONRes.new(500, ResType.error, "Error sending file.")
+
+@cdnBP.route('/asset/<store>/<filename>')
+def getAsset(store, filename):
+    """
+    Serve a generic image asset from a whitelisted store.
+    """
+    FileManager.setup()
+    allowedStores = {"artefacts", "people", "public"}
+
+    if store not in allowedStores:
+        return JSONRes.new(403, ResType.error, "Access to this store is forbidden.")
+
+    fileObj = FileManager.prepFile(store, filename)
+
+    if not isinstance(fileObj, File):
+        Logger.log(f"CDN GETASSET ERROR: {fileObj}")
+        if str(fileObj).strip().lower() == "error: file does not exist.":
+            return JSONRes.new(404, ResType.error, "Requested file not found.")
+        return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
+
+    localPath = fileObj.path()
+    ext = os.path.splitext(localPath)[1].lower()
+    if ext not in VALID_IMAGE_EXTENSIONS:
+        return JSONRes.new(400, ResType.error, f"Invalid image extension '{ext}'")
+
+    mime_type = mimetypes.guess_type(localPath)[0] or 'application/octet-stream'
+    try:
+        response = make_response(send_file(localPath, mimetype=mime_type))
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
+    except Exception as e:
+        Logger.log(f"CDN GETASSET ERROR: {e}")
+        return JSONRes.new(500, ResType.error, "Error sending file.")
