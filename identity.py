@@ -42,3 +42,14 @@ def login():
     session['superuser'] = user.superuser
     
     return JSONRes.new(200, "Login successful.")
+
+@identityBP.route('/session', methods=['GET'])
+def getSession():
+    return JSONRes.new(
+        code=200,
+        msg="Session parameters retrieved.",
+        accID=session.get('accID', None),
+        username=session.get('username', None),
+        sessionStart=session.get('sessionStart', None),
+        superuser=session.get('superuser', False)
+    )
