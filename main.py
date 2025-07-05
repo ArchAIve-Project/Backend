@@ -17,6 +17,8 @@ from metagen import MetadataGenerator
 app = Flask(__name__)
 CORS(app)
 
+app.secret_key = os.environ['SECRET_KEY']
+
 @app.route('/')
 def home():
     return "Welcome to ArchAIve!"
@@ -80,6 +82,9 @@ if __name__ == "__main__":
     # Import and register API blueprints
     from api import apiBP
     app.register_blueprint(apiBP)
+    
+    from identity import identityBP
+    app.register_blueprint(identityBP)
     
     print()
     print("MAIN BOOT: Pre-processing complete. Starting server...")
