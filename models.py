@@ -10,7 +10,7 @@ class Artefact(DIRepresentable):
         if created is None:
             created = Universal.utcNowString()
         if isinstance(metadata, dict):
-            metadata = Metadata.rawLoad(id, metadata)
+            metadata = Metadata.fromMetagen(id, metadata)
         if not isinstance(metadata, Metadata):
             metadata = Metadata(artefactID=id)
 
@@ -140,17 +140,17 @@ class Metadata(DIRepresentable):
         if not isinstance(data, dict):
             raise Exception("METADATA LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
-        return Metadata.rawLoad(data, artefactID)
-    
+        return Metadata.rawLoad(artefactID, data)
+
     @staticmethod
-    def fromMetagen(metagenDict: dict) -> 'Metadata':
+    def fromMetagen(artefactID: str, metagenDict: dict) -> 'Metadata':
         # 1. identify whether it is mm data or hf data
         # 2. manually feed in the values to either constructor to product a MMData | HFData object
         # 3. Pass the data object to Metadata constructor
         # 4. Return the Metadata object
         if 'traditional_chinese' in metagenDict:
             mm = MMData(
-                artefactID=metagenDict.get('artefactID'),
+                artefactID=artefactID,
                 tradCN=metagenDict.get('traditional_chinese'),
                 preCorrectionAcc=metagenDict.get('pre_correction_accuracy'),
                 postCorrectionAcc=metagenDict.get('post_correction_accuracy'),
@@ -158,18 +158,18 @@ class Metadata(DIRepresentable):
                 english=metagenDict.get('english_translation'),
                 summary=metagenDict.get('summary'),
                 nerLabels=metagenDict.get('ner_labels'),
-                correctionApplied=metagenDict.get('correction_applied', False)
+                corrected=metagenDict.get('correction_applied', False)
             )
-            return Metadata(mm.artefactID, mm)
+            return Metadata(artefactID, mm)
         elif 'faceFiles' in metagenDict:
             hf = HFData(
-                artefactID=metagenDict.get('artefactID'),
+                artefactID=artefactID,
                 faceFiles=metagenDict.get('faceFiles'),
                 caption=metagenDict.get('caption')
             )
-            return Metadata(hf.artefactID, hf)
+            return Metadata(artefactID, hf)
         else:
-            raise Exception("METADATA FROM METAGEN ERROR: Unable to determine metadata type from metagen dictionary data.")
+            raise Exception("METADATA FROMMETAGEN ERROR: Unable to determine metadata type from metagen dictionary data.")
 
     @staticmethod
     def ref(artefactID: str) -> Ref:
@@ -177,10 +177,10 @@ class Metadata(DIRepresentable):
 
 
 class MMData(DIRepresentable):
-    def __init__(self, artefactID: str, tradCN: str, preCorrectionAcc: str, postCorrectionAcc: str, simplifiedCN: str, english: str, summary: str, nerLabels: str, correctionApplied: bool = False):
+    def __init__(self, artefactID: str, tradCN: str, preCorrectionAcc: str, postCorrectionAcc: str, simplifiedCN: str, english: str, summary: str, nerLabels: str, corrected: bool = False):
         self.artefactID = artefactID
         self.tradCN = tradCN
-        self.correctionApplied = correctionApplied
+        self.corrected = corrected
         self.preCorrectionAcc = preCorrectionAcc
         self.postCorrectionAcc = postCorrectionAcc
         self.simplifiedCN = simplifiedCN
@@ -198,7 +198,7 @@ class MMData(DIRepresentable):
     def represent(self) -> dict[str, any]:
         return {
             "tradCN": self.tradCN,
-            "correctionApplied": self.correctionApplied,
+            "corrected": self.corrected,
             "preCorrectionAcc": self.preCorrectionAcc,
             "postCorrectionAcc": self.postCorrectionAcc,
             "simplifiedCN": self.simplifiedCN,
@@ -209,21 +209,21 @@ class MMData(DIRepresentable):
 
     @staticmethod
     def rawLoad(data: dict[str, any], artefactID: str) -> 'MMData':
-        requiredParams = ['tradCN', 'correctionApplied','preCorrectionAcc','simplifiedCN','english','summary','nerLabels']
+        requiredParams = ['tradCN', 'corrected','preCorrectionAcc','simplifiedCN','english','summary','nerLabels']
         for reqParam in requiredParams:
             if reqParam not in data:
-                if reqParam == 'correctionApplied':
-                    data['correctionApplied'] = False
+                if reqParam == 'corrected':
+                    data['corrected'] = False
                 else:
                     data[reqParam] = None
 
-        if not isinstance(data['correctionApplied'], bool):
-            data['correctionApplied'] = False
+        if not isinstance(data['corrected'], bool):
+            data['corrected'] = False
 
         return MMData(
             artefactID=artefactID,
             tradCN=data['tradCN'],
-            correctionApplied=data['correctionApplied'],
+            corrected=data['corrected'],
             preCorrectionAcc=data['preCorrectionAcc'],
             postCorrectionAcc=data['postCorrectionAcc'],
             simplifiedCN=data['simplifiedCN'],
@@ -286,9 +286,9 @@ class HFData(DIRepresentable):
         if data is None:
             return None
         if isinstance(data, DIError):
-            raise Exception("HFData LOAD ERROR: DIError occurred: {}".format(data))
+            raise Exception("HFDATA LOAD ERROR: DIError occurred: {}".format(data))
         if not isinstance(data, dict):
-            raise Exception("HFData LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+            raise Exception("HFDATA LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
         return HFData.rawLoad(data, artefactID)
 
@@ -298,14 +298,14 @@ class HFData(DIRepresentable):
 
 if __name__ == "__main__":
     data = {
-        "tradCN": "傳統中文",
-        "correctionApplied": True,
-        "preCorrectionAcc": "Pre-correction accuracy",
-        "postCorrectionAcc": "Post-correction accuracy",
-        "simplifiedCN": "简体中文",
-        "english": "English translation",
+        "traditional_chinese": "傳統中文",
+        "correction_applied": True,
+        "pre_correction_accuracy": "Pre-correction accuracy",
+        "post_correction_accuracy": "Post-correction accuracy",
+        "simplified_chinese": "简体中文",
+        "english_translation": "English translation",
         "summary": "Summary of the artefact",
-        "nerLabels": "NER labels for the artefact"
+        "ner_labels": "NER labels for the artefact"
     }
 
     DI.setup()
