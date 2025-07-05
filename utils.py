@@ -72,5 +72,9 @@ class JSONRes:
         return JSONRes.new(401, msg, ResType.ERROR, **kwargs)
     
     @staticmethod
+    def invalidSession(msg: str="Invalid session.", **kwargs) -> tuple:
+        return JSONRes.new(401, msg, ResType.ERROR, **kwargs)
+    
+    @staticmethod
     def ambiguousError(msg: str="Failed to process request. Please try again.", **kwargs) -> tuple:
         return JSONRes.new(500, msg, ResType.ERROR, **kwargs)
