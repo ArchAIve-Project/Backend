@@ -32,9 +32,17 @@ class User(DIRepresentable):
             "created": self.created
         }
     
-    def save(self):
-        convertedData = self.represent()
+    def save(self, checkSuperuserIntegrity: bool=True):
+        if self.superuser == True and checkSuperuserIntegrity:
+            allUsers = User.load()
+            if not isinstance(allUsers, list):
+                raise Exception("USER SAVE ERROR: Unexpected User load response format; response: {}".format(allUsers))
+            
+            for user in allUsers:
+                if user.id != self.id and user.superuser == True:
+                    raise Exception("USER SAVE ERROR: Cannot save superuser user when another superuser already exists.")
         
+        convertedData = self.represent()
         return DI.save(convertedData, self.originRef)
     
     @staticmethod
