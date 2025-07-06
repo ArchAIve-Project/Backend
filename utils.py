@@ -36,19 +36,20 @@ class ResType(str, Enum):
     def guess(code: int) -> 'ResType':
         if code >= 200 and code < 300:
             return ResType.SUCCESS
-        elif code >= 400:
-            return ResType.ERROR
         else:
             return ResType.ERROR
 
 class JSONRes:
     @staticmethod
-    def new(code: int, msg: str, msgType: ResType=None, serialise: bool=True, serialiser: Any | None=None, **kwargs: Any) -> tuple:
-        if msgType is None or not isinstance(msgType, ResType):
+    def new(code: int, msg: str, msgType: ResType | str=None, serialise: bool=True, serialiser: Any | None=None, **kwargs: Any) -> tuple:
+        if msgType is None or (not isinstance(msgType, ResType) and not isinstance(msgType, str)):
             msgType = ResType.guess(code)
         
+        if isinstance(msgType, ResType):
+            msgType = msgType.value
+        
         payload = {
-            "type": msgType.value,
+            "type": msgType,
             "message": msg
         }
         
