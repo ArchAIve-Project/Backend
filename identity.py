@@ -56,7 +56,7 @@ def logout(user: User):
     
     session.clear()
     
-    return "SUCCESS: Logged out successfully.", 200
+    return JSONRes.new(200, "Logged out successfully.")
 
 @identityBP.route('/session', methods=['GET'])
 @checkSession(strict=True)

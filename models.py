@@ -14,7 +14,7 @@ class User(DIRepresentable):
         authToken (str, optional): The auth token of the user. Defaults to None.
         superuser (bool, optional): Whether the user is a superuser. Defaults to False
         lastLogin (str, optional): The last login timestamp of the user. Defaults to None.
-        created (str, optional): The creation timestamp of the user. Defaults to None. If
+        created (str, optional): The creation timestamp of the user. Defaults to None.
     
     Sample usage:
     ```python
