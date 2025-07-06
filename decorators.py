@@ -89,7 +89,7 @@ def checkAPIKey(func):
     @functools.wraps(func)
     @debug
     def wrapper_checkAPIKey(*args, **kwargs):
-        if ("APIKey" in os.environ) and (("APIKey" not in request.headers) or (request.headers["APIKey"] != os.environ.get("APIKey", None))):
+        if ("API_KEY" in os.environ) and (("API_KEY" not in request.headers) or (request.headers["API_KEY"] != os.environ.get("API_KEY", None))):
             return JSONRes.unauthorised()
         else:
             return func(*args, **kwargs)
