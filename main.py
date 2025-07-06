@@ -4,6 +4,7 @@ load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
 from flask_cors import CORS
 from emailer import Emailer
+from fm import FileManager, File
 from ai import LLMInterface
 from addons import ModelStore, ArchSmith
 from services import Universal, Logger, ThreadManager, Encryption
@@ -99,6 +100,9 @@ if __name__ == "__main__":
     
     from identity import identityBP
     app.register_blueprint(identityBP)
+    
+    from cdn import cdnBP
+    app.register_blueprint(cdnBP)
     
     # Debug execution
     if os.environ.get("DEBUG_MODE", "False") == "True":
