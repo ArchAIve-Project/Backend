@@ -311,9 +311,9 @@ class Universal:
         if customLength == None:
             return uuid.uuid4().hex
         else:
-            out = None
+            source = list("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            out = ''.join(random.choices(source, k=customLength))
             while out in notIn:
-                source = list("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
                 out = ''.join(random.choices(source, k=customLength))
             return out
     

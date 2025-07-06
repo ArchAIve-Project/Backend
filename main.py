@@ -4,13 +4,23 @@ load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
 from flask_cors import CORS
 from emailer import Emailer
+from fm import FileManager, File
 from ai import LLMInterface
-from addons import ModelStore, ModelContext, ArchSmith, ASTracer, ASReport
-from services import Universal, Logger, Encryption, ThreadManager
-from database import DI, Ref, DIError, JSONRes, ResType, FireConn, FireRTDB
+from addons import ModelStore, ArchSmith
+from services import Universal, Logger, ThreadManager, Encryption
+from database import DI, DIError, JSONRes, ResType, FireConn
+from fm import FileManager
+from ccrPipeline import CCRPipeline
+from NERPipeline import NERPipeline
+from cnnclassifier import ImageClassifier
+from captioner import ImageCaptioning, Vocabulary
+from metagen import MetadataGenerator
+from models import User
 
 app = Flask(__name__)
 CORS(app)
+
+app.secret_key = os.environ['SECRET_KEY']
 
 @app.route('/')
 def home():
@@ -43,6 +53,18 @@ if __name__ == "__main__":
         print(f"MAIN BOOT: Error during DI setup: {e}")
         sys.exit(1)
     
+    # Setup FileManager
+    if FireConn.connected:
+        try:
+            res = FileManager.setup()
+            if res != True:
+                raise Exception(res)
+        except Exception as e:
+            print(f"MAIN BOOT: Error during FileManager setup: {e}")
+            sys.exit(1)
+    else:
+        print("MAIN BOOT WARNING: FireConn is not enabled; FileManager will not be available.")
+    
     # Logging services
     Logger.setup()
     ArchSmith.setup()
@@ -56,7 +78,14 @@ if __name__ == "__main__":
     print("THREADMANAGER: Default background scheduler initialised.")
     
     # Setup ModelStore
-    ModelStore.setup()
+    ModelStore.setup(
+        autoLoad=False,
+        ccr=CCRPipeline.loadChineseClassifier,
+        ccrCharFilter=CCRPipeline.loadBinaryClassifier,
+        ner=NERPipeline.load_model,
+        cnn=ImageClassifier.load_model,
+        imageCaptioner=ImageCaptioning.loadModel
+    )
     
     # Setup LLMInterface
     res = LLMInterface.initDefaultClients()
@@ -69,10 +98,23 @@ if __name__ == "__main__":
     from api import apiBP
     app.register_blueprint(apiBP)
     
+    from identity import identityBP
+    app.register_blueprint(identityBP)
+    
+    from cdn import cdnBP
+    app.register_blueprint(cdnBP)
+    
+    # Debug execution
+    if os.environ.get("DEBUG_MODE", "False") == "True":
+        superuser = User.getSuperuser()
+        if superuser == None:
+            pwd = "123456"
+            debugSuperuser = User("johndoe", "john@example.com", Encryption.encodeToSHA256(pwd), superuser=True)
+            debugSuperuser.save()
+            print("MAIN BOOT DEBUG: Superuser created with username '{}' and password '{}'.".format(debugSuperuser.username, pwd))
+
     print()
     print("MAIN BOOT: Pre-processing complete. Starting server...")
     print()
 
     app.run(host='0.0.0.0', port=8000)
-
-    
