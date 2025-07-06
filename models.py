@@ -162,7 +162,7 @@ class User(DIRepresentable):
         else:
             data = DI.load(Ref("users"))
             if data == None:
-                return None
+                return []
             if isinstance(data, DIError):
                 raise Exception("USER LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
@@ -200,8 +200,6 @@ class User(DIRepresentable):
         """
         
         allUsers = User.load()
-        if allUsers is None:
-            return None
         if not isinstance(allUsers, list):
             raise Exception("USER GETSUPERUSER ERROR: Unexpected User load response format; response: {}".format(allUsers))
         
