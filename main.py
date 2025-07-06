@@ -6,7 +6,7 @@ from flask_cors import CORS
 from emailer import Emailer
 from ai import LLMInterface
 from addons import ModelStore, ArchSmith
-from services import Universal, Logger, ThreadManager
+from services import Universal, Logger, ThreadManager, Encryption
 from database import DI, DIError, JSONRes, ResType, FireConn
 from fm import FileManager
 from ccrPipeline import CCRPipeline
@@ -14,6 +14,7 @@ from NERPipeline import NERPipeline
 from cnnclassifier import ImageClassifier
 from captioner import ImageCaptioning, Vocabulary
 from metagen import MetadataGenerator
+from models import User
 
 app = Flask(__name__)
 CORS(app)
@@ -99,6 +100,15 @@ if __name__ == "__main__":
     from identity import identityBP
     app.register_blueprint(identityBP)
     
+    # Debug execution
+    if os.environ.get("DEBUG_MODE", "False") == "True":
+        superuser = User.getSuperuser()
+        if superuser == None:
+            pwd = "123456"
+            debugSuperuser = User("johndoe", "john@example.com", Encryption.encodeToSHA256(pwd))
+            debugSuperuser.save()
+            print("MAIN BOOT DEBUG: Superuser created with username '{}' and password '{}'.".format(debugSuperuser.username, pwd))
+
     print()
     print("MAIN BOOT: Pre-processing complete. Starting server...")
     print()
