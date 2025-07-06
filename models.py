@@ -213,7 +213,7 @@ class MMData(DIRepresentable):
 
     @staticmethod
     def rawLoad(data: Dict[str, Any], artefactID: str) -> 'MMData':
-        requiredParams = ['tradCN', 'corrected','preCorrectionAcc','simplifiedCN','english','summary','nerLabels']
+        requiredParams = ['tradCN', 'corrected', 'preCorrectionAcc', 'postCorrectionAcc', 'simplifiedCN', 'english', 'summary', 'nerLabels']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam == 'corrected':
