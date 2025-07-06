@@ -8,6 +8,7 @@ from ai import LLMInterface
 from addons import ModelStore, ArchSmith
 from services import Universal, Logger, ThreadManager
 from database import DI, DIError, JSONRes, ResType, FireConn
+from fm import FileManager
 from ccrPipeline import CCRPipeline
 from NERPipeline import NERPipeline
 from cnnclassifier import ImageClassifier
@@ -49,6 +50,18 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"MAIN BOOT: Error during DI setup: {e}")
         sys.exit(1)
+    
+    # Setup FileManager
+    if FireConn.connected:
+        try:
+            res = FileManager.setup()
+            if res != True:
+                raise Exception(res)
+        except Exception as e:
+            print(f"MAIN BOOT: Error during FileManager setup: {e}")
+            sys.exit(1)
+    else:
+        print("MAIN BOOT WARNING: FireConn is not enabled; FileManager will not be available.")
     
     # Logging services
     Logger.setup()
