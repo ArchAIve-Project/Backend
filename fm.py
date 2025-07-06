@@ -760,6 +760,8 @@ class FileManager:
         FileManager.cleanupNonmatchingFiles()
         FileManager.initialised = True
         
+        print("FM: FileManager setup complete. Stores: {}, Mode: {}".format(len(FileManager.stores), FileManager.mode))
+        
         return True
 
     @staticmethod
