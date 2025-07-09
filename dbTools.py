@@ -1,5 +1,53 @@
 import time, pprint, datetime, os, sys, shutil, json
 from services import Universal, ThreadManager, Encryption, Trigger
+from firebase import FireConn
+from models import DI, User, Artefact
+from fm import File, FileManager, FileOps
+from ai import LLMInterface, InteractionContext, Interaction
+from addons import ModelStore, ArchSmith
+from ccrPipeline import CCRPipeline
+from NERPipeline import NERPipeline
+from captioner import ImageCaptioning, Vocabulary
+from cnnclassifier import ImageClassifier
+from metagen import MetadataGenerator
+
+class SetupStates:
+    dbSetup = False
+    fmSetup = False
+    msSetup = False
+    llmSetup = False
+
+ArchSmith.setup()
+
+def requireFC():
+    if not FireConn.connected:
+        print("FireConn Connection:", FireConn.connect())
+
+def requireDI():
+    if not SetupStates.dbSetup:
+        print("DI Setup:", DI.setup())
+        SetupStates.dbSetup = True
+
+def requireFM():
+    if not SetupStates.fmSetup:
+        print("FileManager Setup:", FileManager.setup())
+        SetupStates.fmSetup = True
+
+def requireMS():
+    if not SetupStates.msSetup:
+        print("ModelStore Setup:", ModelStore.setup(
+            ccr=CCRPipeline.loadChineseClassifier,
+            ccrCharFilter=CCRPipeline.loadBinaryClassifier,
+            imageCaptioner=ImageCaptioning.loadModel,
+            cnn=ImageClassifier.load_model,
+            ner=NERPipeline.load_model
+        ))
+        SetupStates.msSetup = True
+
+def requireLLM():
+    if not SetupStates.llmSetup:
+        print("LLMInterface Default Clients Init:", LLMInterface.initDefaultClients())
+        SetupStates.llmSetup = True
 
 # Functions:
 # 1. populate 2 users and 5 artefacts
@@ -11,13 +59,12 @@ from services import Universal, ThreadManager, Encryption, Trigger
 # 7. reset local data files
 
 def populateDB():
+    requireDI()
+    requireFM()
+    
+    print()
     print("Populating database with 1 superuser, 4 regular users, and 5 dummy artefacts...")
     print()
-    
-    from models import DI, User, Artefact
-    from fm import FileManager, File
-    DI.setup()
-    FileManager.setup()
     
     pwd = "123456"
     
@@ -86,9 +133,9 @@ def populateDB():
     return True
 
 def createUser():
-    from models import User, DI
-    DI.setup()
+    requireDI()
     
+    print()
     print("Creating a new user...")
     print()
     
@@ -111,8 +158,11 @@ def createUser():
     return True
 
 def deleteUser():
-    from models import User, DI
-    DI.setup()
+    requireDI()
+    
+    print()
+    print("Deleting a user...")
+    print()
     
     complete = False
     
@@ -128,6 +178,39 @@ def deleteUser():
         print()
         
         complete = True
+    
+    return True
+
+def createArtefact():
+    requireDI()
+    requireFM()
+    
+    print()
+    print("Creating a new artefact...")
+    print()
+    
+    filename = input("Enter filename (with extension, should exist in ./artefacts): ").strip()
+    name = input("Enter name (leave blank to set as filename): ").strip() or filename
+    print()
+    file = File(filename, "artefacts")
+    
+    res = FileManager.save(file.store, file.filename)
+    if isinstance(res, str):
+        print("Error saving file:", res)
+        print()
+        return False
+    print("File saved successfully:", res)
+    
+    art = Artefact(
+        name=name,
+        image=filename,
+        metadata=None
+    )
+    art.save()
+    
+    print("Artefact object created:")
+    print(art)
+    print()
     
     return True
 
@@ -173,6 +256,10 @@ def main(choices: list[int] | None=None):
             populateDB()
         elif choice == 2:
             createUser()
+        elif choice == 3:
+            deleteUser()
+        elif choice == 4:
+            createArtefact()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)
