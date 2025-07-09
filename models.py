@@ -2,6 +2,7 @@ from database import DI, DIRepresentable, DIError
 from utils import Ref
 from services import Universal
 from typing import List, Dict, Any
+from datetime import datetime 
 
 class Artefact(DIRepresentable):
     def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, id: str = None):
@@ -299,6 +300,196 @@ class HFData(DIRepresentable):
     @staticmethod
     def ref(artefactID: str) -> Ref:
         return Ref("artefacts", artefactID, "metadata")
+    
+class Book(DIRepresentable):
+    def __init__(self, title: str, subtitle: str, mmIDs: List[str], id: str=None):
+        if id is None:
+            id = Universal.generateUniqueID()
+        
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.mmIDs = mmIDs
+        self.originRef = Book.ref(self.id)
+
+    def save(self) -> bool:
+        return DI.save(self.represent(), self.originRef)
+
+    def represent(self) -> Dict[str, Any]:
+        return {
+            "title": self.title,
+            "subtitle": self.subtitle,
+            "mmIDs": self.mmIDs,
+            "id": self.id
+        }
+    
+    @staticmethod
+    def rawLoad(data: dict) -> 'Book':
+        reqParams = ['title', 'subtitle', 'mmIDs', 'id']
+        for reqParam in reqParams:
+            if reqParam not in data:
+                if reqParam == 'mmIDs':
+                    data[reqParam] = []
+                else:
+                    data[reqParam] = None
+        
+        return Book(
+            title=data.get('title'),
+            subtitle=data.get('subtitle'),
+            mmIDs=data.get('mmIDs', []),
+            id=data.get('id')
+        )
+    
+    @staticmethod
+    def load(id: str=None, title: str=None, withMMID: str=None) -> 'Book | List[Book] | None':
+        if id != None:
+            data = DI.load(Book.ref(id))
+            if data is None:
+                return None
+            if isinstance(data, DIError):
+                raise Exception("BOOK LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("BOOK LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+
+            return Book.rawLoad(data)
+
+        else:
+            data = DI.load(Ref("books"))
+            if data is None:
+                return None
+            if isinstance(data, DIError):
+                raise Exception("BOOK LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("BOOK LOAD ERROR: Failed to load dictionary books data; response: {}".format(data))
+
+            for bookID in data:
+                bookData = data[bookID]
+                if isinstance(bookData, dict) and withMMID in bookData.get('mmIDs', []):
+                    return Book.rawLoad(bookData)
+
+            if title is not None:
+                # If no book with the specified mmID is found, check if a book with the specified title exists
+                for bookID in data:
+                    bookData = data[bookID]
+                    if isinstance(bookData, dict) and bookData.get('title') == title:
+                        return Book.rawLoad(bookData)
+
+            return None
+
+    @staticmethod
+    def ref(id: str):
+        return Ref("books", id)
+
+class Batch(DIRepresentable):
+    def __init__(self, userID: str, processed: List[str], unprocessed: List[str], confirmed: List[str], created: str=None, id: str=None):
+        if id is None:
+            id = Universal.generateUniqueID()
+        if created is None:
+            created = Universal.utcNowString()
+
+        self.id = id
+        self.userID = userID
+        self.processed = processed
+        self.unprocessed = unprocessed
+        self.confirmed = confirmed
+        self.created = created
+        self.originRef = Batch.ref(self.id)
+
+    def save(self) -> bool:
+        return DI.save(self.represent(), self.originRef)
+
+    def represent(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "userID": self.userID,
+            "unprocessed": self.unprocessed,
+            "processed": self.processed,
+            "confirmed": self.confirmed,
+            "created": self.created
+        }
+    
+    @staticmethod
+    def rawLoad(data: dict) -> 'Batch':
+        requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'created', 'id']
+        for reqParam in requiredParams:
+            if reqParam not in data or data[reqParam] is None:
+                if reqParam in ['unprocessed', 'processed', 'confirmed']:
+                    data[reqParam] = []
+                else:
+                    data[reqParam] = None
+
+        return Batch(
+            userID=data['userID'],
+            unprocessed=data['unprocessed'],
+            processed=data['processed'],
+            confirmed=data['confirmed'],
+            created=data['created'],
+            id=data['id']
+        )
+    
+    @staticmethod
+    def load(id: str=None, userID: str=None, created: str=None, hasUnprocessed: bool=False) -> 'Batch | List[Batch] | None':
+        '''
+        If id found load specific batch from the database
+        else loads all batches from the database and filters them based on :
+        1. UserId
+        2. Created Date
+        3. Whether the batch has unprocessed artefacts
+
+        Args:
+            id (str, optional): The ID of the batch to load. Defaults to None.
+            userID (str, optional): The user ID of the batch to load. Defaults to None.
+            created (str, optional): The creation date of the batch to load. Defaults to None
+            hasUnprocessed (bool, optional): Whether to filter batches that have unprocessed artefacts. Defaults to False.
+        Returns:
+            Batch | List[Batch] | None: The loaded batch or list of batches, or None if not found.
+        '''
+        if id != None:
+            data = DI.load(Batch.ref(id))
+            if data is None:
+                return None
+            if isinstance(data, DIError):
+                raise Exception("BATCH LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("BATCH LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+
+            return Batch.rawLoad(data)
+
+        else:
+            data = DI.load(Ref("batches"))
+            if data is None:
+                return []
+            if isinstance(data, DIError):
+                raise Exception("BATCH LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("BATCH LOAD ERROR: Failed to load dictionary batches data; response: {}".format(data))
+
+            batches: Dict[str, Batch] = {}
+            for batchID in data:
+                if isinstance(data[batchID], dict):
+                    batches[batchID] = Batch.rawLoad(data[batchID])
+
+            # If no filter is provided, return all batches
+            if id is None and userID is None and created is None and not hasUnprocessed:
+                return list(batches.values())
+
+            filtered = []
+
+            for batch in batches.values():
+                if userID is not None and batch.userID != userID:
+                    continue
+                if created is not None and batch.created.split("T")[0] != created: # Compare only the date part formatted "2025-07-09"
+                    continue
+                if hasUnprocessed and len(batch.unprocessed) == 0:
+                    continue
+
+                filtered.append(batch)
+
+            return filtered if filtered else None
+
+    def ref(id: str) -> Ref:
+        return Ref("batches", id)      
+
 
 class User(DIRepresentable):
     """User model representation.
