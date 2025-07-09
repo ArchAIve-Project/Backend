@@ -225,18 +225,11 @@ def deleteArtefact():
     complete = False
     
     while not complete:
-        identifier = input("Enter id or name of artefact to delete: ").strip()
-        artefact: Artefact | None = Artefact.load(id=identifier)
+        identifier = input("Enter id, name or image of artefact to delete: ").strip()
+        artefact: Artefact | None = Artefact.load(id=identifier, name=identifier, image=identifier)
         if not artefact:
-            allArtefacts: list[Artefact] = Artefact.load()
-            for art in allArtefacts:
-                if art.name == identifier:
-                    artefact = art
-                    break
-            
-            if not artefact:
-                complete = input("Artefact not found. Try again? (yes/no): ").strip().lower() != "yes"
-                continue
+            complete = input("Artefact not found. Try again? (yes/no): ").strip().lower() != "yes"
+            continue
         
         artefact.destroy()
         
@@ -250,6 +243,18 @@ def deleteArtefact():
     
     return True
 
+def processArtefact():
+    requireDI()
+    requireFM()
+    requireMS()
+    requireLLM()
+    
+    print()
+    print("Triggering artefact processing workflow...")
+    print()
+    
+    pass
+
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
     print("This is a debug script to quickly carry out common tasks.")
@@ -257,6 +262,8 @@ def main(choices: list[int] | None=None):
     
     if isinstance(choices, list):
         choice = choices.pop(0)
+    else:
+        choice = None
     
     while choice != 0:
         if choice is None:

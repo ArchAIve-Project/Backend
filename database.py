@@ -286,7 +286,7 @@ class DI:
             Logger.log("DI EFFICIENTFAILOVER WARNING: Failed to write data object to ref '{}' for efficient local failover; error: {}".format(ref, e))
     
     @staticmethod
-    def loadLocal(ref: Ref = Ref()):
+    def loadLocal(ref: Ref=None):
         '''
         Attempts to load data at a given reference (Ref) from the local database (DI.localFile).
         
@@ -296,6 +296,12 @@ class DI:
         
         Returns the data object. Can also return `DIError` or `None`. `None` represents that there is no data at the given reference.
         '''
+        if ref == None:
+            ref = Ref()
+        removed = ref.removeIllegalChars()
+        if removed:
+            Logger.log("DI SAVE WARNING: Reference '{}' has been modified to remove illegal characters.".format(ref))
+        
         DI.ensureLocalDBFile()
         
         data = None
@@ -392,7 +398,7 @@ class DI:
             return True
 
     @staticmethod
-    def load(ref: Ref = Ref()):
+    def load(ref: Ref=None):
         '''
         Load data from the database at a given reference (Ref). If no reference is provided, the data at the root will be loaded.
         
@@ -410,6 +416,12 @@ class DI:
         
         Returns the data object. Can also return `DIError` or `None`. `None` represents that there is no data at the given reference.
         '''
+        if ref == None:
+            ref = Ref()
+        removed = ref.removeIllegalChars()
+        if removed:
+            Logger.log("DI SAVE WARNING: Reference '{}' has been modified to remove illegal characters.".format(ref))
+        
         DI.synchronise()
         
         # Check if Firebase is enabled
@@ -436,7 +448,7 @@ class DI:
             return DI.loadLocal(ref)
     
     @staticmethod
-    def save(payload, ref: Ref = Ref()):
+    def save(payload, ref: Ref=None):
         '''
         Save a payload to the database at a given reference (Ref). If no reference is provided, the payload will be written at the root.
         
@@ -454,6 +466,12 @@ class DI:
         
         Returns `True` almost exclusively.
         '''
+        if ref == None:
+            ref = Ref()
+        removed = ref.removeIllegalChars()
+        if removed:
+            Logger.log("DI SAVE WARNING: Reference '{}' has been modified to remove illegal characters.".format(ref))
+        
         DI.efficientDataWrite(payload, ref)
         DI.synchronise()
         
