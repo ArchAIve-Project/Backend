@@ -1,7 +1,7 @@
 import time, pprint, datetime, os, sys, shutil, json
 from services import Universal, ThreadManager, Encryption, Trigger
 from firebase import FireConn
-from models import DI, User, Artefact
+from models import DI, User, Artefact, Metadata
 from fm import File, FileManager, FileOps
 from ai import LLMInterface, InteractionContext, Interaction
 from addons import ModelStore, ArchSmith
@@ -234,7 +234,7 @@ def deleteArtefact():
         artefact.destroy()
         
         artFile = File(artefact.image, "artefacts")
-        print("FileManager deletion result:", FileManager.delete(artFile))
+        print("FileManager deletion result:", FileManager.delete(file=artFile))
         
         print("Deleted artefact:", artefact.name)
         print()
@@ -253,7 +253,44 @@ def processArtefact():
     print("Triggering artefact processing workflow...")
     print()
     
-    pass
+    identifier = input("Enter id, name or image of artefact to process: ").strip()
+    artefact: Artefact | None = Artefact.load(id=identifier, name=identifier, image=identifier)
+    while not artefact:
+        tryAgain = input("Artefact not found. Try again? (yes/no): ").strip().lower() == "yes"
+        if not tryAgain:
+            print("Exiting artefact processing.")
+            print()
+            return False
+        
+        identifier = input("Enter id, name or image of artefact to process: ").strip()
+        artefact: Artefact | None = Artefact.load(id=identifier, name=identifier, image=identifier)
+    
+    file = artefact.getFMFile()
+    res = FileManager.prepFile(file=file)
+    if isinstance(res, str):
+        print("Failed to prepare file locally; response:", res)
+        print("Exiting artefact processing.")
+        print()
+        return False
+    
+    print()
+    print("Processing artefact... this may take a while")
+    print()
+    output = MetadataGenerator.generate(file.path())
+    if isinstance(output, str):
+        print("Error processing artefact:", output)
+        print("Exiting artefact processing.")
+        print()
+        return False
+    
+    artefact.metadata = Metadata.fromMetagen(artefact.id, output)
+    artefact.save()
+    
+    print("Artefact processed and saved successfully. Artefact data:")
+    print(artefact)
+    print()
+    
+    return True
 
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
@@ -305,6 +342,8 @@ def main(choices: list[int] | None=None):
             createArtefact()
         elif choice == 5:
             deleteArtefact()
+        elif choice == 6:
+            processArtefact()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)
