@@ -1,4 +1,5 @@
 from typing import List, Dict, Any
+from enum import Enum
 from flask import jsonify
 
 class Ref:
@@ -26,14 +27,27 @@ class DIError:
     def __str__(self) -> str:
         return self.message
 
-class ResType:
-    success = "SUCCESS"
-    error = "ERROR"
-    userError = "UERROR"
+class ResType(str, Enum):
+    SUCCESS = "SUCCESS"
+    ERROR = "ERROR"
+    USERERROR = "UERROR"
+    
+    @staticmethod
+    def guess(code: int) -> 'ResType':
+        if code >= 200 and code < 300:
+            return ResType.SUCCESS
+        else:
+            return ResType.ERROR
 
 class JSONRes:
     @staticmethod
-    def new(code: int, msgType: str, msg: str, serialise: bool=True, serialiser: Any | None=None, **kwargs: Any) -> tuple:
+    def new(code: int, msg: str, msgType: ResType | str=None, serialise: bool=True, serialiser: Any | None=None, **kwargs: Any) -> tuple:
+        if msgType is None or (not isinstance(msgType, ResType) and not isinstance(msgType, str)):
+            msgType = ResType.guess(code)
+        
+        if isinstance(msgType, ResType):
+            msgType = msgType.value
+        
         payload = {
             "type": msgType,
             "message": msg
@@ -49,3 +63,19 @@ class JSONRes:
             payload = serialiser(payload)
         
         return payload, code
+    
+    @staticmethod
+    def invalidRequestFormat(msg: str = "Invalid request format.", **kwargs) -> tuple:
+        return JSONRes.new(400, msg, ResType.ERROR, **kwargs)
+    
+    @staticmethod
+    def unauthorised(msg: str="Request unauthorised.", **kwargs) -> tuple:
+        return JSONRes.new(401, msg, ResType.ERROR, **kwargs)
+    
+    @staticmethod
+    def invalidSession(msg: str="Invalid session.", **kwargs) -> tuple:
+        return JSONRes.new(401, msg, ResType.ERROR, **kwargs)
+    
+    @staticmethod
+    def ambiguousError(msg: str="Failed to process request. Please try again.", **kwargs) -> tuple:
+        return JSONRes.new(500, msg, ResType.ERROR, **kwargs)
