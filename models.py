@@ -78,7 +78,7 @@ class Artefact(DIRepresentable):
         else:
             data = DI.load(Ref("artefacts"))
             if data == None:
-                return None
+                return []
             if isinstance(data, DIError):
                 raise Exception("ARTEFACT LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
