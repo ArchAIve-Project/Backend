@@ -190,7 +190,7 @@ def createArtefact():
     print()
     
     filename = input("Enter filename (with extension, should exist in ./artefacts): ").strip()
-    name = input("Enter name (leave blank to set as filename): ").strip() or filename
+    name = input("Enter name (leave blank to set as filename w/o extension): ").strip() or filename.split(".")[0]
     print()
     file = File(filename, "artefacts")
     
@@ -211,6 +211,42 @@ def createArtefact():
     print("Artefact object created:")
     print(art)
     print()
+    
+    return True
+
+def deleteArtefact():
+    requireDI()
+    requireFM()
+    
+    print()
+    print("Deleting an artefact...")
+    print()
+    
+    complete = False
+    
+    while not complete:
+        identifier = input("Enter id or name of artefact to delete: ").strip()
+        artefact: Artefact | None = Artefact.load(id=identifier)
+        if not artefact:
+            allArtefacts: list[Artefact] = Artefact.load()
+            for art in allArtefacts:
+                if art.name == identifier:
+                    artefact = art
+                    break
+            
+            if not artefact:
+                complete = input("Artefact not found. Try again? (yes/no): ").strip().lower() != "yes"
+                continue
+        
+        artefact.destroy()
+        
+        artFile = File(artefact.image, "artefacts")
+        print("FileManager deletion result:", FileManager.delete(artFile))
+        
+        print("Deleted artefact:", artefact.name)
+        print()
+        
+        complete = True
     
     return True
 
@@ -260,6 +296,8 @@ def main(choices: list[int] | None=None):
             deleteUser()
         elif choice == 4:
             createArtefact()
+        elif choice == 5:
+            deleteArtefact()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)
