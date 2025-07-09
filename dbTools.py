@@ -24,11 +24,13 @@ def requireFC():
         print("FireConn Connection:", FireConn.connect())
 
 def requireDI():
+    requireFC()
     if not SetupStates.dbSetup:
         print("DI Setup:", DI.setup())
         SetupStates.dbSetup = True
 
 def requireFM():
+    requireFC()
     if not SetupStates.fmSetup:
         print("FileManager Setup:", FileManager.setup())
         SetupStates.fmSetup = True
@@ -115,7 +117,7 @@ def populateDB():
     
     for filename in dummyArtefacts:
         file = File(filename, "artefacts")
-        if not file.exists()[0]:
+        if not file.exists()[1]:
             src = os.path.join(os.getcwd(), "dummy", filename)
             shutil.copy(src, file.path())
             
@@ -292,6 +294,71 @@ def processArtefact():
     
     return True
 
+def wipeDB():
+    requireDI()
+    
+    print()
+    print("Wiping database...")
+    print()
+    
+    if input("Are you sure you want to wipe the database? This cannot be undone. (yes/no): ").strip().lower() != "yes":
+        print("Database wipe cancelled.")
+        return False
+    
+    DI.save(None)
+    print()
+    print("Database wiped successfully.")
+    print()
+    
+    return True
+
+def wipeFM():
+    requireFM()
+    
+    print()
+    print("Wiping FileManager...")
+    print()
+    
+    if input("Are you sure you want to wipe the FileManager? This cannot be undone. (yes/no): ").strip().lower() != "yes":
+        print("FileManager wipe cancelled.")
+        return False
+    
+    print("Delete All Result:", FileManager.deleteAll())
+    
+    print()
+    print("FileManager wiped successfully.")
+    print()
+    
+    return True
+
+def resetLocalDataFiles():
+    print()
+    print("Resetting local persistent stores...")
+    print()
+    
+    if input("Are you sure you want to reset local data files? This will delete all local data. (yes/no): ").strip().lower() != "yes":
+        print("Local data reset cancelled.")
+        return False
+    
+    try:
+        for store in FileManager.stores:
+            shutil.rmtree(os.path.join(os.getcwd(), store), ignore_errors=True)
+        
+        os.remove("database.json")
+        os.remove("fmContext.json")
+        os.remove("archsmith.json")
+    except Exception as e:
+        print("Error resetting local data files:", e)
+        print("Local data reset failed.")
+        return False
+    
+    print()
+    print("All local persistent stores deleted.")
+    print("The DB tools context is now invalid, and thus DB tools will exit.")
+    print()
+    
+    sys.exit(0)
+
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
     print("This is a debug script to quickly carry out common tasks.")
@@ -344,6 +411,12 @@ def main(choices: list[int] | None=None):
             deleteArtefact()
         elif choice == 6:
             processArtefact()
+        elif choice == 7:
+            wipeDB()
+        elif choice == 8:
+            wipeFM()
+        elif choice == 9:
+            resetLocalDataFiles()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)
