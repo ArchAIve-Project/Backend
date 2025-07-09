@@ -10,7 +10,7 @@ from services import Universal, ThreadManager, Encryption, Trigger
 # 6. wipe FM
 # 7. reset local data files
 
-def populate_db():
+def populateDB():
     print("Populating database with 1 superuser, 4 regular users, and 5 dummy artefacts...")
     print()
     
@@ -85,10 +85,59 @@ def populate_db():
     
     return True
 
-def main(choice: int=None):
+def createUser():
+    from models import User, DI
+    DI.setup()
+    
+    print("Creating a new user...")
+    print()
+    
+    user = User(
+        username=input("Enter username: ").strip(),
+        email=input("Enter email: ").strip(),
+        pwd=Encryption.encodeToSHA256(input("Enter password: ").strip()),
+        superuser=input("Is this a superuser? (yes/no): ").strip().lower() == "yes"
+    )
+    if input("Start a login session? (yes/no): ").strip().lower() == "yes":
+        user.authToken = Universal.generateUniqueID(customLength=12)
+        user.lastLogin = Universal.utcNowString()
+    
+    user.save()
+    
+    print()
+    print("Created User:")
+    print(user)
+    print()
+    return True
+
+def deleteUser():
+    from models import User, DI
+    DI.setup()
+    
+    complete = False
+    
+    while not complete:
+        identifier = input("Enter id, username, email or auth token of user to delete: ").strip()
+        user: User | None = User.load(id=identifier) or User.load(username=identifier, email=identifier, authToken=identifier)
+        if not user:
+            complete = input("User not found. Try again? (yes/no): ").strip().lower() != "yes"
+            continue
+        
+        user.destroy()
+        print("Deleted user:", user.username)
+        print()
+        
+        complete = True
+    
+    return True
+
+def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
     print("This is a debug script to quickly carry out common tasks.")
     print()
+    
+    if isinstance(choices, list):
+        choice = choices.pop(0)
     
     while choice != 0:
         if choice is None:
@@ -121,13 +170,21 @@ def main(choice: int=None):
             print("Exiting...")
             sys.exit(0)
         elif choice == 1:
-            populate_db()
+            populateDB()
+        elif choice == 2:
+            createUser()
         
-        choice = None
+        if isinstance(choices, list) and len(choices) > 0:
+            choice = choices.pop(0)
+        else:
+            choice = None
 
 if __name__ == "__main__":
-    choice = None
+    choices = None
     if len(sys.argv) > 1:
-        choice = int(sys.argv[1])
+        choices = []
+        for arg in sys.argv[1:]:
+            choices.append(int(arg))
+    print(choices)
     
-    main(choice)
+    main(choices)
