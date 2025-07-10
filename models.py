@@ -526,6 +526,7 @@ class Batch(DIRepresentable):
     
     def __str__(self):
         completeData = self.represent()
+        completeData['user'] = self.user.represent() if self.user is not None else None
         completeData['unprocessedObjects'] = [art.represent() for art in self.unprocessedObjects] if self.unprocessedObjects is not None else []
         completeData['processedObjects'] = [art.represent() for art in self.processedObjects] if self.processedObjects is not None else []
         completeData['confirmedObjects'] = [art.represent() for art in self.confirmedObjects] if self.confirmedObjects is not None else []
