@@ -357,7 +357,10 @@ class Book(DIRepresentable):
         if id != None:
             data = DI.load(Book.ref(id))
             if data is None:
-                return None
+                if title is not None or withMMID is not None:
+                    return Book.load(title=title, withMMID=withMMID)
+                else:
+                    return None
             if isinstance(data, DIError):
                 raise Exception("BOOK LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
@@ -374,18 +377,19 @@ class Book(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("BOOK LOAD ERROR: Failed to load dictionary books data; response: {}".format(data))
 
-            if withMMID is not None:
-                for bookID in data:
-                    bookData = data[bookID]
-                    if isinstance(bookData, dict) and withMMID in bookData.get('mmIDs', []):
-                        return Book.rawLoad(bookData)
-
-            if title is not None:
-                # If no book with the specified mmID is found, check if a book with the specified title exists
-                for bookID in data:
-                    bookData = data[bookID]
-                    if isinstance(bookData, dict) and bookData.get('title') == title:
-                        return Book.rawLoad(bookData)
+            books: Dict[str, Book] = {}
+            for id in data:
+                if isinstance(data[id], dict):
+                    books[id] = Book.rawLoad(data[id])
+            
+            if title is None and withMMID is None:
+                return list(books.values())
+            
+            for book in books.values():
+                if title is not None and book.title == title:
+                    return book
+                elif withMMID is not None and withMMID in book.mmIDs:
+                    return book
 
             return None
 
