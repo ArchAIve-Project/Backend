@@ -369,10 +369,11 @@ class Book(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("BOOK LOAD ERROR: Failed to load dictionary books data; response: {}".format(data))
 
-            for bookID in data:
-                bookData = data[bookID]
-                if isinstance(bookData, dict) and withMMID in bookData.get('mmIDs', []):
-                    return Book.rawLoad(bookData)
+            if withMMID is not None:
+                for bookID in data:
+                    bookData = data[bookID]
+                    if isinstance(bookData, dict) and withMMID in bookData.get('mmIDs', []):
+                        return Book.rawLoad(bookData)
 
             if title is not None:
                 # If no book with the specified mmID is found, check if a book with the specified title exists
