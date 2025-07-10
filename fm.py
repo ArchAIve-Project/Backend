@@ -76,6 +76,14 @@ class File:
         self.updateMetadata = updateMetadata
         self.forceExistence = forceExistence
     
+    def filenameWithoutExtension(self) -> str:
+        """Returns the filename without its extension.
+
+        Returns:
+            str: The filename without the extension.
+        """
+        return self.filename.split(".")[0]
+    
     def represent(self) -> dict:
         """
         Returns the metadata of the file as a dictionary.
@@ -476,16 +484,27 @@ class FileManager:
             return "ERROR: Failed to remove file locally; error: {}".format(e)
     
     @staticmethod
-    def delete(file: File) -> bool | str:
+    def delete(store: str=None, filename: str=None, file: File=None) -> bool | str:
         """
-        Deletes the file from Firebase and cleans up locally/contextually.
+        Deletes the file from Firebase and cleans up locally/contextually. Provide either `store` and `filename` or a `File` object.
 
         Args:
+            store (str): Store the file belongs to.
+            filename (str): Name of the file.
             file (File): File to delete.
 
         Returns:
              bool | str: True if successful, else error.
         """
+        if store is None and filename is None and file is None:
+            return "ERROR: Either 'store' and 'filename' or 'file' must be provided."
+        
+        if isinstance(file, File):
+            store = file.store
+            filename = file.filename
+        
+        if store is None or filename is None:
+            return "ERROR: Could not resolve target 'store' and 'filename'."
         
         fileObject = FireStorage.getFileInfo(file.identifierPath())
         if isinstance(fileObject, str):
@@ -504,6 +523,27 @@ class FileManager:
         res = FileManager.removeLocally(file)
         if res != True:
             return "ERROR: Failed to remove file '{}' locally; error: {}".format(file.identifierPath(), res)
+        
+        return True
+    
+    @staticmethod
+    def deleteAll() -> bool | str:
+        """Deletes all files on cloud and removes them from the local filesystem and context.
+
+        Returns:
+            bool | str: True if successful, else error.
+        """
+        
+        cloudFiles = FireStorage.listFiles(ignoreFolders=True)
+        if isinstance(cloudFiles, str):
+            return cloudFiles
+        
+        for file in cloudFiles:
+            try:
+                file.delete()
+                FileManager.removeLocally(File(file.name.split("/")[1], file.name.split("/")[0]))
+            except Exception as e:
+                Logger.log("FILEMANAGER DELETEALL WARNING: Failed to delete file '{}'; error: {}".format(file.name, e))
         
         return True
     
@@ -765,17 +805,27 @@ class FileManager:
         return True
 
     @staticmethod
-    def prepFile(store: str, filename: str) -> File | str:
+    def prepFile(store: str=None, filename: str=None, file: File=None) -> File | str:
         """
-        Prepares a file in the local context if it exists on cloud.
+        Prepares a file in the local context if it exists on cloud. Provide either `store` and `filename` or a `File` object.
 
         Args:
             store (str): Store the file belongs to.
             filename (str): Name of the file.
+            file (File): File object.
 
         Returns:
              File | str: File if successful, else error.
         """
+        if store is None and filename is None and file is None:
+            return "ERROR: Either 'store' and 'filename' or 'file' must be provided."
+        
+        if isinstance(file, File):
+            store = file.store
+            filename = file.filename
+        
+        if store is None or filename is None:
+            return "ERROR: Could not resolve target 'store' and 'filename'."
         
         if not FileManager.initialised:
             return "ERROR: FileManager has not been setup yet."
@@ -839,17 +889,27 @@ class FileManager:
         return FileManager.context[idPath]
 
     @staticmethod
-    def save(store: str, filename: str) -> File | str:
+    def save(store: str=None, filename: str=None, file: File=None) -> File | str:
         """
-        Saves a file from the local system to Firebase.
+        Saves a file from the local system to Firebase. Provide either `store` and `filename` or a `File` object.
 
         Args:
             store (str): Store the file is in.
             filename (str): File name.
+            file (File): File object to save.
 
         Returns:
              File | str: Updated File or error string.
         """
+        if store is None and filename is None and file is None:
+            return "ERROR: Either 'store' and 'filename' or 'file' must be provided."
+        
+        if isinstance(file, File):
+            store = file.store
+            filename = file.filename
+        
+        if store is None or filename is None:
+            return "ERROR: Could not resolve target 'store' and 'filename'."
         
         if not FileManager.initialised:
             return "ERROR: FileManager has not been setup yet."

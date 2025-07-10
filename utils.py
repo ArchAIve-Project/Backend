@@ -3,15 +3,38 @@ from enum import Enum
 from flask import jsonify
 
 class Ref:
+    illegalChars = ['.', '#', '$', '[', ']', '/']
+    
     def __init__(self, *subscripts: tuple[str]) -> None:
         self.subscripts = list(subscripts)
+    
+    def hasIllegalChars(self) -> bool:
+        for sub in self.subscripts:
+            for char in sub:
+                if char in Ref.illegalChars:
+                    return True
         
+        return False
+    
+    def removeIllegalChars(self) -> bool:
+        removed = False
+        for subIndex in range(len(self.subscripts)):
+            sub: str = self.subscripts[subIndex]
+            for char in Ref.illegalChars:
+                if char in sub:
+                    sub = sub.replace(char, "")
+                    removed = True
+            
+            self.subscripts[subIndex] = sub
+        
+        return removed
+    
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, Ref):
             return False
         
         return self.subscripts == value.subscripts
-        
+    
     def __str__(self) -> str:
         return "/".join(self.subscripts)
     
