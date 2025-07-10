@@ -342,6 +342,13 @@ class Book(DIRepresentable):
     
     @staticmethod
     def load(id: str=None, title: str=None, withMMID: str=None) -> 'Book | List[Book] | None':
+        '''
+        Load a book by its ID, title, or MMID.
+        If id is provided, it loads the specific book.
+        If title is provided, it searches for a book with that title.
+        If withMMID is provided, it searches for a book that contains that MMID in its mmIDs list.
+        If neither id nor title is provided, it loads all books and returns the first one that matches the criteria.
+        '''
         if id != None:
             data = DI.load(Book.ref(id))
             if data is None:
@@ -381,7 +388,7 @@ class Book(DIRepresentable):
         return Ref("books", id)
 
 class Batch(DIRepresentable):
-    def __init__(self, userID: str, processed: List[str], unprocessed: List[str], confirmed: List[str], created: str=None, id: str=None):
+    def __init__(self, userID: str, processed: List[Artefact | str], unprocessed: List[Artefact | str], confirmed: List[Artefact | str], created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -428,21 +435,19 @@ class Batch(DIRepresentable):
         )
     
     @staticmethod
-    def load(id: str=None, userID: str=None, created: str=None, hasUnprocessed: bool=False) -> 'Batch | List[Batch] | None':
+    def load(id: str=None, userID: str=None, withUser: bool=False, withArtefacts: bool=False) -> 'Batch | Dict[Batch] | None':
         '''
         If id found load specific batch from the database
-        else loads all batches from the database and filters them based on :
-        1. UserId
-        2. Created Date
-        3. Whether the batch has unprocessed artefacts
+        else loads all batches from the database and filter based on userID // Gets all batch under that userID
 
         Args:
             id (str, optional): The ID of the batch to load. Defaults to None.
             userID (str, optional): The user ID of the batch to load. Defaults to None.
-            created (str, optional): The creation date of the batch to load. Defaults to None
-            hasUnprocessed (bool, optional): Whether to filter batches that have unprocessed artefacts. Defaults to False.
+            withUser (bool, optional): Whether to include user information in the loaded batch. Defaults to False.
+            withArtefacts (bool, optional): Whether to include artefacts in the loaded batch. Defaults to False.
+
         Returns:
-            Batch | List[Batch] | None: The loaded batch or list of batches, or None if not found.
+            Batch | Dict[Batch] | None: The loaded batch or list of batches, or None if not found.
         '''
         if id != None:
             data = DI.load(Batch.ref(id))
@@ -453,9 +458,12 @@ class Batch(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("BATCH LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
-            return Batch.rawLoad(data)
+            batch = Batch.rawLoad(data)
+            
+            return batch
 
         else:
+
             data = DI.load(Ref("batches"))
             if data is None:
                 return []
@@ -464,28 +472,29 @@ class Batch(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("BATCH LOAD ERROR: Failed to load dictionary batches data; response: {}".format(data))
 
-            batches: Dict[str, Batch] = {}
-            for batchID in data:
-                if isinstance(data[batchID], dict):
-                    batches[batchID] = Batch.rawLoad(data[batchID])
+        # To be use on both (batch/batches) just if being called
+        batches: Dict[str, Batch] = {}
 
-            # If no filter is provided, return all batches
-            if id is None and userID is None and created is None and not hasUnprocessed:
-                return list(batches.values())
-
-            filtered = []
-
-            for batch in batches.values():
+        for batchID, batchData in data.items():
+            if isinstance(batchData, dict):
+                batch = Batch.rawLoad(batchData)
                 if userID is not None and batch.userID != userID:
                     continue
-                if created is not None and batch.created.split("T")[0] != created: # Compare only the date part formatted "2025-07-09"
-                    continue
-                if hasUnprocessed and len(batch.unprocessed) == 0:
-                    continue
 
-                filtered.append(batch)
+                if withUser:
+                    user = User.load(id=batch.userID)
+                    if isinstance(user, User):
+                        batch.user = user
 
-            return filtered if filtered else None
+                if withArtefacts:
+                    batch.unproArtefact = [Artefact.load(aid) for aid in batch.unprocessed]
+                    batch.proArtefact = [Artefact.load(aid) for aid in batch.processed]
+                    batch.conArtefact = [Artefact.load(aid) for aid in batch.confirmed]
+                    
+                batches[batch.id] = batch
+
+        return batches if batches else None            
+
 
     def ref(id: str) -> Ref:
         return Ref("batches", id)      
