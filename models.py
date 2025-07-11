@@ -617,6 +617,35 @@ class Batch(DIRepresentable):
             self.confirmed[artefactID] = artefactObject
         
         return True
+    
+    def where(self, artefact: Artefact | str) -> 'Batch.Stage | None':
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        
+        if artefactID in self.unprocessed:
+            return Batch.Stage.UNPROCESSED
+        elif artefactID in self.processed:
+            return Batch.Stage.PROCESSED
+        elif artefactID in self.confirmed:
+            return Batch.Stage.CONFIRMED
+        else:
+            return None
+    
+    def remove(self, artefact: Artefact | str) -> bool:
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        
+        if not self.has(artefactID):
+            raise Exception("BATCH REMOVE ERROR: Artefact with ID '{}' does not exist in the batch.".format(artefactID))
+        
+        # Find which stage the artefact is currently in and remove it
+        stage = self.where(artefactID)
+        if stage == Batch.Stage.UNPROCESSED:
+            del self.unprocessed[artefactID]
+        elif stage == Batch.Stage.PROCESSED:
+            del self.processed[artefactID]
+        elif stage == Batch.Stage.CONFIRMED:
+            del self.confirmed[artefactID]
+        
+        return True
 
     @staticmethod
     def rawLoad(data: dict) -> 'Batch':
