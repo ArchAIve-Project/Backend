@@ -35,6 +35,18 @@ class Artefact(DIRepresentable):
     def destroy(self):
         return DI.save(None, self.originRef)
     
+    def reload(self):
+        data = DI.load(self.originRef)
+        if isinstance(data, DIError):
+            raise Exception("ARTEFACT RELOAD ERROR: DIError occurred: {}".format(data))
+        if data == None:
+            raise Exception("ARTEFACT RELOAD ERROR: No data found at reference '{}'.".format(self.originRef))
+        if not isinstance(data, dict):
+            raise Exception("ARTEFACT RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        self.__dict__.update(self.rawLoad(data, self.id).__dict__)
+        return True
+    
     def getFMFile(self) -> File:
         return File(self.image, "artefacts")
     
@@ -48,7 +60,6 @@ class Artefact(DIRepresentable):
 
     def represent(self) -> Dict[str, Any]:
         return {
-            'id': self.id,
             'public': self.public,
             'name': self.name,
             'image': self.image,
@@ -57,8 +68,8 @@ class Artefact(DIRepresentable):
         }
 
     @staticmethod
-    def rawLoad(data, includeMetadata: bool=True):
-        requiredParams = ['public', 'name', 'image', 'created', 'metadata', 'id']
+    def rawLoad(data: dict, artefactID: str | None=None, includeMetadata: bool=True) -> 'Artefact':
+        requiredParams = ['public', 'name', 'image', 'created', 'metadata']
         for param in requiredParams:
             if param not in data:
                 if param == 'public':
@@ -67,8 +78,8 @@ class Artefact(DIRepresentable):
                     data[param] = None
 
         metadata = None
-        if includeMetadata and isinstance(data['metadata'], dict):
-            metadata = Metadata.rawLoad(data['id'], data['metadata'])
+        if includeMetadata and isinstance(data['metadata'], dict) and isinstance(artefactID, str):
+            metadata = Metadata.rawLoad(artefactID, data['metadata'])
 
         output = Artefact(
             name=data['name'], 
@@ -77,7 +88,7 @@ class Artefact(DIRepresentable):
             public=data['public'],
             created=data['created'],
             metadataLoaded=includeMetadata,
-            id=data['id']
+            id=artefactID
         )
 
         return output
@@ -96,7 +107,7 @@ class Artefact(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("ARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
             
-            return Artefact.rawLoad(data, includeMetadata)
+            return Artefact.rawLoad(data, id, includeMetadata)
         else:
             data = DI.load(Ref("artefacts"))
             if data == None:
@@ -109,7 +120,7 @@ class Artefact(DIRepresentable):
             artefacts: Dict[str, Artefact] = {}
             for id in data:
                 if isinstance(data[id], dict):
-                    artefacts[id] = Artefact.rawLoad(data[id], includeMetadata)
+                    artefacts[id] = Artefact.rawLoad(data[id], id, includeMetadata)
             
             if name is None and image is None:
                 return list(artefacts.values())
@@ -361,13 +372,24 @@ class Book(DIRepresentable):
         return {
             "title": self.title,
             "subtitle": self.subtitle,
-            "mmIDs": self.mmIDs,
-            "id": self.id
+            "mmIDs": self.mmIDs
         }
     
+    def reload(self):
+        data = DI.load(self.originRef)
+        if isinstance(data, DIError):
+            raise Exception("BOOK RELOAD ERROR: DIError occurred: {}".format(data))
+        if data == None:
+            raise Exception("BOOK RELOAD ERROR: No data found at reference '{}'.".format(self.originRef))
+        if not isinstance(data, dict):
+            raise Exception("BOOK RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        self.__dict__.update(self.rawLoad(data, self.id).__dict__)
+        return True
+    
     @staticmethod
-    def rawLoad(data: dict) -> 'Book':
-        reqParams = ['title', 'subtitle', 'mmIDs', 'id']
+    def rawLoad(data: dict, bookID: str | None=None) -> 'Book':
+        reqParams = ['title', 'subtitle', 'mmIDs']
         for reqParam in reqParams:
             if reqParam not in data:
                 if reqParam == 'mmIDs':
@@ -379,7 +401,7 @@ class Book(DIRepresentable):
             title=data.get('title'),
             subtitle=data.get('subtitle'),
             mmIDs=data.get('mmIDs', []),
-            id=data.get('id')
+            id=bookID
         )
     
     @staticmethod
@@ -403,7 +425,7 @@ class Book(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("BOOK LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
-            return Book.rawLoad(data)
+            return Book.rawLoad(data, id)
 
         else:
             data = DI.load(Ref("books"))
@@ -417,7 +439,7 @@ class Book(DIRepresentable):
             books: Dict[str, Book] = {}
             for id in data:
                 if isinstance(data[id], dict):
-                    books[id] = Book.rawLoad(data[id])
+                    books[id] = Book.rawLoad(data[id], id)
             
             if title is None and withMMID is None:
                 return list(books.values())
@@ -529,13 +551,24 @@ class Batch(DIRepresentable):
 
     def represent(self) -> Dict[str, Any]:
         return {
-            "id": self.id,
             "userID": self.userID,
             "unprocessed": list(self.unprocessed.keys()),
             "processed": list(self.processed.keys()),
             "confirmed": list(self.confirmed.keys()),
             "created": self.created
         }
+    
+    def reload(self):
+        data = DI.load(self.originRef)
+        if isinstance(data, DIError):
+            raise Exception("BATCH RELOAD ERROR: DIError occurred: {}".format(data))
+        if data == None:
+            raise Exception("BATCH RELOAD ERROR: No data found at reference '{}'.".format(self.originRef))
+        if not isinstance(data, dict):
+            raise Exception("BATCH RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        self.__dict__.update(self.rawLoad(data, self.id).__dict__)
+        return True
     
     def __str__(self):
         completeData = self.represent()
@@ -653,10 +686,10 @@ class Batch(DIRepresentable):
         return True
 
     @staticmethod
-    def rawLoad(data: dict) -> 'Batch':
-        requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'created', 'id']
+    def rawLoad(data: dict, batchID: str | None=None) -> 'Batch':
+        requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'created']
         for reqParam in requiredParams:
-            if reqParam not in data or data[reqParam] is None:
+            if reqParam not in data:
                 if reqParam in ['unprocessed', 'processed', 'confirmed']:
                     data[reqParam] = []
                 else:
@@ -675,7 +708,7 @@ class Batch(DIRepresentable):
             processed=data['processed'],
             confirmed=data['confirmed'],
             created=data['created'],
-            id=data['id']
+            id=batchID
         )
     
     @staticmethod
@@ -702,7 +735,7 @@ class Batch(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("BATCH LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
-            batch = Batch.rawLoad(data)
+            batch = Batch.rawLoad(data, id)
             
             return batch
 
@@ -718,7 +751,7 @@ class Batch(DIRepresentable):
             batches: Dict[str, Batch] = {}
             for id in data:
                 if isinstance(data[id], dict):
-                    batches[id] = Batch.rawLoad(data[id])
+                    batches[id] = Batch.rawLoad(data[id], id)
             
             if userID is None:
                 for batch in batches.values():
@@ -745,7 +778,6 @@ class Batch(DIRepresentable):
     @staticmethod
     def ref(id: str) -> Ref:
         return Ref("batches", id)
-
 
 class User(DIRepresentable):
     """User model representation.
@@ -795,6 +827,7 @@ class User(DIRepresentable):
             id = Universal.generateUniqueID()
         if created is None:
             created = Universal.utcNowString()
+        
         self.id = id
         self.username = username
         self.email = email
@@ -807,7 +840,6 @@ class User(DIRepresentable):
     
     def represent(self) -> dict:
         return {
-            "id": self.id,
             "username": self.username,
             "email": self.email,
             "pwd": self.pwd,
@@ -843,9 +875,21 @@ class User(DIRepresentable):
         convertedData = self.represent()
         return DI.save(convertedData, self.originRef)
     
+    def reload(self):
+        data = DI.load(self.originRef)
+        if isinstance(data, DIError):
+            raise Exception("USER RELOAD ERROR: DIError occurred: {}".format(data))
+        if data == None:
+            raise Exception("USER RELOAD ERROR: No data found at reference '{}'.".format(self.originRef))
+        if not isinstance(data, dict):
+            raise Exception("USER RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        self.__dict__.update(self.rawLoad(data, self.id).__dict__)
+        return True
+    
     @staticmethod
-    def rawLoad(data) -> 'User':
-        requiredParams = ['username', 'email', 'pwd', 'authToken', 'superuser', 'lastLogin', 'created', 'id']
+    def rawLoad(data: dict, userID: str | None=None) -> 'User':
+        requiredParams = ['username', 'email', 'pwd', 'authToken', 'superuser', 'lastLogin', 'created']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam in []: # add any required params that should be empty dictionaries
@@ -868,7 +912,7 @@ class User(DIRepresentable):
             superuser=data['superuser'],
             lastLogin=data['lastLogin'],
             created=data['created'],
-            id=data['id']
+            id=userID
         )
     
     @staticmethod
@@ -900,7 +944,7 @@ class User(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("USER LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
             
-            return User.rawLoad(data)
+            return User.rawLoad(data, id)
         else:
             data = DI.load(Ref("users"))
             if data == None:
@@ -913,7 +957,7 @@ class User(DIRepresentable):
             users: Dict[str, User] = {}
             for id in data:
                 if isinstance(data[id], dict):
-                    users[id] = User.rawLoad(data[id])
+                    users[id] = User.rawLoad(data[id], id)
 
             if username == None and email == None and authToken == None:
                 return list(users.values())
@@ -974,7 +1018,6 @@ class Category(DIRepresentable):
     
     def represent(self):
         return {
-            "id": self.id,
             "name": self.name,
             "description": self.description,
             "members": {artefactID: member.represent() for artefactID, member in self.members.items()},
@@ -984,9 +1027,21 @@ class Category(DIRepresentable):
     def save(self):
         return DI.save(self.represent(), self.originRef)
     
+    def reload(self):
+        data = DI.load(self.originRef)
+        if isinstance(data, DIError):
+            raise Exception("CATEGORY RELOAD ERROR: DIError occurred: {}".format(data))
+        if data == None:
+            raise Exception("CATEGORY RELOAD ERROR: No data found at reference '{}'.".format(self.originRef))
+        if not isinstance(data, dict):
+            raise Exception("CATEGORY RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        self.__dict__.update(self.rawLoad(data, self.id).__dict__)
+        return True
+    
     @staticmethod
-    def rawLoad(data: dict, withArtefacts: bool=False) -> 'Category':
-        reqParam = ['id', 'name', 'description', 'members', 'created']
+    def rawLoad(data: dict, categoryID: str | None=None, withArtefacts: bool=False) -> 'Category':
+        reqParam = ['name', 'description', 'members', 'created']
         for param in reqParam:
             if param not in data:
                 if param == 'members':
@@ -994,7 +1049,67 @@ class Category(DIRepresentable):
                 else:
                     data[param] = None
         
-        # TODO
+        cat = Category(
+            name=data.get('name'),
+            description=data.get('description'),
+            members=None,
+            created=data.get('created'),
+            id=categoryID
+        )
+        
+        members = {}
+        if isinstance(data['members'], dict):
+            for artefactID in data['members']:
+                if isinstance(data['members'][artefactID], dict):
+                    members[artefactID] = CategoryArtefact.rawLoad(
+                        category=cat.id,
+                        artefact=artefactID,
+                        data=data['members'][artefactID],
+                        withArtefact=withArtefacts
+                    )
+        
+        cat.members = members
+        return cat
+    
+    @staticmethod
+    def load(id: str=None, name: str=None, withMemberID: str=None, withArtefacts: bool=False) -> 'Category | List[Category] | None':
+        if id != None:
+            data = DI.load(Category.ref(id))
+            if data is None:
+                if name is not None:
+                    return Category.load(name=name, withArtefacts=withArtefacts)
+                else:
+                    return None
+            if isinstance(data, DIError):
+                raise Exception("CATEGORY LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("CATEGORY LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+
+            return Category.rawLoad(data, id, withArtefacts=withArtefacts)
+        else:
+            data = DI.load(Ref("categories"))
+            if data is None:
+                return None
+            if isinstance(data, DIError):
+                raise Exception("CATEGORY LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("CATEGORY LOAD ERROR: Failed to load dictionary categories data; response: {}".format(data))
+
+            categories: Dict[str, Category] = {}
+            for id in data:
+                if isinstance(data[id], dict):
+                    categories[id] = Category.rawLoad(data[id], id, withArtefacts=withArtefacts)
+
+            if name is None and withMemberID is None:
+                return list(categories.values())
+
+            for category in categories.values():
+                if name is not None and category.name == name:
+                    return category
+                elif withMemberID is not None and withMemberID in category.members:
+                    return category
+            
+            return None
     
     @staticmethod
     def ref(id: str) -> Ref:
