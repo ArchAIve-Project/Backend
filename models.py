@@ -547,12 +547,14 @@ class Batch(DIRepresentable):
         return str(completeData)
     
     def getUser(self) -> bool:
-        if self.userID is None:
-            raise Exception("BATCH GETUSER ERROR: Batch does not have a userID set.")
+        if not isinstance(self.userID, str):
+            raise Exception("BATCH GETUSER ERROR: Invalid value set for 'userID'. Expected a string representing the User ID.")
         
         self.user = User.load(id=self.userID)
+        if not isinstance(self.user, User):
+            raise Exception("BATCH GETUSER ERROR: Failed to load User with ID '{}'; response: {}".format(self.userID, self.user))
         
-        return True if isinstance(self.user, User) else False
+        return True
     
     def getArtefacts(self, unprocessed: bool=True, processed: bool=True, confirmed: bool=True, metadataRequired: bool=False) -> bool:
         if not (unprocessed or processed or confirmed):
@@ -956,25 +958,118 @@ class User(DIRepresentable):
     def ref(id: str) -> Ref:
         return Ref("users", id)
 
-if __name__ == "__main__":
-    # data = {
-    #     "traditional_chinese": "傳統中文",
-    #     "correction_applied": True,
-    #     "pre_correction_accuracy": "Pre-correction accuracy",
-    #     "post_correction_accuracy": "Post-correction accuracy",
-    #     "simplified_chinese": "简体中文",
-    #     "english_translation": "English translation",
-    #     "summary": "Summary of the artefact",
-    #     "ner_labels": "NER labels for the artefact"
-    # }
+class Category(DIRepresentable):
+    def __init__(self, name: str, description: str, members: 'Dict[str, CategoryArtefact]', created: str=None, id: str=None):
+        if id is None:
+            id = Universal.generateUniqueID()
+        if created is None:
+            created = Universal.utcNowString()
+        
+        self.id = id
+        self.name = name
+        self.description = description
+        self.members = members
+        self.created = created
+        self.originRef = Category.ref(id)
+    
+    def represent(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "members": {artefactID: member.represent() for artefactID, member in self.members.items()},
+            "created": self.created
+        }
+    
+    def save(self):
+        return DI.save(self.represent(), self.originRef)
+    
+    @staticmethod
+    def rawLoad(data: dict, withArtefacts: bool=False) -> 'Category':
+        reqParam = ['id', 'name', 'description', 'members', 'created']
+        for param in reqParam:
+            if param not in data:
+                if param == 'members':
+                    data[param] = {}
+                else:
+                    data[param] = None
+        
+        # TODO
+    
+    @staticmethod
+    def ref(id: str) -> Ref:
+        return Ref("categories", id)
 
-    DI.setup()
-    # art = Artefact("hello", "image.png", data)
-
-    # print(art)
-
-    while True:
-        try:
-            exec(input(">>> "))
-        except Exception as e:
-            print("ERROR: {}".format(e))
+class CategoryArtefact(DIRepresentable):
+    def __init__(self, category: Category | str, artefact: Artefact | str, reason: str, added: str=None):
+        if added is None:
+            added = Universal.utcNowString()
+        
+        self.categoryID = category.id if isinstance(category, Category) else category
+        self.artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        self.reason = reason
+        self.added = added
+        self.artefact: Artefact = artefact if isinstance(artefact, Artefact) else None
+        self.originRef = CategoryArtefact.ref(self.categoryID, self.artefactID)
+    
+    def getArtefact(self) -> bool:
+        if not isinstance(self.artefactID, str):
+            raise Exception("CATEGORYARTEFACT GETARTEFACT ERROR: Invalid value set for 'artefactID'. Expected a string representing the Artefact ID.")
+        
+        self.artefact = Artefact.load(self.artefactID)
+        if not isinstance(self.artefact, Artefact):
+            raise Exception("CATEGORYARTEFACT GETARTEFACT ERROR: Failed to load Artefact with ID '{}'; response: {}".format(self.artefactID, self.artefact))
+        
+        return True
+    
+    def represent(self):
+        return {
+            "reason": self.reason,
+            "added": self.added
+        }
+    
+    def save(self):
+        return DI.save(self.represent(), self.originRef)
+    
+    @staticmethod
+    def rawLoad(category: Category | str, artefact: Artefact | str, data: dict, withArtefact: bool=False) -> 'CategoryArtefact':
+        reqParams = ['reason', 'added']
+        for reqParam in reqParams:
+            if reqParam not in data:
+                data[reqParam] = None
+        
+        if not isinstance(category, Category) and not isinstance(category, str):
+            raise Exception("CATEGORY RAWLOAD ERROR: 'category' must be a Category object or a string representing the category ID.")
+        if not isinstance(artefact, Artefact) and not isinstance(artefact, str):
+            raise Exception("CATEGORY RAWLOAD ERROR: 'artefact' must be an Artefact object or a string representing the artefact ID.")
+        
+        catArt = CategoryArtefact(
+            category=category,
+            artefact=artefact,
+            reason=data.get('reason'),
+            added=data.get('added')
+        )
+        
+        if withArtefact:
+            catArt.getArtefact()
+        
+        return catArt
+    
+    @staticmethod
+    def load(category: Category | str, artefact: Artefact | str, withArtefact: bool=False) -> 'CategoryArtefact | None':
+        categoryID = category.id if isinstance(category, Category) else category
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        
+        data = DI.load(CategoryArtefact.ref(categoryID, artefactID))
+        if data == None:
+            return None
+        if isinstance(data, DIError):
+            raise Exception("CATEGORYARTEFACT LOAD ERROR: DIError occurred: {}".format(data))
+        if not isinstance(data, dict):
+            raise Exception("CATEGORYARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        return CategoryArtefact.rawLoad(categoryID, artefact, data, withArtefact=withArtefact)
+    
+    @staticmethod
+    def ref(categoryID: str, artefactID: str) -> Ref:
+        return Ref("categories", categoryID, "members", artefactID)
