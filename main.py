@@ -18,7 +18,7 @@ from metagen import MetadataGenerator
 from models import User
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, origins="*", supports_credentials=True, allow_private_network=True)
 
 app.secret_key = os.environ['SECRET_KEY']
 
