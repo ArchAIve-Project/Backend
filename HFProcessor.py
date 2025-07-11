@@ -68,7 +68,7 @@ class FaceRecognition:
 
     @staticmethod
     def detect_face_crops(img_path) -> list[Image.Image] | None:
-        img = Image.open(img_path)
+        img = Image.open(img_path).convert("RGB")
         boxes, _ = FaceRecognition.mtcnn.detect(img)
         if boxes is None or len(boxes) == 0:
             return None
