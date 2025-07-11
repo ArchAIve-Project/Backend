@@ -468,88 +468,40 @@ class Batch(DIRepresentable):
         if not isinstance(confirmed, list):
             raise TypeError("BATCH INIT ERROR: 'confirmed' must be a list of Artefact or str.")
         
-        unprocessedIDs = []
-        unprocessedObjects = []
+        unprocessedData = {}
+        processedData = {}
+        confirmedData = {}
         
-        processedIDs = []
-        processedObjects = []
-        
-        confirmedIDs = []
-        confirmedObjects = []
-        
-        expected = None
-        for item in unprocessed:
-            if isinstance(item, Artefact):
-                if expected != None and expected != 'artefact':
-                    raise Exception("BATCH INIT ERROR: Expected all unprocessed items to be of type 'str'.")
-                
-                unprocessedIDs.append(item.id)
-                unprocessedObjects.append(item)
-                
-                if expected is None:
-                    expected = 'artefact'
-            elif isinstance(item, str):
-                if expected != None and expected != 'str':
-                    raise Exception("BATCH INIT ERROR: Expected all unprocessed items to be of type 'Artefact'.")
-                
-                unprocessedIDs.append(item)
-                
-                if expected is None:
-                    expected = 'str'
+        for artefactItem in unprocessed:
+            if isinstance(artefactItem, Artefact):
+                unprocessedData[artefactItem.id] = artefactItem
+            elif isinstance(artefactItem, str):
+                unprocessedData[artefactItem] = None
             else:
-                raise Exception("BATCH INIT ERROR: Unprocessed items must be of type 'Artefact' or 'str'.")
+                raise TypeError("BATCH INIT ERROR: 'unprocessed' list must contain Artefact objects or strings representing Artefact IDs.")
         
-        for item in processed:
-            if isinstance(item, Artefact):
-                if expected != None and expected != 'artefact':
-                    raise Exception("BATCH INIT ERROR: Expected all processed items to be of type 'str'.")
-                
-                processedIDs.append(item.id)
-                processedObjects.append(item)
-                
-                if expected is None:
-                    expected = 'artefact'
-            elif isinstance(item, str):
-                if expected != None and expected != 'str':
-                    raise Exception("BATCH INIT ERROR: Expected all processed items to be of type 'Artefact'.")
-                
-                processedIDs.append(item)
-                
-                if expected is None:
-                    expected = 'str'
+        for artefactItem in processed:
+            if isinstance(artefactItem, Artefact):
+                processedData[artefactItem.id] = artefactItem
+            elif isinstance(artefactItem, str):
+                processedData[artefactItem] = None
             else:
-                raise Exception("BATCH INIT ERROR: Processed items must be of type 'Artefact' or 'str'.")
+                raise TypeError("BATCH INIT ERROR: 'processed' list must contain Artefact objects or strings representing Artefact IDs.")
         
-        for item in confirmed:
-            if isinstance(item, Artefact):
-                if expected != None and expected != 'artefact':
-                    raise Exception("BATCH INIT ERROR: Expected all confirmed items to be of type 'str'.")
-                
-                confirmedIDs.append(item.id)
-                confirmedObjects.append(item)
-                
-                if expected is None:
-                    expected = 'artefact'
-            elif isinstance(item, str):
-                if expected != None and expected != 'str':
-                    raise Exception("BATCH INIT ERROR: Expected all confirmed items to be of type 'Artefact'.")
-                
-                confirmedIDs.append(item)
-                
-                if expected is None:
-                    expected = 'str'
+        for artefactItem in confirmed:
+            if isinstance(artefactItem, Artefact):
+                confirmedData[artefactItem.id] = artefactItem
+            elif isinstance(artefactItem, str):
+                confirmedData[artefactItem] = None
             else:
-                raise Exception("BATCH INIT ERROR: Confirmed items must be of type 'Artefact' or 'str'.")
-
+                raise TypeError("BATCH INIT ERROR: 'confirmed' list must contain Artefact objects or strings representing Artefact IDs.")
+        
         self.id: str = id
         self.userID: str = userID
-        self.processed: List[str] = processedIDs
-        self.unprocessed: List[str] = unprocessedIDs
-        self.confirmed: List[str] = confirmedIDs
+        self.unprocessed: Dict[str, Artefact | None] = unprocessedData
+        self.processed: Dict[str, Artefact | None] = processedData
+        self.confirmed: Dict[str, Artefact | None] = confirmedData
         self.user: User | None = None
-        self.processedObjects: List[Artefact] | None = None if len(processedObjects) == 0 else processedObjects
-        self.unprocessedObjects: List[Artefact] | None = None if len(unprocessedObjects) == 0 else unprocessedObjects
-        self.confirmedObjects: List[Artefact] | None = None if len(confirmedObjects) == 0 else confirmedObjects
         self.created: str = created
         self.originRef = Batch.ref(self.id)
 
@@ -558,21 +510,17 @@ class Batch(DIRepresentable):
             if self.userID is None:
                 raise Exception("BATCH SAVE ERROR: Batch does not have a userID set.")
             
-            allIDs = []
-            for id in self.unprocessed:
-                if id in allIDs:
-                    raise Exception("BATCH SAVE ERROR: Duplicate unprocessed artefact ID found: {}".format(id))
-                allIDs.append(id)
-
-            for id in self.processed:
-                if id in allIDs:
-                    raise Exception("BATCH SAVE ERROR: Duplicate processed artefact ID found: {}".format(id))
-                allIDs.append(id)
+            data = User.load(self.userID)
+            if data is None:
+                raise Exception("BATCH SAVE ERROR: User with ID '{}' does not exist.".format(self.userID))
+            del data  # We don't need the user data here, just checking existence
             
-            for id in self.confirmed:
-                if id in allIDs:
-                    raise Exception("BATCH SAVE ERROR: Duplicate confirmed artefact ID found: {}".format(id))
-                allIDs.append(id)
+            allIDs = []
+            for stage in [self.unprocessed, self.processed, self.confirmed]:
+                for id in stage:
+                    if id in allIDs:
+                        raise Exception("BATCH SAVE ERROR: Duplicate Artefact ID '{}' from stage '{}' found.".format(id, stage))
+                    allIDs.append(id)
         
         return DI.save(self.represent(), self.originRef)
 
@@ -580,18 +528,18 @@ class Batch(DIRepresentable):
         return {
             "id": self.id,
             "userID": self.userID,
-            "unprocessed": self.unprocessed,
-            "processed": self.processed,
-            "confirmed": self.confirmed,
+            "unprocessed": list(self.unprocessed.keys()),
+            "processed": list(self.processed.keys()),
+            "confirmed": list(self.confirmed.keys()),
             "created": self.created
         }
     
     def __str__(self):
         completeData = self.represent()
         completeData['user'] = self.user.represent() if self.user is not None else None
-        completeData['unprocessedObjects'] = [art.represent() for art in self.unprocessedObjects] if self.unprocessedObjects is not None else []
-        completeData['processedObjects'] = [art.represent() for art in self.processedObjects] if self.processedObjects is not None else []
-        completeData['confirmedObjects'] = [art.represent() for art in self.confirmedObjects] if self.confirmedObjects is not None else []
+        completeData['unprocessed'] = {id: (self.unprocessed[id].represent() if isinstance(self.unprocessed[id], Artefact) else None) for id in self.unprocessed.keys()}
+        completeData['processed'] = {id: (self.processed[id].represent() if isinstance(self.processed[id], Artefact) else None) for id in self.processed.keys()}
+        completeData['confirmed'] = {id: (self.confirmed[id].represent() if isinstance(self.confirmed[id], Artefact) else None) for id in self.confirmed.keys()}
         
         return str(completeData)
     
@@ -607,32 +555,13 @@ class Batch(DIRepresentable):
         if not (unprocessed or processed or confirmed):
             raise Exception("BATCH GETARTEFACTS ERROR: At least one of unprocessed, processed, or confirmed must be True.")
         
-        if unprocessed:
-            self.unprocessedObjects = []
-            for id in self.unprocessed:
-                art = Artefact.load(id, includeMetadata=metadataRequired)
-                if not isinstance(art, Artefact):
-                    raise Exception("BATCH GETARTEFACTS ERROR: Failed to load unprocessed artefact; response: {}".format(art))
-                
-                self.unprocessedObjects.append(art)
-        
-        if processed:
-            self.processedObjects = []
-            for id in self.processed:
-                art = Artefact.load(id, includeMetadata=metadataRequired)
-                if not isinstance(art, Artefact):
-                    raise Exception("BATCH GETARTEFACTS ERROR: Failed to load processed artefact; response: {}".format(art))
-                
-                self.processedObjects.append(art)
-        
-        if confirmed:
-            self.confirmedObjects = []
-            for id in self.confirmed:
-                art = Artefact.load(id, includeMetadata=metadataRequired)
-                if not isinstance(art, Artefact):
-                    raise Exception("BATCH GETARTEFACTS ERROR: Failed to load confirmed artefact; response: {}".format(art))
-                
-                self.confirmedObjects.append(art)
+        for stageDict in [self.unprocessed, self.processed, self.confirmed]:
+            for id in stageDict:
+                if stageDict[id] is None:
+                    data = Artefact.load(id=id, includeMetadata=metadataRequired)
+                    if not isinstance(data, Artefact):
+                        raise Exception("BATCH GETARTEFACTS ERROR: Failed to load Artefact with ID '{}'; response: {}".format(id, data))
+                    stageDict[id] = data
         
         return True
     
@@ -641,12 +570,51 @@ class Batch(DIRepresentable):
         if to == False:
             raise Exception("BATCH ADD ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
         
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        artefactObject = artefact if isinstance(artefact, Artefact) else None
+        
+        if self.has(artefactID):
+            raise Exception("BATCH ADD ERROR: Artefact with ID '{}' already exists in the batch.".format(artefactID))
+        
         if to == Batch.Stage.UNPROCESSED:
-            self.unprocessed.append(artefact.id if isinstance(artefact, Artefact) else artefact)
+            self.unprocessed[artefactID] = artefactObject
         elif to == Batch.Stage.PROCESSED:
-            self.processed.append(artefact.id if isinstance(artefact, Artefact) else artefact)
+            self.processed[artefactID] = artefactObject
         elif to == Batch.Stage.CONFIRMED:
-            self.confirmed.append(artefact.id if isinstance(artefact, Artefact) else artefact)
+            self.confirmed[artefactID] = artefactObject
+        
+        return True
+    
+    def has(self, artefact: Artefact | str) -> bool: 
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        
+        allIDs = list(self.unprocessed.keys()) + list(self.processed.keys()) + list(self.confirmed.keys())
+        return artefactID in allIDs
+    
+    def move(self, artefact: Artefact | str, to: 'Batch.Stage') -> bool:
+        to = Batch.Stage.validateAndReturn(to)
+        if to == False:
+            raise Exception("BATCH MOVE ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
+        
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        artefactObject = artefact if isinstance(artefact, Artefact) else None
+        
+        if not self.has(artefactID):
+            raise Exception("BATCH MOVE ERROR: Artefact with ID '{}' does not exist in the batch.".format(artefactID))
+        
+        # Find which stage the artefact is currently in
+        for stage in [self.unprocessed, self.processed, self.confirmed]:
+            if artefactID in stage:
+                del stage[artefactID]
+                break
+        
+        # Add the artefact to the new stage
+        if to == Batch.Stage.UNPROCESSED:
+            self.unprocessed[artefactID] = artefactObject
+        elif to == Batch.Stage.PROCESSED:
+            self.processed[artefactID] = artefactObject
+        elif to == Batch.Stage.CONFIRMED:
+            self.confirmed[artefactID] = artefactObject
         
         return True
 
@@ -666,7 +634,7 @@ class Batch(DIRepresentable):
             data['processed'] = []
         if not isinstance(data['confirmed'], list):
             data['confirmed'] = []
-
+        
         return Batch(
             userID=data['userID'],
             unprocessed=data['unprocessed'],
@@ -957,21 +925,21 @@ class User(DIRepresentable):
         return Ref("users", id)
 
 if __name__ == "__main__":
-    data = {
-        "traditional_chinese": "傳統中文",
-        "correction_applied": True,
-        "pre_correction_accuracy": "Pre-correction accuracy",
-        "post_correction_accuracy": "Post-correction accuracy",
-        "simplified_chinese": "简体中文",
-        "english_translation": "English translation",
-        "summary": "Summary of the artefact",
-        "ner_labels": "NER labels for the artefact"
-    }
+    # data = {
+    #     "traditional_chinese": "傳統中文",
+    #     "correction_applied": True,
+    #     "pre_correction_accuracy": "Pre-correction accuracy",
+    #     "post_correction_accuracy": "Post-correction accuracy",
+    #     "simplified_chinese": "简体中文",
+    #     "english_translation": "English translation",
+    #     "summary": "Summary of the artefact",
+    #     "ner_labels": "NER labels for the artefact"
+    # }
 
     DI.setup()
-    art = Artefact("hello", "image.png", data)
+    # art = Artefact("hello", "image.png", data)
 
-    print(art)
+    # print(art)
 
     while True:
         try:
