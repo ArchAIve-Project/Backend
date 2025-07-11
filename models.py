@@ -293,10 +293,11 @@ class MMData(DIRepresentable):
         return Ref("artefacts", artefactID, "metadata")
 
 class HFData(DIRepresentable):
-    def __init__(self, artefactID: str, faceFiles: list[str], caption: str):
+    def __init__(self, artefactID: str, faceFiles: list[str], caption: str, addInfo: str=None):
         self.artefactID = artefactID
         self.faceFiles = faceFiles
         self.caption = caption
+        self.addInfo = addInfo
         self.originRef = HFData.ref(artefactID)
 
     def save(self) -> bool:
@@ -305,12 +306,13 @@ class HFData(DIRepresentable):
     def represent(self) -> Dict[str, Any]:
         return {
             "faceFiles": self.faceFiles,
-            "caption": self.caption
+            "caption": self.caption,
+            "addInfo": self.addInfo
         }
 
     @staticmethod
     def rawLoad(data: Dict[str, Any], artefactID: str) -> 'HFData':
-        requiredParams = ['faceFiles', 'caption']
+        requiredParams = ['faceFiles', 'caption', 'addInfo']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam == 'faceFiles':
@@ -320,8 +322,9 @@ class HFData(DIRepresentable):
 
         return HFData(
             artefactID=artefactID,
-            faceFiles=data['faceFiles'],
-            caption=data['caption']
+            faceFiles=data.get('faceFiles', []),
+            caption=data.get('caption'),
+            addInfo=data.get('addInfo', None)
         )
 
     @staticmethod
