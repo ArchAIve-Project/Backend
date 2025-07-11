@@ -409,6 +409,13 @@ class Batch(DIRepresentable):
             processed = []
         if confirmed is None:
             confirmed = []
+
+        if not isinstance(unprocessed, list):
+            raise TypeError("BATCH INIT ERROR: 'unprocessed' must be a list of Artefact or str.")
+        if not isinstance(processed, list):
+            raise TypeError("BATCH INIT ERROR: 'processed' must be a list of Artefact or str.")
+        if not isinstance(confirmed, list):
+            raise TypeError("BATCH INIT ERROR: 'confirmed' must be a list of Artefact or str.")
         
         unprocessedIDs = []
         unprocessedObjects = []
