@@ -79,7 +79,7 @@ if __name__ == "__main__":
     
     # Setup ModelStore
     ModelStore.setup(
-        autoLoad=True,
+        autoLoad=False,
         ccr=CCRPipeline.loadChineseClassifier,
         ccrCharFilter=CCRPipeline.loadBinaryClassifier,
         ner=NERPipeline.load_model,
