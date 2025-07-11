@@ -1,4 +1,5 @@
 from database import DI, DIRepresentable, DIError
+from fm import File, FileManager
 from utils import Ref
 from services import Universal
 from typing import List, Dict, Any
@@ -32,6 +33,17 @@ class Artefact(DIRepresentable):
     
     def destroy(self):
         return DI.save(None, self.originRef)
+    
+    def getFMFile(self) -> File:
+        return File(self.image, "artefacts")
+    
+    def fmSave(self):
+        fmFile = self.getFMFile()
+        return FileManager.save(fmFile.store, fmFile.filename)
+    
+    def fmDelete(self):
+        fmFile = self.getFMFile()
+        return FileManager.delete(file=fmFile)
 
     def represent(self) -> Dict[str, Any]:
         return {
@@ -70,13 +82,16 @@ class Artefact(DIRepresentable):
         return output
 
     @staticmethod
-    def load(id: str = None, includeMetadata: bool=True) -> 'List[Artefact] | Artefact | None':
+    def load(id: str = None, name: str=None, image: str=None, includeMetadata: bool=True) -> 'List[Artefact] | Artefact | None':
         if id is not None:
             data = DI.load(Artefact.ref(id))
             if isinstance(data, DIError):
                 raise Exception("ARTEFACT LOAD ERROR: DIError occurred: {}".format(data))
             if data is None:
-                return None
+                if name is not None or image is not None:
+                    return Artefact.load(name=name, image=image)
+                else:
+                    return None
             if not isinstance(data, dict):
                 raise Exception("ARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
             
@@ -84,7 +99,7 @@ class Artefact(DIRepresentable):
         else:
             data = DI.load(Ref("artefacts"))
             if data == None:
-                return None
+                return []
             if isinstance(data, DIError):
                 raise Exception("ARTEFACT LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
@@ -95,8 +110,26 @@ class Artefact(DIRepresentable):
                 if isinstance(data[id], dict):
                     artefacts[id] = Artefact.rawLoad(data[id], includeMetadata)
             
-            return list(artefacts.values())
-        
+            if name is None and image is None:
+                return list(artefacts.values())
+            
+            for artefactID in artefacts:
+                targetArtefact = artefacts[artefactID]
+                if name != None and targetArtefact.name == name:
+                    return targetArtefact
+                elif image != None and targetArtefact.image == image:
+                    return targetArtefact
+            
+            return None
+    
+    @staticmethod
+    def fromFMFile(file: File) -> 'Artefact | None':
+        return Artefact(
+            name=file.filenameWithoutExtension(),
+            image=file.filename,
+            metadata=None
+        )
+
     @staticmethod
     def ref(id: str) -> Ref:
         return Ref("artefacts", id)
