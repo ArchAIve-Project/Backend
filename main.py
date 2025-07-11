@@ -15,10 +15,10 @@ from NERPipeline import NERPipeline
 from cnnclassifier import ImageClassifier
 from captioner import ImageCaptioning, Vocabulary
 from metagen import MetadataGenerator
-from models import User
+from models import User, Artefact, Metadata
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, origins="*", supports_credentials=True, allow_private_network=True)
 
 app.secret_key = os.environ['SECRET_KEY']
 
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     
     # Setup ModelStore
     ModelStore.setup(
-        autoLoad=False,
+        autoLoad=True,
         ccr=CCRPipeline.loadChineseClassifier,
         ccrCharFilter=CCRPipeline.loadBinaryClassifier,
         ner=NERPipeline.load_model,

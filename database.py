@@ -279,7 +279,7 @@ class DI:
             
             if dumpRequired:
                 with open(DI.localFile, "w") as f:
-                    json.dump(localData, f)
+                    json.dump(localData, f, indent=4)
                 
                 # print("Dumped data '{}' to '{}'".format(payload, ref))
         except Exception as e:
