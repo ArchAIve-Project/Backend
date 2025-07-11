@@ -3,24 +3,29 @@ from fm import File, FileManager
 from utils import Ref
 from services import Universal
 from typing import List, Dict, Any
+from datetime import datetime 
 
 class Artefact(DIRepresentable):
-    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, id: str = None):
+    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
             created = Universal.utcNowString()
-        if isinstance(metadata, dict):
-            metadata = Metadata.fromMetagen(id, metadata)
-        if not isinstance(metadata, Metadata):
-            metadata = Metadata(artefactID=id)
+        if metadataLoaded:
+            if isinstance(metadata, dict):
+                metadata = Metadata.fromMetagen(id, metadata)
+            if not isinstance(metadata, Metadata):
+                metadata = Metadata(artefactID=id)
+        else:
+            metadata = None
 
         self.id = id
         self.name = name
         self.image = image
         self.public = public
         self.created = created
-        self.metadata: Metadata = metadata
+        self.metadata: Metadata | None = metadata
+        self.metadataLoaded: bool = metadataLoaded
         self.originRef = Artefact.ref(self.id)
     
     def save(self) -> bool:
@@ -47,11 +52,11 @@ class Artefact(DIRepresentable):
             'name': self.name,
             'image': self.image,
             'created': self.created,
-            'metadata': self.metadata.represent() if self.metadata is not None else {}
+            'metadata': self.metadata.represent() if self.metadata is not None else None
         }
 
     @staticmethod
-    def rawLoad(data):
+    def rawLoad(data, includeMetadata: bool=True):
         requiredParams = ['public', 'name', 'image', 'created', 'metadata', 'id']
         for param in requiredParams:
             if param not in data:
@@ -61,7 +66,7 @@ class Artefact(DIRepresentable):
                     data[param] = None
 
         metadata = None
-        if isinstance(data['metadata'], dict):
+        if includeMetadata and isinstance(data['metadata'], dict):
             metadata = Metadata.rawLoad(data['id'], data['metadata'])
 
         output = Artefact(
@@ -69,14 +74,15 @@ class Artefact(DIRepresentable):
             image=data['image'],
             metadata=metadata,
             public=data['public'],
-            created=data['created'], 
+            created=data['created'],
+            metadataLoaded=includeMetadata,
             id=data['id']
         )
 
         return output
 
     @staticmethod
-    def load(id: str = None, name: str=None, image: str=None) -> 'List[Artefact] | Artefact | None':
+    def load(id: str = None, name: str=None, image: str=None, includeMetadata: bool=True) -> 'List[Artefact] | Artefact | None':
         if id is not None:
             data = DI.load(Artefact.ref(id))
             if isinstance(data, DIError):
@@ -89,7 +95,7 @@ class Artefact(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("ARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
             
-            return Artefact.rawLoad(data)
+            return Artefact.rawLoad(data, includeMetadata)
         else:
             data = DI.load(Ref("artefacts"))
             if data == None:
@@ -102,7 +108,7 @@ class Artefact(DIRepresentable):
             artefacts: Dict[str, Artefact] = {}
             for id in data:
                 if isinstance(data[id], dict):
-                    artefacts[id] = Artefact.rawLoad(data[id])
+                    artefacts[id] = Artefact.rawLoad(data[id], includeMetadata)
             
             if name is None and image is None:
                 return list(artefacts.values())
@@ -332,6 +338,380 @@ class HFData(DIRepresentable):
     @staticmethod
     def ref(artefactID: str) -> Ref:
         return Ref("artefacts", artefactID, "metadata")
+    
+class Book(DIRepresentable):
+    def __init__(self, title: str, subtitle: str, mmIDs: List[str], id: str=None):
+        if id is None:
+            id = Universal.generateUniqueID()
+        
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.mmIDs = mmIDs
+        self.originRef = Book.ref(self.id)
+
+    def save(self) -> bool:
+        return DI.save(self.represent(), self.originRef)
+
+    def represent(self) -> Dict[str, Any]:
+        return {
+            "title": self.title,
+            "subtitle": self.subtitle,
+            "mmIDs": self.mmIDs,
+            "id": self.id
+        }
+    
+    @staticmethod
+    def rawLoad(data: dict) -> 'Book':
+        reqParams = ['title', 'subtitle', 'mmIDs', 'id']
+        for reqParam in reqParams:
+            if reqParam not in data:
+                if reqParam == 'mmIDs':
+                    data[reqParam] = []
+                else:
+                    data[reqParam] = None
+        
+        return Book(
+            title=data.get('title'),
+            subtitle=data.get('subtitle'),
+            mmIDs=data.get('mmIDs', []),
+            id=data.get('id')
+        )
+    
+    @staticmethod
+    def load(id: str=None, title: str=None, withMMID: str=None) -> 'Book | List[Book] | None':
+        '''
+        Load a book by its ID, title, or MMID.
+        If id is provided, it loads the specific book.
+        If title is provided, it searches for a book with that title.
+        If withMMID is provided, it searches for a book that contains that MMID in its mmIDs list.
+        If neither id nor title is provided, it loads all books and returns the first one that matches the criteria.
+        '''
+        if id != None:
+            data = DI.load(Book.ref(id))
+            if data is None:
+                if title is not None or withMMID is not None:
+                    return Book.load(title=title, withMMID=withMMID)
+                else:
+                    return None
+            if isinstance(data, DIError):
+                raise Exception("BOOK LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("BOOK LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+
+            return Book.rawLoad(data)
+
+        else:
+            data = DI.load(Ref("books"))
+            if data is None:
+                return None
+            if isinstance(data, DIError):
+                raise Exception("BOOK LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("BOOK LOAD ERROR: Failed to load dictionary books data; response: {}".format(data))
+
+            books: Dict[str, Book] = {}
+            for id in data:
+                if isinstance(data[id], dict):
+                    books[id] = Book.rawLoad(data[id])
+            
+            if title is None and withMMID is None:
+                return list(books.values())
+            
+            for book in books.values():
+                if title is not None and book.title == title:
+                    return book
+                elif withMMID is not None and withMMID in book.mmIDs:
+                    return book
+
+            return None
+
+    @staticmethod
+    def ref(id: str):
+        return Ref("books", id)
+
+class Batch(DIRepresentable):
+    def __init__(self, userID: str, unprocessed: List[Artefact | str]=None, processed: List[Artefact | str]=None, confirmed: List[Artefact | str]=None, created: str=None, id: str=None):
+        if id is None:
+            id = Universal.generateUniqueID()
+        if created is None:
+            created = Universal.utcNowString()
+        if unprocessed is None:
+            unprocessed = []
+        if processed is None:
+            processed = []
+        if confirmed is None:
+            confirmed = []
+
+        if not isinstance(unprocessed, list):
+            raise TypeError("BATCH INIT ERROR: 'unprocessed' must be a list of Artefact or str.")
+        if not isinstance(processed, list):
+            raise TypeError("BATCH INIT ERROR: 'processed' must be a list of Artefact or str.")
+        if not isinstance(confirmed, list):
+            raise TypeError("BATCH INIT ERROR: 'confirmed' must be a list of Artefact or str.")
+        
+        unprocessedIDs = []
+        unprocessedObjects = []
+        
+        processedIDs = []
+        processedObjects = []
+        
+        confirmedIDs = []
+        confirmedObjects = []
+        
+        expected = None
+        for item in unprocessed:
+            if isinstance(item, Artefact):
+                if expected != None and expected != 'artefact':
+                    raise Exception("BATCH INIT ERROR: Expected all unprocessed items to be of type 'str'.")
+                
+                unprocessedIDs.append(item.id)
+                unprocessedObjects.append(item)
+                
+                if expected is None:
+                    expected = 'artefact'
+            elif isinstance(item, str):
+                if expected != None and expected != 'str':
+                    raise Exception("BATCH INIT ERROR: Expected all unprocessed items to be of type 'Artefact'.")
+                
+                unprocessedIDs.append(item)
+                
+                if expected is None:
+                    expected = 'str'
+            else:
+                raise Exception("BATCH INIT ERROR: Unprocessed items must be of type 'Artefact' or 'str'.")
+        
+        for item in processed:
+            if isinstance(item, Artefact):
+                if expected != None and expected != 'artefact':
+                    raise Exception("BATCH INIT ERROR: Expected all processed items to be of type 'str'.")
+                
+                processedIDs.append(item.id)
+                processedObjects.append(item)
+                
+                if expected is None:
+                    expected = 'artefact'
+            elif isinstance(item, str):
+                if expected != None and expected != 'str':
+                    raise Exception("BATCH INIT ERROR: Expected all processed items to be of type 'Artefact'.")
+                
+                processedIDs.append(item)
+                
+                if expected is None:
+                    expected = 'str'
+            else:
+                raise Exception("BATCH INIT ERROR: Processed items must be of type 'Artefact' or 'str'.")
+        
+        for item in confirmed:
+            if isinstance(item, Artefact):
+                if expected != None and expected != 'artefact':
+                    raise Exception("BATCH INIT ERROR: Expected all confirmed items to be of type 'str'.")
+                
+                confirmedIDs.append(item.id)
+                confirmedObjects.append(item)
+                
+                if expected is None:
+                    expected = 'artefact'
+            elif isinstance(item, str):
+                if expected != None and expected != 'str':
+                    raise Exception("BATCH INIT ERROR: Expected all confirmed items to be of type 'Artefact'.")
+                
+                confirmedIDs.append(item)
+                
+                if expected is None:
+                    expected = 'str'
+            else:
+                raise Exception("BATCH INIT ERROR: Confirmed items must be of type 'Artefact' or 'str'.")
+
+        self.id: str = id
+        self.userID: str = userID
+        self.processed: List[str] = processedIDs
+        self.unprocessed: List[str] = unprocessedIDs
+        self.confirmed: List[str] = confirmedIDs
+        self.user: User | None = None
+        self.processedObjects: List[Artefact] | None = None if len(processedObjects) == 0 else processedObjects
+        self.unprocessedObjects: List[Artefact] | None = None if len(unprocessedObjects) == 0 else unprocessedObjects
+        self.confirmedObjects: List[Artefact] | None = None if len(confirmedObjects) == 0 else confirmedObjects
+        self.created: str = created
+        self.originRef = Batch.ref(self.id)
+
+    def save(self, checkIntegrity: bool=True) -> bool:
+        if checkIntegrity:
+            if self.userID is None:
+                raise Exception("BATCH SAVE ERROR: Batch does not have a userID set.")
+            
+            allIDs = []
+            for id in self.unprocessed:
+                if id in allIDs:
+                    raise Exception("BATCH SAVE ERROR: Duplicate unprocessed artefact ID found: {}".format(id))
+                allIDs.append(id)
+
+            for id in self.processed:
+                if id in allIDs:
+                    raise Exception("BATCH SAVE ERROR: Duplicate processed artefact ID found: {}".format(id))
+                allIDs.append(id)
+            
+            for id in self.confirmed:
+                if id in allIDs:
+                    raise Exception("BATCH SAVE ERROR: Duplicate confirmed artefact ID found: {}".format(id))
+                allIDs.append(id)
+        
+        return DI.save(self.represent(), self.originRef)
+
+    def represent(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "userID": self.userID,
+            "unprocessed": self.unprocessed,
+            "processed": self.processed,
+            "confirmed": self.confirmed,
+            "created": self.created
+        }
+    
+    def __str__(self):
+        completeData = self.represent()
+        completeData['user'] = self.user.represent() if self.user is not None else None
+        completeData['unprocessedObjects'] = [art.represent() for art in self.unprocessedObjects] if self.unprocessedObjects is not None else []
+        completeData['processedObjects'] = [art.represent() for art in self.processedObjects] if self.processedObjects is not None else []
+        completeData['confirmedObjects'] = [art.represent() for art in self.confirmedObjects] if self.confirmedObjects is not None else []
+        
+        return str(completeData)
+    
+    def getUser(self) -> bool:
+        if self.userID is None:
+            raise Exception("BATCH GETUSER ERROR: Batch does not have a userID set.")
+        
+        self.user = User.load(id=self.userID)
+        
+        return True if isinstance(self.user, User) else False
+    
+    def getArtefacts(self, unprocessed: bool=True, processed: bool=True, confirmed: bool=True, metadataRequired: bool=False) -> bool:
+        if not (unprocessed or processed or confirmed):
+            raise Exception("BATCH GETARTEFACTS ERROR: At least one of unprocessed, processed, or confirmed must be True.")
+        
+        if unprocessed:
+            self.unprocessedObjects = []
+            for id in self.unprocessed:
+                art = Artefact.load(id, includeMetadata=metadataRequired)
+                if not isinstance(art, Artefact):
+                    raise Exception("BATCH GETARTEFACTS ERROR: Failed to load unprocessed artefact; response: {}".format(art))
+                
+                self.unprocessedObjects.append(art)
+        
+        if processed:
+            self.processedObjects = []
+            for id in self.processed:
+                art = Artefact.load(id, includeMetadata=metadataRequired)
+                if not isinstance(art, Artefact):
+                    raise Exception("BATCH GETARTEFACTS ERROR: Failed to load processed artefact; response: {}".format(art))
+                
+                self.processedObjects.append(art)
+        
+        if confirmed:
+            self.confirmedObjects = []
+            for id in self.confirmed:
+                art = Artefact.load(id, includeMetadata=metadataRequired)
+                if not isinstance(art, Artefact):
+                    raise Exception("BATCH GETARTEFACTS ERROR: Failed to load confirmed artefact; response: {}".format(art))
+                
+                self.confirmedObjects.append(art)
+        
+        return True
+    
+    @staticmethod
+    def rawLoad(data: dict) -> 'Batch':
+        requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'created', 'id']
+        for reqParam in requiredParams:
+            if reqParam not in data or data[reqParam] is None:
+                if reqParam in ['unprocessed', 'processed', 'confirmed']:
+                    data[reqParam] = []
+                else:
+                    data[reqParam] = None
+        
+        if not isinstance(data['unprocessed'], list):
+            data['unprocessed'] = []
+        if not isinstance(data['processed'], list):
+            data['processed'] = []
+        if not isinstance(data['confirmed'], list):
+            data['confirmed'] = []
+
+        return Batch(
+            userID=data['userID'],
+            unprocessed=data['unprocessed'],
+            processed=data['processed'],
+            confirmed=data['confirmed'],
+            created=data['created'],
+            id=data['id']
+        )
+    
+    @staticmethod
+    def load(id: str=None, userID: str=None, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch | Dict[Batch] | None':
+        '''
+        If id found load specific batch from the database
+        else loads all batches from the database and filter based on userID // Gets all batch under that userID
+
+        Args:
+            id (str, optional): The ID of the batch to load. Defaults to None.
+            userID (str, optional): The user ID of the batch to load. Defaults to None.
+            withUser (bool, optional): Whether to include user information in the loaded batch. Defaults to False.
+            withArtefacts (bool, optional): Whether to include artefacts in the loaded batch. Defaults to False.
+
+        Returns:
+            Batch | Dict[Batch] | None: The loaded batch or list of batches, or None if not found.
+        '''
+        if id != None:
+            data = DI.load(Batch.ref(id))
+            if data is None:
+                return None
+            if isinstance(data, DIError):
+                raise Exception("BATCH LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("BATCH LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+
+            batch = Batch.rawLoad(data)
+            
+            return batch
+
+        else:
+            data = DI.load(Ref("batches"))
+            if data is None:
+                return []
+            if isinstance(data, DIError):
+                raise Exception("BATCH LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("BATCH LOAD ERROR: Failed to load dictionary batches data; response: {}".format(data))
+            
+            batches: Dict[str, Batch] = {}
+            for id in data:
+                if isinstance(data[id], dict):
+                    batches[id] = Batch.rawLoad(data[id])
+            
+            if userID is None:
+                for batch in batches.values():
+                    if withUser:
+                        batch.getUser()
+                    if withArtefacts:
+                        batch.getArtefacts(metadataRequired=metadataRequired)
+                
+                return list(batches.values())
+            
+            userBatches: List[Batch] = []
+            for batchID in batches:
+                if batches[batchID].userID == userID:
+                    userBatches.append(batches[batchID])
+            
+            for batch in userBatches:
+                if withUser:
+                    batch.getUser()
+                if withArtefacts:
+                    batch.getArtefacts(metadataRequired=metadataRequired)
+            
+            return userBatches
+    
+    @staticmethod
+    def ref(id: str) -> Ref:
+        return Ref("batches", id)
+
 
 class User(DIRepresentable):
     """User model representation.
