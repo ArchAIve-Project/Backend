@@ -1,8 +1,9 @@
+from enum import Enum
 from database import DI, DIRepresentable, DIError
 from fm import File, FileManager
 from utils import Ref
 from services import Universal
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Literal
 from datetime import datetime 
 
 class Artefact(DIRepresentable):
@@ -431,6 +432,23 @@ class Book(DIRepresentable):
         return Ref("books", id)
 
 class Batch(DIRepresentable):
+    class Stage(str, Enum):
+        UNPROCESSED = "unprocessed"
+        PROCESSED = "processed"
+        CONFIRMED = "confirmed"
+        
+        @staticmethod
+        def validateAndReturn(stage) -> 'Batch.Stage | Literal[False]':
+            if isinstance(stage, Batch.Stage):
+                return stage
+            elif isinstance(stage, str):
+                try:
+                    return Batch.Stage(stage.lower())
+                except ValueError:
+                    return False
+            else:
+                return False
+    
     def __init__(self, userID: str, unprocessed: List[Artefact | str]=None, processed: List[Artefact | str]=None, confirmed: List[Artefact | str]=None, created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
@@ -618,6 +636,20 @@ class Batch(DIRepresentable):
         
         return True
     
+    def add(self, artefact: Artefact | str, to: 'Batch.Stage') -> bool:
+        to = Batch.Stage.validateAndReturn(to)
+        if to == False:
+            raise Exception("BATCH ADD ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
+        
+        if to == Batch.Stage.UNPROCESSED:
+            self.unprocessed.append(artefact.id if isinstance(artefact, Artefact) else artefact)
+        elif to == Batch.Stage.PROCESSED:
+            self.processed.append(artefact.id if isinstance(artefact, Artefact) else artefact)
+        elif to == Batch.Stage.CONFIRMED:
+            self.confirmed.append(artefact.id if isinstance(artefact, Artefact) else artefact)
+        
+        return True
+
     @staticmethod
     def rawLoad(data: dict) -> 'Batch':
         requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'created', 'id']
