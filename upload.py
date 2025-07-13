@@ -8,10 +8,12 @@ from models import Metadata, Batch, Artefact, User
 from fm import FileManager
 from services import ThreadManager
 from metagen import MetadataGenerator
+from database import DI
+from utils import Ref
 
 uploadBP = Blueprint('upload', __name__, url_prefix="/upload")
 
-UPLOAD_FOLDER = "uploads"  # check if folder exists
+UPLOAD_FOLDER = "uploads" 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @uploadBP.route('/', methods=['POST'])
@@ -20,10 +22,6 @@ def upload(user: User):
     accID = session.get('accID')
     if not accID:
         return JSONRes.new(401, "ACCOUNTID FAILED ERROR: Failed to retrieve")
-    
-    print("Request content type:", request.content_type)
-    print("Request files:", request.files)
-    print("Request form:", request.form)
 
     if 'file' not in request.files:
         return JSONRes.new(400, "No file part in the request.")
@@ -57,6 +55,39 @@ def upload(user: User):
     ThreadManager.defaultProcessor.addJob(ImportProcessor.processBatch, batch)
 
     return JSONRes.new(200, "Batch is processing.")
+
+@uploadBP.route('/batches', methods=['GET'])
+@checkSession(strict=True)
+def allBatches():
+    try:
+        data = DI.load(Ref("batches"))
+        if not isinstance(data, dict):
+            return JSONRes.new(500, "BATCH LIST ERROR: Invalid format")
+        return JSONRes.new(200, "All batches retrieved.", raw=data)
+    except Exception as e:
+        Logger.log(f"BATCH LIST ERROR: {e}")
+        return JSONRes.ambiguousError()
+
+
+@uploadBP.route('/userbatches', methods=['GET'])
+@checkSession(strict=True, provideUser=True)
+def userBatches(user: User):
+    try:
+        data = DI.load(Ref("batches"))
+
+        if not isinstance(data, dict):
+            return JSONRes.new(500, "BATCH LIST ERROR: Invalid format")
+        
+        batches = {
+            k: v for k, v in data.items()
+            if v.get("userID") == user.id
+        }
+
+        return JSONRes.new(200, "Batches retrieved.", raw=batches)
+    
+    except Exception as e:
+        
+        return JSONRes.ambiguousError(str(e))
 
 class ImportProcessor:
     @staticmethod
