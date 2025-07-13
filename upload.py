@@ -60,30 +60,29 @@ def upload(user: User):
 @checkSession(strict=True)
 def allBatches():
     try:
-        data = DI.load(Ref("batches"))
-        if not isinstance(data, dict):
-            return JSONRes.new(500, "BATCH LIST ERROR: Invalid format")
-        return JSONRes.new(200, "All batches retrieved.", raw=data)
-    except Exception as e:
+        batches = Batch.load()
+        if not batches:
+            return JSONRes.new(200, "No batches found.", raw={})
+        
+        formatted = {b.id: b.represent() for b in batches}
+        return JSONRes.new(200, "All batches retrieved.", raw=formatted)
+    
+    except Exception as e: 
         Logger.log(f"BATCH LIST ERROR: {e}")
-        return JSONRes.ambiguousError()
+        return JSONRes.ambiguousError(str(e))
 
 
 @uploadBP.route('/userbatches', methods=['GET'])
 @checkSession(strict=True, provideUser=True)
 def userBatches(user: User):
     try:
-        data = DI.load(Ref("batches"))
-
-        if not isinstance(data, dict):
-            return JSONRes.new(500, "BATCH LIST ERROR: Invalid format")
+        batches = Batch.load(userID=user.id, withArtefacts=False)
+        if not batches:
+            return JSONRes.new(200, "No batches found.", raw={})
         
-        batches = {
-            k: v for k, v in data.items()
-            if v.get("userID") == user.id
-        }
+        formatted = {b.id: b.represent() for b in batches}
 
-        return JSONRes.new(200, "Batches retrieved.", raw=batches)
+        return JSONRes.new(200, "Batches retrieved.", raw=formatted)
     
     except Exception as e:
         
