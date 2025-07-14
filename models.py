@@ -484,7 +484,7 @@ class Batch(DIRepresentable):
             else:
                 return False
     
-    def __init__(self, userID: str, batchArtefacts: 'Dict[str, BatchArtefact]'=None, processingJob: str | None=None , cancelled: bool = False, created: str=None, id: str=None):
+    def __init__(self, userID: str, batchArtefacts: 'Dict[str, BatchArtefact]'=None, processingJob: str | None=None, cancelled: bool = False, created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -511,21 +511,22 @@ class Batch(DIRepresentable):
                 raise Exception("BATCH SAVE ERROR: User with ID '{}' does not exist.".format(self.userID))
             del data  # We don't need the user data here, just checking existence
             
-            allIDs = []
-            for stage in [self.unprocessed, self.processed, self.confirmed]:
-                for id in stage:
-                    if id in allIDs:
-                        raise Exception("BATCH SAVE ERROR: Duplicate Artefact ID '{}' from stage '{}' found.".format(id, stage))
-                    allIDs.append(id)
+            for artefactID, batchArt in self.artefacts.items():
+                if not isinstance(batchArt, BatchArtefact):
+                    raise Exception("BATCH SAVE ERROR: Artefact with ID '{}' is not a valid BatchArtefact.".format(artefactID))
+                if batchArt.batchID != self.id:
+                    raise Exception("BATCH SAVE ERROR: Artefact with ID '{}' does not belong to this batch (ID: '{}').".format(artefactID, self.id))
+                if batchArt.artefactID != artefactID:
+                    raise Exception("BATCH SAVE ERROR: Found artefact ID '{}' in BatchArtefact when '{}' was expected.".format(batchArt.artefactID, artefactID))
+                if batchArt.stage not in [Batch.Stage.UNPROCESSED, Batch.Stage.PROCESSED, Batch.Stage.CONFIRMED]:
+                    raise Exception("BATCH SAVE ERROR: Invalid stage '{}' for artefact with ID '{}'.".format(batchArt.stage, artefactID))
         
         return DI.save(self.represent(), self.originRef)
 
     def represent(self) -> Dict[str, Any]:
         return {
             "userID": self.userID,
-            "unprocessed": list(self.unprocessed.keys()),
-            "processed": list(self.processed.keys()),
-            "confirmed": list(self.confirmed.keys()),
+            "artefacts": {id: batchArt.represent() for id, batchArt in self.artefacts.items()},
             'processingJob': self.processingJob,
             'cancelled': self.cancelled,
             "created": self.created
@@ -546,9 +547,6 @@ class Batch(DIRepresentable):
     def __str__(self):
         completeData = self.represent()
         completeData['user'] = self.user.represent() if self.user is not None else None
-        completeData['unprocessed'] = {id: (self.unprocessed[id].represent() if isinstance(self.unprocessed[id], Artefact) else None) for id in self.unprocessed.keys()}
-        completeData['processed'] = {id: (self.processed[id].represent() if isinstance(self.processed[id], Artefact) else None) for id in self.processed.keys()}
-        completeData['confirmed'] = {id: (self.confirmed[id].represent() if isinstance(self.confirmed[id], Artefact) else None) for id in self.confirmed.keys()}
         
         return str(completeData)
     
@@ -562,45 +560,25 @@ class Batch(DIRepresentable):
         
         return True
     
-    def getArtefacts(self, unprocessed: bool=False, processed: bool=False, confirmed: bool=False, metadataRequired: bool=False) -> bool:
-        if not (unprocessed or processed or confirmed):
-            raise Exception("BATCH GETARTEFACTS ERROR: At least one of unprocessed, processed, or confirmed must be True.")
-        
-        for stageDict in [self.unprocessed, self.processed, self.confirmed]:
-            for id in stageDict:
-                if stageDict[id] is None:
-                    data = Artefact.load(id=id, includeMetadata=metadataRequired)
-                    if not isinstance(data, Artefact):
-                        raise Exception("BATCH GETARTEFACTS ERROR: Failed to load Artefact with ID '{}'; response: {}".format(id, data))
-                    stageDict[id] = data
-        
-        return True
-    
-    def add(self, artefact: Artefact | str, to: 'Batch.Stage') -> bool:
+    def add(self, artefact: Artefact | str, to: 'Batch.Stage') -> 'BatchArtefact':
         to = Batch.Stage.validateAndReturn(to)
         if to == False:
             raise Exception("BATCH ADD ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
         
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
-        artefactObject = artefact if isinstance(artefact, Artefact) else None
         
         if self.has(artefactID):
             raise Exception("BATCH ADD ERROR: Artefact with ID '{}' already exists in the batch.".format(artefactID))
         
-        if to == Batch.Stage.UNPROCESSED:
-            self.unprocessed[artefactID] = artefactObject
-        elif to == Batch.Stage.PROCESSED:
-            self.processed[artefactID] = artefactObject
-        elif to == Batch.Stage.CONFIRMED:
-            self.confirmed[artefactID] = artefactObject
+        batchArt = BatchArtefact(self.id, artefactID, to)
+        self.artefacts[artefactID] = batchArt
         
-        return True
+        return batchArt
     
     def has(self, artefact: Artefact | str) -> bool: 
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
-        allIDs = list(self.unprocessed.keys()) + list(self.processed.keys()) + list(self.confirmed.keys())
-        return artefactID in allIDs
+        return artefactID in self.artefacts
     
     def move(self, artefact: Artefact | str, to: 'Batch.Stage') -> bool:
         to = Batch.Stage.validateAndReturn(to)
@@ -608,38 +586,21 @@ class Batch(DIRepresentable):
             raise Exception("BATCH MOVE ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
         
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
-        artefactObject = artefact if isinstance(artefact, Artefact) else None
         
         if not self.has(artefactID):
             raise Exception("BATCH MOVE ERROR: Artefact with ID '{}' does not exist in the batch.".format(artefactID))
         
-        # Find which stage the artefact is currently in
-        for stage in [self.unprocessed, self.processed, self.confirmed]:
-            if artefactID in stage:
-                del stage[artefactID]
-                break
-        
-        # Add the artefact to the new stage
-        if to == Batch.Stage.UNPROCESSED:
-            self.unprocessed[artefactID] = artefactObject
-        elif to == Batch.Stage.PROCESSED:
-            self.processed[artefactID] = artefactObject
-        elif to == Batch.Stage.CONFIRMED:
-            self.confirmed[artefactID] = artefactObject
+        batchArt = self.artefacts[artefactID]
+        if batchArt.stage == to:
+            raise Exception("BATCH MOVE ERROR: Artefact with ID '{}' is already in stage '{}'.".format(artefactID, to))
+        batchArt.stage = to
         
         return True
     
     def where(self, artefact: Artefact | str) -> 'Batch.Stage | None':
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
-        if artefactID in self.unprocessed:
-            return Batch.Stage.UNPROCESSED
-        elif artefactID in self.processed:
-            return Batch.Stage.PROCESSED
-        elif artefactID in self.confirmed:
-            return Batch.Stage.CONFIRMED
-        else:
-            return None
+        return self.artefacts[artefactID].stage if self.has(artefactID) else None
     
     def remove(self, artefact: Artefact | str) -> bool:
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
@@ -647,15 +608,7 @@ class Batch(DIRepresentable):
         if not self.has(artefactID):
             raise Exception("BATCH REMOVE ERROR: Artefact with ID '{}' does not exist in the batch.".format(artefactID))
         
-        # Find which stage the artefact is currently in and remove it
-        stage = self.where(artefactID)
-        if stage == Batch.Stage.UNPROCESSED:
-            del self.unprocessed[artefactID]
-        elif stage == Batch.Stage.PROCESSED:
-            del self.processed[artefactID]
-        elif stage == Batch.Stage.CONFIRMED:
-            del self.confirmed[artefactID]
-        
+        self.artefacts.pop(artefactID, None)
         return True
     
     def cancel(self, autoSave: bool=True):
