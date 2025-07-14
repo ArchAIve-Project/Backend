@@ -8,20 +8,15 @@ from models import Metadata, Batch, Artefact, User
 from fm import FileManager
 from services import ThreadManager
 from metagen import MetadataGenerator
-from database import DI
-from utils import Ref
 
 uploadBP = Blueprint('upload', __name__, url_prefix="/upload")
-
-UPLOAD_FOLDER = "uploads" 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @uploadBP.route('/', methods=['POST'])
 @checkSession(strict=True, provideUser=True)
 def upload(user: User):
     accID = session.get('accID')
     if not accID:
-        return JSONRes.new(401, "ACCOUNTID FAILED ERROR: Failed to retrieve")
+        return JSONRes.unauthorised()
 
     if 'file' not in request.files:
         return JSONRes.new(400, "No file part in the request.")
@@ -30,7 +25,6 @@ def upload(user: User):
     if not files or all(file.filename == '' for file in files):
         return JSONRes.new(400, "No files selected.")
 
-    Logger.log(f"Received files: {[f.filename for f in files]}")
     savedArtefacts = []
 
     for file in files:
@@ -38,7 +32,7 @@ def upload(user: User):
             filename = Universal.generateUniqueID()
             ext = FileOps.getFileExtension(file.filename)
             fullFilename = f"{filename}.{ext}"
-            imagePath = os.path.join(UPLOAD_FOLDER, fullFilename)
+            imagePath = os.path.join("artefacts", fullFilename)
             file.save(imagePath)
 
             artefact = Artefact("testing", imagePath, metadata=None)
@@ -47,11 +41,11 @@ def upload(user: User):
 
     FileManager.save()
 
-    # Create a batch with these artefacts as unprocessed
     batch = Batch(user.id, unprocessed=savedArtefacts, processed=None, confirmed=None)
     batch.save()
 
-    # Start processing
+    # Logger
+
     ThreadManager.defaultProcessor.addJob(ImportProcessor.processBatch, batch)
 
     return JSONRes.new(200, "Batch is processing.")
@@ -75,52 +69,36 @@ def allBatches():
 @uploadBP.route('/userbatches', methods=['GET'])
 @checkSession(strict=True, provideUser=True)
 def userBatches(user: User):
+    Logger.log(f"userBatches called for user id: {user.id}")
     try:
         batches = Batch.load(userID=user.id, withArtefacts=False)
+        Logger.log(f"Loaded batches count: {len(batches) if batches else 0}")
         if not batches:
             return JSONRes.new(200, "No batches found.", raw={})
         
         formatted = {b.id: b.represent() for b in batches}
-
         return JSONRes.new(200, "Batches retrieved.", raw=formatted)
     
     except Exception as e:
-        
+        Logger.log(f"userBatches error: {e}")
         return JSONRes.ambiguousError(str(e))
+    
+@uploadBP.route('/batches/<batchID>', methods=['DELETE'])
+@checkSession(strict=True, provideUser=True)
+def deleteBatch(user: User, batchID: str):
+    try:
+        batch = Batch.load(id=batchID)
+        if not batch:
+            return JSONRes.new("Batch not found.")
 
-class ImportProcessor:
-    @staticmethod
-    def processBatch(batch: Batch, chunk_size=10):
-        batch.getArtefacts(unprocessed=True)
-        unprocessedItems = [a for a in batch.unprocessed.values() if isinstance(a, Artefact)]
-        total = len(unprocessedItems)
-        i = 0
+        if batch.userID != user.id:
+            return JSONRes.unauthorised()
 
-        while i < total:
-            currentChunk = unprocessedItems[i:i + chunk_size]
-            # Submit one job per chunk to the default processor
-            ThreadManager.defaultProcessor.addJob(ImportProcessor.processChunk, currentChunk, batch)
+        batch.getArtefacts(unprocessed=True, processed=True, confirmed=True)
+        batch.destroy()
 
-            # Wait for this chunk to be processed before moving on
-            while not all(artefact.id in batch.processed for artefact in currentChunk):
-                time.sleep(0.5)
+        return JSONRes.new(200, f"Batch {batchID} and artefacts deleted.")
 
-            i += chunk_size
-
-        batch.save()
-        return True
-
-
-    @staticmethod
-    def processChunk(chunk, batch):
-        for artefact in chunk:
-            ImportProcessor.processItem(artefact)
-            batch.move(artefact, Batch.Stage.PROCESSED)
-
-    @staticmethod
-    def processItem(artefact: Artefact):
-        out = MetadataGenerator.generate(artefact.image)
-        artefact.metadata = Metadata.fromMetagen(artefact.id, out)
-        artefact.save()
-        return artefact
-        
+    except Exception as e:
+        Logger.log("DELETE BATCH ERROR: {}".format(e))
+        return JSONRes.ambiguousError()
