@@ -567,6 +567,8 @@ class Batch(DIRepresentable):
             "unprocessed": list(self.unprocessed.keys()),
             "processed": list(self.processed.keys()),
             "confirmed": list(self.confirmed.keys()),
+            'processingJob': self.processingJob,
+            'cancelled': self.cancelled,
             "created": self.created
         }
     
@@ -702,11 +704,13 @@ class Batch(DIRepresentable):
 
     @staticmethod
     def rawLoad(data: dict, batchID: str | None=None) -> 'Batch':
-        requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'created']
+        requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'processingJob', 'cancelled', 'created']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam in ['unprocessed', 'processed', 'confirmed']:
                     data[reqParam] = []
+                elif reqParam in ['cancelled']:
+                    data[reqParam] = False
                 else:
                     data[reqParam] = None
         
@@ -722,6 +726,8 @@ class Batch(DIRepresentable):
             unprocessed=data['unprocessed'],
             processed=data['processed'],
             confirmed=data['confirmed'],
+            processingJob=data['processingJob'],
+            cancelled=data['cancelled'],
             created=data['created'],
             id=batchID
         )
