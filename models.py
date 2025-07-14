@@ -484,7 +484,7 @@ class Batch(DIRepresentable):
             else:
                 return False
     
-    def __init__(self, userID: str, unprocessed: List[Artefact | str]=None, processed: List[Artefact | str]=None, confirmed: List[Artefact | str]=None, created: str=None, id: str=None):
+    def __init__(self, userID: str, unprocessed: List[Artefact | str]=None, processed: List[Artefact | str]=None, confirmed: List[Artefact | str]=None, processingJob: str | None=None , cancelled: bool = False, created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -536,6 +536,8 @@ class Batch(DIRepresentable):
         self.unprocessed: Dict[str, Artefact | None] = unprocessedData
         self.processed: Dict[str, Artefact | None] = processedData
         self.confirmed: Dict[str, Artefact | None] = confirmedData
+        self.processingJob: str | None = processingJob
+        self.cancelled: bool = cancelled
         self.user: User | None = None
         self.created: str = created
         self.originRef = Batch.ref(self.id)
@@ -694,6 +696,9 @@ class Batch(DIRepresentable):
             del self.confirmed[artefactID]
         
         return True
+    
+    def cancel(self):
+        self.cancelled = True
 
     @staticmethod
     def rawLoad(data: dict, batchID: str | None=None) -> 'Batch':
