@@ -1003,7 +1003,68 @@ class User(DIRepresentable):
         return Ref("users", id)
 
 class Category(DIRepresentable):
+    """
+    Represents a collection of artefacts grouped under a specific category.
+
+    Attributes:
+        id (str): Unique identifier for the category.
+        name (str): Name of the category.
+        description (str): Description of the category.
+        members (Dict[str, CategoryArtefact]): Dictionary mapping artefact IDs to CategoryArtefact objects.
+        created (str): ISO timestamp of category creation.
+        originRef (Ref): Reference object for database operations.
+
+    Methods:
+        represent(): Returns a dictionary representation of the category for serialization.
+        save(): Saves the category to the database.
+        reload(): Reloads the category data from the database.
+        add(): Adds an artefact to the category.
+        remove(): Removes an artefact from the category.
+        has(): Checks if an artefact is in the category.
+        get(): Retrieves the CategoryArtefact for a given artefact.
+        cleanMembers(): Removes invalid or missing artefacts from members in a safe manner.
+        loadAllArtefacts(): Loads all artefact objects for the category.
+        rawLoad(): Loads a Category from raw dictionary data.
+        load(): Loads a category by ID, name, or member ID.
+        ref(id): Returns the database reference for the category.
+
+    Sample usage:
+    ```python
+    from models import DI, Category, Artefact
+    DI.setup()
+
+    # Create a new category
+    cat = Category(name="Paintings", description="All painting artefacts")
+    cat.save()
+
+    # Add an artefact to the category
+    artefact = Artefact.load(id="artefact123")
+    cat.add(artefact, reason="Featured in exhibition")
+    cat.save()
+
+    # Load and inspect a category
+    loaded_cat = Category.load(name="Paintings", withArtefacts=True, metadataRequired=True) # loads 'Artefact' objects, which internally loads 'Metadata', internally in 'CategoryArtefact'
+    print(loaded_cat.represent())
+    ```
+
+    Notes:
+        - All artefacts added to a category must exist in the database.
+        - The `members` attribute is a dictionary mapping artefact IDs to CategoryArtefact objects.
+        - Use `save()` after modifying a category to persist changes.
+        - The class supports both direct artefact objects and artefact IDs for member management.
+    """
+    
     def __init__(self, name: str, description: str, members: 'Dict[str, CategoryArtefact]'=None, created: str=None, id: str=None):
+        """Initialize a new Category instance.
+
+        Args:
+            name (str): The name of the category.
+            description (str): A brief description of the category.
+            members (Dict[str, CategoryArtefact], optional): A dictionary of artefacts belonging to the category. Defaults to None.
+            created (str, optional): ISO timestamp of category creation. Defaults to None.
+            id (str, optional): Unique identifier for the category. Defaults to None.
+        """
+        
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -1019,6 +1080,12 @@ class Category(DIRepresentable):
         self.originRef = Category.ref(id)
     
     def represent(self):
+        """Returns a dictionary representation of the category for serialization.
+
+        Returns:
+            dict: A dictionary containing the category's attributes.
+        """
+        
         return {
             "name": self.name,
             "description": self.description,
@@ -1027,9 +1094,26 @@ class Category(DIRepresentable):
         }
     
     def save(self):
+        """Saves the category to the database.
+
+        Returns:
+            bool: True if the save operation was successful, False otherwise.
+        """
+        
         return DI.save(self.represent(), self.originRef)
     
     def reload(self):
+        """Reloads the category data from the database.
+
+        Raises:
+            Exception: If a DIError occurs during loading.
+            Exception: If no data is found for the category.
+            Exception: If the data format is unexpected.
+
+        Returns:
+            bool: True if the reload operation was successful, False otherwise.
+        """
+        
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
             raise Exception("CATEGORY RELOAD ERROR: DIError occurred: {}".format(data))
@@ -1042,6 +1126,26 @@ class Category(DIRepresentable):
         return True
     
     def add(self, artefact: Artefact | str, reason: str, checkIntegrity: bool=True, loadArtefactObject: bool=False, metadataRequired: bool=False) -> bool:
+        """Adds an artefact to the category.
+
+        Args:
+            artefact (Artefact | str): The artefact to add, either as an Artefact object or a string ID.
+            reason (str): The reason for adding the artefact.
+            checkIntegrity (bool, optional): Whether to check the integrity of the artefact. Defaults to True.
+            loadArtefactObject (bool, optional): Whether to load the artefact object. Defaults to False.
+            metadataRequired (bool, optional): Whether metadata is required. Defaults to False.
+
+        Raises:
+            Exception: If 'artefact' is not an Artefact object or a string.
+            Exception: If 'reason' is not a string.
+            Exception: If the artefact already exists in the category.
+            Exception: If the artefact cannot be loaded when checkIntegrity is True.
+            Exception: If an artefact does not exist when loadArtefactObject is True.
+
+        Returns:
+            bool: True if the artefact was added successfully, False otherwise.
+        """
+        
         if not isinstance(artefact, Artefact) and not isinstance(artefact, str):
             raise Exception("CATEGORY ADD ERROR: 'artefact' must be an Artefact object or a string representing the artefact ID.")
         if not isinstance(reason, str):
@@ -1070,6 +1174,19 @@ class Category(DIRepresentable):
         return True
     
     def remove(self, artefact: Artefact | str) -> bool:
+        """Removes an artefact from the category.
+
+        Args:
+            artefact (Artefact | str): The artefact to remove, either as an Artefact object or a string ID.
+
+        Raises:
+            Exception: If 'artefact' is not an Artefact object or a string.
+            Exception: If the artefact does not exist in the category.
+
+        Returns:
+            bool: True if the artefact was removed successfully.
+        """
+        
         if not isinstance(artefact, Artefact) and not isinstance(artefact, str):
             raise Exception("CATEGORY REMOVE ERROR: 'artefact' must be an Artefact object or a string representing the artefact ID.")
         
@@ -1081,6 +1198,18 @@ class Category(DIRepresentable):
         return True
 
     def has(self, artefact: Artefact | str) -> bool:
+        """Checks if the category contains a specific artefact.
+
+        Args:
+            artefact (Artefact | str): The artefact to check, either as an Artefact object or a string ID.
+
+        Raises:
+            Exception: If 'artefact' is not an Artefact object or a string.
+
+        Returns:
+            bool: True if the artefact is in the category, False otherwise.
+        """
+        
         if not isinstance(artefact, Artefact) and not isinstance(artefact, str):
             raise Exception("CATEGORY HAS ERROR: 'artefact' must be an Artefact object or a string representing the artefact ID.")
         
@@ -1088,6 +1217,19 @@ class Category(DIRepresentable):
         return artefactID in self.members
     
     def get(self, artefact: Artefact | str, default: None=None) -> 'CategoryArtefact | None':
+        """Retrieves an artefact from the category.
+
+        Args:
+            artefact (Artefact | str): The artefact to retrieve, either as an Artefact object or a string ID.
+            default (None, optional): The value to return if the artefact is not found. Defaults to None.
+
+        Raises:
+            Exception: If 'artefact' is not an Artefact object or a string.
+
+        Returns:
+            CategoryArtefact | None: The requested artefact, or the default value if not found.
+        """
+        
         if not isinstance(artefact, Artefact) and not isinstance(artefact, str):
             raise Exception("CATEGORY GET ERROR: 'artefact' must be an Artefact object or a string representing the artefact ID.")
         
@@ -1095,6 +1237,12 @@ class Category(DIRepresentable):
         return self.members.get(artefactID, default)
     
     def cleanMembers(self) -> bool:
+        """Cleans up the members of the category by removing any invalid artefacts.
+
+        Returns:
+            bool: True if the cleanup was successful.
+        """
+        
         for artefactID in list(self.members.keys()):
             if not isinstance(self.members[artefactID], CategoryArtefact):
                 del self.members[artefactID]
@@ -1106,6 +1254,19 @@ class Category(DIRepresentable):
         return True
     
     def loadAllArtefacts(self, metadataRequired: bool=False) -> bool:
+        """Loads all artefacts in the category.
+
+        Args:
+            metadataRequired (bool, optional): Whether to include metadata in the loading process. Defaults to False.
+
+        Raises:
+            Exception: If 'self.members' is not a dictionary.
+            Exception: If any member is not a CategoryArtefact.
+
+        Returns:
+            bool: True if all artefacts were loaded successfully.
+        """
+        
         if not isinstance(self.members, dict):
             raise Exception("CATEGORY LOADALLARTEFACTS ERROR: 'members' must be a dictionary of CategoryArtefact objects.")
         
@@ -1120,6 +1281,18 @@ class Category(DIRepresentable):
     
     @staticmethod
     def rawLoad(data: dict, categoryID: str | None=None, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Category':
+        """Loads a category from raw data.
+
+        Args:
+            data (dict): The raw data to load the category from.
+            categoryID (str | None, optional): The ID of the category. Defaults to None.
+            withArtefacts (bool, optional): Whether to include artefacts in the loading process. Defaults to False.
+            metadataRequired (bool, optional): Whether to include metadata in the Artefact loading process. Defaults to False (memory constraints).
+
+        Returns:
+            Category: The loaded category.
+        """
+        
         reqParam = ['name', 'description', 'members', 'created']
         for param in reqParam:
             if param not in data:
@@ -1153,6 +1326,24 @@ class Category(DIRepresentable):
     
     @staticmethod
     def load(id: str=None, name: str=None, withMemberID: str=None, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Category | List[Category] | None':
+        """Loads a category from the data source.
+
+        Args:
+            id (str, optional): Retrieve by ID of the category. Defaults to None.
+            name (str, optional): Retrieve by the name of the category. Defaults to None.
+            withMemberID (str, optional): Retrieve by a category that has a certain member. Defaults to None.
+            withArtefacts (bool, optional): Whether to include artefacts in the loading process. Defaults to False.
+            metadataRequired (bool, optional): Whether to include metadata in the Artefact loading process. Defaults to False (memory constraints).
+
+        Raises:
+            Exception: If an error occurs during loading.
+            Exception: If a DIError occurs during loading.
+            Exception: If the data format is unexpected.
+
+        Returns:
+            Category | List[Category] | None: The loaded category or categories.
+        """
+        
         if id != None:
             data = DI.load(Category.ref(id))
             if data is None:
