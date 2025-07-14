@@ -1079,7 +1079,7 @@ class Category(DIRepresentable):
         self.created = created
         self.originRef = Category.ref(id)
     
-    def represent(self):
+    def represent(self) -> dict:
         """Returns a dictionary representation of the category for serialization.
 
         Returns:
@@ -1387,7 +1387,57 @@ class Category(DIRepresentable):
         return Ref("categories", id)
 
 class CategoryArtefact(DIRepresentable):
+    """
+    Represents the relationship between a Category and an Artefact, including metadata about the association.
+    This can be considered similar to a join table in relational databases, i.e a *..* relationship between Category and Artefact.
+
+    Attributes:
+        categoryID (str): ID of the category this artefact belongs to.
+        artefactID (str): ID of the artefact.
+        reason (str): Reason for including the artefact in the category.
+        added (str): ISO timestamp when the artefact was added to the category.
+        artefact (Artefact | None): The loaded Artefact object, if available.
+        originRef (Ref): Reference object for database operations.
+
+    Methods:
+        getArtefact(): Loads the Artefact object for this CategoryArtefact.
+        represent(): Returns a dictionary representation for serialization.
+        save(): Saves the CategoryArtefact to the database.
+        rawLoad(): Loads a CategoryArtefact from raw dictionary data.
+        load(): Loads a CategoryArtefact by category and artefact.
+        ref(): Returns the database reference for the CategoryArtefact.
+
+    Sample usage:
+    ```python
+    from models import DI, Category, CategoryArtefact, Artefact
+    DI.setup()
+
+    # Load a category and its artefact relationship
+    cat = Category.load(name="Paintings")
+    catArt = cat.get("artefact123") # catArt is of type CategoryArtefact
+    print(catArt.represent())
+
+    # Load the full artefact object
+    catArt.getArtefact(includeMetadata=True) # loads the Artefact object, passing includeMetadata=True to the Artefact.load() method
+    print(catArt.artefact.represent())
+    ```
+
+    Notes:
+        - The `reason` attribute should describe why the artefact is included in the category.
+        - Use `getArtefact()` to load the full Artefact object if needed.
+        - Changes to CategoryArtefact objects should be saved using `save()`.
+    """
+    
     def __init__(self, category: Category | str, artefact: Artefact | str, reason: str, added: str=None):
+        """Initializes a CategoryArtefact instance.
+
+        Args:
+            category (Category | str): The category this artefact belongs to.
+            artefact (Artefact | str): The artefact object or its ID.
+            reason (str): The reason for including the artefact in the category.
+            added (str, optional): ISO timestamp when the artefact was added to the category. Defaults to UTC now timestamp.
+        """
+        
         if added is None:
             added = Universal.utcNowString()
         
@@ -1399,6 +1449,20 @@ class CategoryArtefact(DIRepresentable):
         self.originRef = CategoryArtefact.ref(self.categoryID, self.artefactID)
     
     def getArtefact(self, includeMetadata: bool=False, safeFail: bool=False) -> bool:
+        """Loads the Artefact object for this CategoryArtefact.
+
+        Args:
+            includeMetadata (bool, optional): Whether to include metadata when loading the Artefact. Defaults to False.
+            safeFail (bool, optional): Whether to fail silently if the Artefact cannot be loaded. Defaults to False.
+
+        Raises:
+            Exception: If the artefactID is not a string.
+            Exception: If the Artefact cannot be loaded and safeFail is False.
+
+        Returns:
+            bool: True if the Artefact was loaded successfully, False otherwise (False is returned only if safeFail=True).
+        """
+        
         if not isinstance(self.artefactID, str):
             raise Exception("CATEGORYARTEFACT GETARTEFACT ERROR: Invalid value set for 'artefactID'. Expected a string representing the Artefact ID.")
         
@@ -1411,17 +1475,46 @@ class CategoryArtefact(DIRepresentable):
         
         return True
     
-    def represent(self):
+    def represent(self) -> dict:
+        """Represents the CategoryArtefact instance as a dictionary.
+
+        Returns:
+            dict: The dictionary representation of the CategoryArtefact.
+        """
+        
         return {
             "reason": self.reason,
             "added": self.added
         }
     
     def save(self):
+        """Saves the CategoryArtefact instance.
+
+        Returns:
+            bool: True if the save operation was successful.
+        """
+        
         return DI.save(self.represent(), self.originRef)
     
     @staticmethod
     def rawLoad(category: Category | str, artefact: Artefact | str, data: dict, withArtefact: bool=False, metadataRequired: bool=False) -> 'CategoryArtefact':
+        """Loads a CategoryArtefact instance from raw data.
+
+        Args:
+            category (Category | str): The category this artefact belongs to.
+            artefact (Artefact | str): The artefact object or its ID.
+            data (dict): The raw data to load from.
+            withArtefact (bool, optional): Whether to load the Artefact object when loading. Defaults to False.
+            metadataRequired (bool, optional): Whether metadata is required when loading the Artefact. Defaults to False.
+
+        Raises:
+            Exception: If the categoryID is not a string.
+            Exception: If the artefactID is not a string.
+
+        Returns:
+            CategoryArtefact: The loaded CategoryArtefact instance.
+        """
+        
         reqParams = ['reason', 'added']
         for reqParam in reqParams:
             if reqParam not in data:
@@ -1446,6 +1539,22 @@ class CategoryArtefact(DIRepresentable):
     
     @staticmethod
     def load(category: Category | str, artefact: Artefact | str, withArtefact: bool=False, metadataRequired: bool=False) -> 'CategoryArtefact | None':
+        """Loads a CategoryArtefact instance.
+
+        Args:
+            category (Category | str): The category this artefact belongs to (object or ID).
+            artefact (Artefact | str): The artefact object or its ID.
+            withArtefact (bool, optional): Whether to load the Artefact object when loading. Defaults to False.
+            metadataRequired (bool, optional): Whether metadata is required when loading the Artefact. Defaults to False.
+
+        Raises:
+            Exception: If the categoryID is not a string.
+            Exception: If the artefactID is not a string.
+
+        Returns:
+            CategoryArtefact | None: The loaded CategoryArtefact instance.
+        """
+        
         categoryID = category.id if isinstance(category, Category) else category
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
