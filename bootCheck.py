@@ -1,7 +1,75 @@
 import os
 from importlib.metadata import distributions
 
+class EnvVariable:
+    def __init__(self, name: str, booleanValue: bool, required: bool=True, children: 'list[EnvVariable]'=None):
+        self.name = name
+        self.booleanValue = booleanValue
+        self.required = required
+        self.children = children if children is not None else []
+    
+    def check(self):
+        if self.name not in os.environ and self.required:
+            raise Exception("BOOTCHECK ERROR: Required environment variable '{}' was not found.".format(self.name))
+        
+        if self.booleanValue and os.environ.get(self.name, "False") == "True":
+            if len(self.children) > 0:
+                for child in self.children:
+                    child.check()
+        
+        return self.name if (self.name not in os.environ and not self.required) else True
+    
+    @staticmethod
+    def defaults():
+        return [
+            EnvVariable("LOGGING_ENABLED", True, False),
+            EnvVariable("DEBUG_MODE", True, False),
+            EnvVariable("DEBUG_MS_AUTOLOAD", True, False),
+            EnvVariable("FM_DEBUG_MODE", True, False),
+            EnvVariable("DECORATOR_DEBUG_MODE", True, False),
+            EnvVariable("ARCHSMITH_ENABLED", True, True),
+            EnvVariable("API_KEY", False, True),
+            EnvVariable("SECRET_KEY", False, True),
+            EnvVariable("EMAILING_ENABLED", True, True, [
+                EnvVariable("SENDER_EMAIL", False, True),
+                EnvVariable("SENDER_EMAIL_APP_PASSWORD", False, True)
+            ]),
+            EnvVariable("FireConnEnabled", True, True, [
+                EnvVariable("FireRTDBEnabled", True, False, [
+                    EnvVariable("RTDB_URL", False, True)
+                ]),
+                EnvVariable("FireStorageEnabled", True, False, [
+                    EnvVariable("STORAGE_URL", False, True)
+                ])
+            ]),
+            EnvVariable("LLMINTERFACE_ENABLED", True, True, [
+                EnvVariable("QWEN_API_KEY", False, True),
+                EnvVariable("OPENAI_API_KEY", False, True)
+            ])
+        ]
+
 class BootCheck:
+    dependencyMappings = {
+        "python-dotenv": "python-dotenv",
+        "requests": "requests",
+        "torch": "torch",
+        "torchvision": "torchvision",
+        "flask": "Flask",
+        "flask-limiter": "Flask-Limiter",
+        "flask-cors": "flask-cors",
+        "openai": "openai",
+        "basicsr": "basicsr",
+        "realesrgan": "realesrgan",
+        "passlib": "passlib",
+        "apscheduler": "APScheduler",
+        "firebase-admin": "firebase-admin",
+        "pillow": "pillow",
+        "numpy": "numpy",
+        "facenet-pytorch": "facenet-pytorch",
+        "uuid": "uuid",
+        "transformers": "transformers"
+    }
+    
     @staticmethod
     def getInstallations() -> list:
         pkgs = []
@@ -11,17 +79,7 @@ class BootCheck:
     
     @staticmethod
     def checkDependencies():
-        requiredDependencies = [
-            "Flask",
-            "Flask-Cors",
-            "requests",
-            "python-dotenv",
-            "passlib",
-            "firebase-admin",
-            "getmac",
-            "APScheduler",
-            "Flask-Limiter"
-        ]
+        requiredDependencies = list(BootCheck.dependencyMappings.values())
         
         deps = BootCheck.getInstallations()
         for req in requiredDependencies:
@@ -35,37 +93,15 @@ class BootCheck:
         from dotenv import load_dotenv
         load_dotenv()
         
-        requiredEnvVariables = [
-            "APP_SECRET_KEY",
-            "APIKey",
-            "EMAILING_ENABLED",
-            "RuntimePort",
-            "LOGGING_ENABLED",
-            "FireConnEnabled",
-            "FireRTDBEnabled"
-        ]
-        
-        for var in requiredEnvVariables:
-            if var not in os.environ:
-                raise Exception("BOOTCHECK ERROR: Required environment variable '{}' was not found.".format(var))
-            if var == "EMAILING_ENABLED" and os.environ[var] == "True" and ("SENDER_EMAIL" not in os.environ or "SENDER_EMAIL_APP_PASSWORD" not in os.environ):
-                raise Exception("BOOTCHECK ERROR: 'EMAILING_ENABLED' is True but 'SENDER_EMAIL' and 'SENDER_EMAIL_APP_PASSWORD' are not set.")
-            if var == "FireRTDBEnabled" and os.environ[var] == "True" and ("RTDB_URL" not in os.environ):
-                raise Exception("BOOTCHECK ERROR: 'FireRTDBEnabled' is True but 'RTDB_URL' is not set.")
-        
-        optionalEnvVariables = [
-            "DEBUG_MODE",
-            "DECORATOR_DEBUG_MODE",
-            "DI_FAILOVER_STRATEGY"
-        ]
         notFound = []
-        for var in optionalEnvVariables:
-            if var not in os.environ:
-                notFound.append(var)
+        for var in EnvVariable.defaults():
+            res = var.check()
+            if res != True:
+                notFound.append(res)
         
         if len(notFound) > 0:
             print("BOOTCHECK WARNING: Optional environment variables {} not found.".format(', '.join(notFound)))
-            
+        
         return True
     
     @staticmethod

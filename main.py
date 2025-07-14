@@ -1,4 +1,10 @@
-import os, sys, json
+import os, sys
+from bootCheck import BootCheck
+if not (len(sys.argv) > 1 and sys.argv[1] == "--skip-bootcheck"):
+    BootCheck.check()
+    print("BOOTCHECK: Check complete.")
+del BootCheck
+
 from dotenv import load_dotenv
 load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
@@ -79,7 +85,7 @@ if __name__ == "__main__":
     
     # Setup ModelStore
     ModelStore.setup(
-        autoLoad=True,
+        autoLoad=os.environ.get("DEBUG_MS_AUTOLOAD", "True") == "True",
         ccr=CCRPipeline.loadChineseClassifier,
         ccrCharFilter=CCRPipeline.loadBinaryClassifier,
         ner=NERPipeline.load_model,
@@ -100,6 +106,9 @@ if __name__ == "__main__":
     
     from identity import identityBP
     app.register_blueprint(identityBP)
+
+    from upload import uploadBP
+    app.register_blueprint(uploadBP)
     
     from cdn import cdnBP
     app.register_blueprint(cdnBP)
