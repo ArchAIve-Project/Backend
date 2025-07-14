@@ -1,4 +1,10 @@
-import os, sys, json
+import os, sys
+from bootCheck import BootCheck
+if not (len(sys.argv) > 1 and sys.argv[1] == "--skip-bootcheck"):
+    BootCheck.check()
+    print("BOOTCHECK: Check complete.")
+del BootCheck
+
 from dotenv import load_dotenv
 load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
