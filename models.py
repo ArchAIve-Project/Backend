@@ -484,58 +484,17 @@ class Batch(DIRepresentable):
             else:
                 return False
     
-    def __init__(self, userID: str, unprocessed: List[Artefact | str]=None, processed: List[Artefact | str]=None, confirmed: List[Artefact | str]=None, processingJob: str | None=None , cancelled: bool = False, created: str=None, id: str=None):
+    def __init__(self, userID: str, batchArtefacts: 'Dict[str, BatchArtefact]'=None, processingJob: str | None=None , cancelled: bool = False, created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
             created = Universal.utcNowString()
-        if unprocessed is None:
-            unprocessed = []
-        if processed is None:
-            processed = []
-        if confirmed is None:
-            confirmed = []
-
-        if not isinstance(unprocessed, list):
-            raise TypeError("BATCH INIT ERROR: 'unprocessed' must be a list of Artefact or str.")
-        if not isinstance(processed, list):
-            raise TypeError("BATCH INIT ERROR: 'processed' must be a list of Artefact or str.")
-        if not isinstance(confirmed, list):
-            raise TypeError("BATCH INIT ERROR: 'confirmed' must be a list of Artefact or str.")
-        
-        unprocessedData = {}
-        processedData = {}
-        confirmedData = {}
-        
-        for artefactItem in unprocessed:
-            if isinstance(artefactItem, Artefact):
-                unprocessedData[artefactItem.id] = artefactItem
-            elif isinstance(artefactItem, str):
-                unprocessedData[artefactItem] = None
-            else:
-                raise TypeError("BATCH INIT ERROR: 'unprocessed' list must contain Artefact objects or strings representing Artefact IDs.")
-        
-        for artefactItem in processed:
-            if isinstance(artefactItem, Artefact):
-                processedData[artefactItem.id] = artefactItem
-            elif isinstance(artefactItem, str):
-                processedData[artefactItem] = None
-            else:
-                raise TypeError("BATCH INIT ERROR: 'processed' list must contain Artefact objects or strings representing Artefact IDs.")
-        
-        for artefactItem in confirmed:
-            if isinstance(artefactItem, Artefact):
-                confirmedData[artefactItem.id] = artefactItem
-            elif isinstance(artefactItem, str):
-                confirmedData[artefactItem] = None
-            else:
-                raise TypeError("BATCH INIT ERROR: 'confirmed' list must contain Artefact objects or strings representing Artefact IDs.")
+        if batchArtefacts is None:
+            batchArtefacts = {}
         
         self.id: str = id
         self.userID: str = userID
-        self.unprocessed: Dict[str, Artefact | None] = unprocessedData
-        self.processed: Dict[str, Artefact | None] = processedData
-        self.confirmed: Dict[str, Artefact | None] = confirmedData
+        self.artefacts: Dict[str, BatchArtefact] = batchArtefacts
         self.processingJob: str | None = processingJob
         self.cancelled: bool = cancelled
         self.user: User | None = None
@@ -699,8 +658,10 @@ class Batch(DIRepresentable):
         
         return True
     
-    def cancel(self):
+    def cancel(self, autoSave: bool=True):
         self.cancelled = True
+        if autoSave:
+            self.save(checkIntegrity=False)
 
     @staticmethod
     def rawLoad(data: dict, batchID: str | None=None) -> 'Batch':
@@ -799,6 +760,75 @@ class Batch(DIRepresentable):
     @staticmethod
     def ref(id: str) -> Ref:
         return Ref("batches", id)
+
+class BatchArtefact(DIRepresentable):
+    def __init__(self, batch: Batch | str, artefact: Artefact | str, stage: Batch.Stage, processedDuration: str | None, processedTime: str | None=None, processingError: str | None=None):
+        batchID = batch.id if isinstance(batch, Batch) else batch
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        stage = Batch.Stage.validateAndReturn(stage)
+        if stage == False:
+            raise Exception("BATCHARTEFACT INIT ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
+        
+        self.batchID: str = batchID
+        self.artefactID: str = artefactID
+        self.stage: Batch.Stage = stage
+        self.processedDuration: str | None = processedDuration
+        self.processedTime: str | None = processedTime
+        self.processingError: str | None = processingError
+        self.originRef = BatchArtefact.ref(batchID, artefactID)
+    
+    def represent(self):
+        return {
+            "stage": self.stage.value,
+            "processedDuration": self.processedDuration,
+            "processedTime": self.processedTime,
+            "processingError": self.processingError
+        }
+    
+    def save(self):
+        return DI.save(self.represent(), self.originRef)
+    
+    @staticmethod
+    def rawLoad(data: dict, batchID: str | None=None, artefactID: str | None=None):
+        reqParams = ['stage', 'processedDuration', 'processedTime', 'processingError']
+        for reqParam in reqParams:
+            if reqParam not in data:
+                if reqParam == 'stage':
+                    data[reqParam] = Batch.Stage.UNPROCESSED.value
+                else:
+                    data[reqParam] = None
+        
+        stage = Batch.Stage.validateAndReturn(data['stage'])
+        if stage == False:
+            stage = Batch.Stage.UNPROCESSED
+        
+        return BatchArtefact(
+            batch=batchID,
+            artefact=artefactID,
+            stage=stage,
+            processedDuration=data.get('processedDuration'),
+            processedTime=data.get('processedTime'),
+            processingError=data.get('processingError')
+        )
+    
+    @staticmethod
+    def load(batch: Batch | str, artefact: Artefact | str) -> 'BatchArtefact | None':
+        batchID = batch.id if isinstance(batch, Batch) else batch
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        
+        data = DI.load(BatchArtefact.ref(batchID, artefactID))
+        if data is None:
+            return None
+        if isinstance(data, DIError):
+            raise Exception("BATCHARTEFACT LOAD ERROR: DIError occurred: {}".format(data))
+        if not isinstance(data, dict):
+            raise Exception("BATCHARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        return BatchArtefact.rawLoad(data, batchID, artefactID)
+    
+    @staticmethod
+    def ref(batchID: str, artefactID: str) -> Ref:
+        return Ref("batches", batchID, "artefacts", artefactID)
 
 class User(DIRepresentable):
     """User model representation.
