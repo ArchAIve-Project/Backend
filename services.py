@@ -124,40 +124,57 @@ class AsyncProcessor:
         return job.id
 
 class ThreadManager:
-    '''Manage multiple `AsyncProcessor` threads with this class.
+    '''Manage multiple `AsyncProcessor`s with this class.
     
-    Spin up new threads easily and track information about them, including the name, source, creation time, and the processor itself.
+    Spin up multiple processors and add jobs to them. Each processor spins up one or more separate threads and schedules jobs to run in the background.
     
-    **Example Usage:**
+    **Recommended Usage:**
     ```python
     import time
     from services import ThreadManager, AsyncProcessor, Trigger
     
-    # Spinning up a thread and adding jobs
-    processor = ThreadManager.new(name="newThread", source="example.py") # Returns an `AsyncProcessor` instance. `name` must be unique.
+    def sample_work(some_param):
+        print(f"Working with {some_param}...")
+        time.sleep(2)
+        print(f"Done working with {some_param}!")
+    
+    ThreadManager.initDefault() # Initializes a default processor at `ThreadManager.defaultProcessor`
+    id = ThreadManager.defaultProcessor.addJob(sample_work, "example_param", trigger=Trigger(type='interval', seconds=10)) # Adds a job to the default processor
+    
+    print(f"Job ID: {id}")
+    ```
+    
+    **Advanced Usage with Multiple Processors (Caution):**
+    ```python
+    import time
+    from services import ThreadManager, AsyncProcessor, Trigger
+    
+    # Spinning up a custom processor
+    processor = ThreadManager.new(name="newScheduler", source="example.py") # Returns an `AsyncProcessor` instance. `name` must be unique.
     processor.addJob(lambda: print("Hello from the new thread!"), trigger=Trigger(type='interval', seconds=5))
     
-    print("Current threads:", ThreadManager.list())
-    print("Thread info:", ThreadManager.info("newThread"))
-    
+    print("Current processors:", ThreadManager.list())
+    print("Processor info:", ThreadManager.info("newThread"))
+
     time.sleep(10)
     
-    processor2 = ThreadManager.getProcessorWithName("newThread") # Get the processor for the `newThread`
+    processor2 = ThreadManager.getProcessorWithName("newScheduler") # Get the processor for the `newScheduler`
     processor2.addJob(lambda: print("This is another job in the same thread!"), trigger=Trigger(type='interval', seconds=10))
     
     time.sleep(25)
-    
-    ThreadManager.closeThread("newThread") # Close the thread
-    # ThreadManager.shutdown() # Shutdown all threads
+
+    ThreadManager.closeThread("newScheduler") # Close the processor
+    # ThreadManager.shutdown() # Shutdown all processors
     ```
     
     Methods:
-    - `list()`: Returns a list of all thread names.
-    - `new(name: str, source: str, paused: bool=False, logging: bool=True)`: Creates a new thread with the given name and source. Returns an `AsyncProcessor` instance or an error message if the name is not unique.
-    - `info(name: str)`: Returns information about the thread with the given name, including the processor, name, source, and creation time.
-    - `getProcessorWithName(name: str)`: Returns the `AsyncProcessor` instance for the thread with the given name, or `None` if it does not exist.
-    - `getProcessorWithID(id: str)`: Returns the `AsyncProcessor` instance for the thread with the given ID, or `None` if it does not exist.
-    - `closeThread(name: str)`: Closes the thread with the given name and returns `True` if successful, or `False` if the thread does not exist.
+    - `list()`: Returns a list of all processor names.
+    - `initDefault()`: Initializes a default processor named "default" and returns it.
+    - `new(name: str, source: str, paused: bool=False, logging: bool=True)`: Creates a new processor with the given name and source. Returns an `AsyncProcessor` instance or an error message if the name is not unique.
+    - `info(name: str)`: Returns information about the processor with the given name, including the processor, name, source, and creation time.
+    - `getProcessorWithName(name: str)`: Returns the `AsyncProcessor` instance for the processor with the given name, or `None` if it does not exist.
+    - `getProcessorWithID(id: str)`: Returns the `AsyncProcessor` instance for the processor with the given ID, or `None` if it does not exist.
+    - `closeThread(name: str)`: Closes the processor with the given name and returns `True` if successful, or `False` if the processor does not exist.
     - `shutdown()`: Shuts down all threads and returns `True` if successful.
     
     Note: Be careful when using this class. It is very powerful and creates multiple real background threads. Close threads properly when no longer needed.
