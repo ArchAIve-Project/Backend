@@ -101,7 +101,7 @@ class Artefact(DIRepresentable):
                 raise Exception("ARTEFACT LOAD ERROR: DIError occurred: {}".format(data))
             if data is None:
                 if name is not None or image is not None:
-                    return Artefact.load(name=name, image=image)
+                    return Artefact.load(name=name, image=image, includeMetadata=includeMetadata)
                 else:
                     return None
             if not isinstance(data, dict):
@@ -1052,7 +1052,7 @@ class Category(DIRepresentable):
             raise Exception("CATEGORY ADD ERROR: Artefact with ID '{}' already exists.".format(artefactID))
         
         if checkIntegrity:
-            artefact = Artefact.load(artefactID)
+            artefact = Artefact.load(artefactID, includeMetadata=False)
             if not isinstance(artefact, Artefact):
                 raise Exception("CATEGORY ADD ERROR: Failed to load Artefact with ID '{}'; response: {}".format(artefactID, artefact))
         
