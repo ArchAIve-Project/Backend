@@ -1003,11 +1003,13 @@ class User(DIRepresentable):
         return Ref("users", id)
 
 class Category(DIRepresentable):
-    def __init__(self, name: str, description: str, members: 'Dict[str, CategoryArtefact]', created: str=None, id: str=None):
+    def __init__(self, name: str, description: str, members: 'Dict[str, CategoryArtefact]'=None, created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
             created = Universal.utcNowString()
+        if members is None:
+            members = {}
         
         self.id = id
         self.name = name
@@ -1039,8 +1041,85 @@ class Category(DIRepresentable):
         self.__dict__.update(self.rawLoad(data, self.id).__dict__)
         return True
     
+    def add(self, artefact: Artefact | str, reason: str, checkIntegrity: bool=True, loadArtefactObject: bool=False, metadataRequired: bool=False) -> bool:
+        if not isinstance(artefact, Artefact) and not isinstance(artefact, str):
+            raise Exception("CATEGORY ADD ERROR: 'artefact' must be an Artefact object or a string representing the artefact ID.")
+        if not isinstance(reason, str):
+            raise Exception("CATEGORY ADD ERROR: 'reason' must be a string.")
+        
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        if artefactID in self.members:
+            raise Exception("CATEGORY ADD ERROR: Artefact with ID '{}' already exists.".format(artefactID))
+        
+        if checkIntegrity:
+            artefact = Artefact.load(artefactID)
+            if not isinstance(artefact, Artefact):
+                raise Exception("CATEGORY ADD ERROR: Failed to load Artefact with ID '{}'; response: {}".format(artefactID, artefact))
+        
+        catArt = CategoryArtefact(
+            category=self.id,
+            artefact=artefact,
+            reason=reason
+        )
+        
+        if loadArtefactObject:
+            catArt.getArtefact(includeMetadata=metadataRequired)
+        
+        self.members[artefactID] = catArt
+        
+        return True
+    
+    def remove(self, artefact: Artefact | str) -> bool:
+        if not isinstance(artefact, Artefact) and not isinstance(artefact, str):
+            raise Exception("CATEGORY REMOVE ERROR: 'artefact' must be an Artefact object or a string representing the artefact ID.")
+        
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        if artefactID not in self.members:
+            raise Exception("CATEGORY REMOVE ERROR: Artefact with ID '{}' does not exist in the category.".format(artefactID))
+        
+        del self.members[artefactID]
+        return True
+
+    def has(self, artefact: Artefact | str) -> bool:
+        if not isinstance(artefact, Artefact) and not isinstance(artefact, str):
+            raise Exception("CATEGORY HAS ERROR: 'artefact' must be an Artefact object or a string representing the artefact ID.")
+        
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        return artefactID in self.members
+    
+    def get(self, artefact: Artefact | str, default: None=None) -> 'CategoryArtefact | None':
+        if not isinstance(artefact, Artefact) and not isinstance(artefact, str):
+            raise Exception("CATEGORY GET ERROR: 'artefact' must be an Artefact object or a string representing the artefact ID.")
+        
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        return self.members.get(artefactID, default)
+    
+    def cleanMembers(self) -> bool:
+        for artefactID in list(self.members.keys()):
+            if not isinstance(self.members[artefactID], CategoryArtefact):
+                del self.members[artefactID]
+                continue
+            
+            if not self.members[artefactID].getArtefact(safeFail=True):
+                del self.members[artefactID]
+            
+        return True
+    
+    def loadAllArtefacts(self, metadataRequired: bool=False) -> bool:
+        if not isinstance(self.members, dict):
+            raise Exception("CATEGORY LOADALLARTEFACTS ERROR: 'members' must be a dictionary of CategoryArtefact objects.")
+        
+        for artefactID in self.members:
+            if isinstance(self.members[artefactID], CategoryArtefact):
+                catArt = self.members[artefactID]
+                catArt.getArtefact(includeMetadata=metadataRequired)
+            else:
+                raise Exception("CATEGORY LOADALLARTEFACTS ERROR: Member with ID '{}' is not a CategoryArtefact.".format(artefactID))
+        
+        return True
+    
     @staticmethod
-    def rawLoad(data: dict, categoryID: str | None=None, withArtefacts: bool=False) -> 'Category':
+    def rawLoad(data: dict, categoryID: str | None=None, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Category':
         reqParam = ['name', 'description', 'members', 'created']
         for param in reqParam:
             if param not in data:
@@ -1065,19 +1144,20 @@ class Category(DIRepresentable):
                         category=cat.id,
                         artefact=artefactID,
                         data=data['members'][artefactID],
-                        withArtefact=withArtefacts
+                        withArtefact=withArtefacts,
+                        metadataRequired=metadataRequired
                     )
         
         cat.members = members
         return cat
     
     @staticmethod
-    def load(id: str=None, name: str=None, withMemberID: str=None, withArtefacts: bool=False) -> 'Category | List[Category] | None':
+    def load(id: str=None, name: str=None, withMemberID: str=None, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Category | List[Category] | None':
         if id != None:
             data = DI.load(Category.ref(id))
             if data is None:
-                if name is not None:
-                    return Category.load(name=name, withArtefacts=withArtefacts)
+                if name is not None or withMemberID is not None:
+                    return Category.load(name=name, withMemberID=withMemberID, withArtefacts=withArtefacts, metadataRequired=metadataRequired)
                 else:
                     return None
             if isinstance(data, DIError):
@@ -1085,7 +1165,7 @@ class Category(DIRepresentable):
             if not isinstance(data, dict):
                 raise Exception("CATEGORY LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
-            return Category.rawLoad(data, id, withArtefacts=withArtefacts)
+            return Category.rawLoad(data, id, withArtefacts=withArtefacts, metadataRequired=metadataRequired)
         else:
             data = DI.load(Ref("categories"))
             if data is None:
@@ -1098,7 +1178,7 @@ class Category(DIRepresentable):
             categories: Dict[str, Category] = {}
             for id in data:
                 if isinstance(data[id], dict):
-                    categories[id] = Category.rawLoad(data[id], id, withArtefacts=withArtefacts)
+                    categories[id] = Category.rawLoad(data[id], id, withArtefacts=withArtefacts, metadataRequired=metadataRequired)
 
             if name is None and withMemberID is None:
                 return list(categories.values())
@@ -1127,12 +1207,15 @@ class CategoryArtefact(DIRepresentable):
         self.artefact: Artefact = artefact if isinstance(artefact, Artefact) else None
         self.originRef = CategoryArtefact.ref(self.categoryID, self.artefactID)
     
-    def getArtefact(self) -> bool:
+    def getArtefact(self, includeMetadata: bool=False, safeFail: bool=False) -> bool:
         if not isinstance(self.artefactID, str):
             raise Exception("CATEGORYARTEFACT GETARTEFACT ERROR: Invalid value set for 'artefactID'. Expected a string representing the Artefact ID.")
         
-        self.artefact = Artefact.load(self.artefactID)
+        self.artefact = Artefact.load(self.artefactID, includeMetadata=includeMetadata)
         if not isinstance(self.artefact, Artefact):
+            if safeFail:
+                self.artefact = None
+                return False
             raise Exception("CATEGORYARTEFACT GETARTEFACT ERROR: Failed to load Artefact with ID '{}'; response: {}".format(self.artefactID, self.artefact))
         
         return True
@@ -1147,7 +1230,7 @@ class CategoryArtefact(DIRepresentable):
         return DI.save(self.represent(), self.originRef)
     
     @staticmethod
-    def rawLoad(category: Category | str, artefact: Artefact | str, data: dict, withArtefact: bool=False) -> 'CategoryArtefact':
+    def rawLoad(category: Category | str, artefact: Artefact | str, data: dict, withArtefact: bool=False, metadataRequired: bool=False) -> 'CategoryArtefact':
         reqParams = ['reason', 'added']
         for reqParam in reqParams:
             if reqParam not in data:
@@ -1166,12 +1249,12 @@ class CategoryArtefact(DIRepresentable):
         )
         
         if withArtefact:
-            catArt.getArtefact()
+            catArt.getArtefact(includeMetadata=metadataRequired)
         
         return catArt
     
     @staticmethod
-    def load(category: Category | str, artefact: Artefact | str, withArtefact: bool=False) -> 'CategoryArtefact | None':
+    def load(category: Category | str, artefact: Artefact | str, withArtefact: bool=False, metadataRequired: bool=False) -> 'CategoryArtefact | None':
         categoryID = category.id if isinstance(category, Category) else category
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
@@ -1183,7 +1266,7 @@ class CategoryArtefact(DIRepresentable):
         if not isinstance(data, dict):
             raise Exception("CATEGORYARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
         
-        return CategoryArtefact.rawLoad(categoryID, artefact, data, withArtefact=withArtefact)
+        return CategoryArtefact.rawLoad(categoryID, artefact, data, withArtefact=withArtefact, metadataRequired=metadataRequired)
     
     @staticmethod
     def ref(categoryID: str, artefactID: str) -> Ref:
