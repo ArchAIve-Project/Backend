@@ -66,6 +66,17 @@ class Artefact(DIRepresentable):
             'created': self.created,
             'metadata': self.metadata.represent() if self.metadata is not None else None
         }
+    
+    def __str__(self):
+        return "Artefact(id='{}', name='{}', image='{}', public={}, created='{}', metadataLoaded={}, metadata={})".format(
+            self.id,
+            self.name,
+            self.image,
+            self.public,
+            self.created,
+            self.metadataLoaded,
+            self.metadata.represent() if isinstance(self.metadata, Metadata) else "None"
+        )
 
     @staticmethod
     def rawLoad(data: dict, artefactID: str | None=None, includeMetadata: bool=True) -> 'Artefact':
@@ -849,6 +860,18 @@ class User(DIRepresentable):
             "created": self.created
         }
     
+    def __str__(self):
+        return "User(id='{}', username='{}', email='{}', pwd='{}', authToken='{}', superuser={}, lastLogin='{}', created='{}')".format(
+            self.id,
+            self.username,
+            self.email,
+            self.pwd,
+            self.authToken,
+            self.superuser,
+            self.lastLogin,
+            self.created
+        )
+    
     def save(self, checkSuperuserIntegrity: bool=True):
         """Saves the user to the database.
 
@@ -1093,13 +1116,30 @@ class Category(DIRepresentable):
             "created": self.created
         }
     
-    def save(self):
-        """Saves the category to the database.
+    def save(self, checkIntegrity: bool=True):
+        """Saves the category to the database. Integrity check enforces unique names and integrity of 'members' attribute.
+        
+        Args:
+            checkIntegrity (bool, optional): Whether to perform integrity checks before saving. Defaults to True.
 
         Returns:
             bool: True if the save operation was successful, False otherwise.
         """
         
+        if checkIntegrity:
+            if not isinstance(self.members, dict):
+                raise Exception("CATEGORY SAVE ERROR: 'members' must be a dictionary of CategoryArtefact objects.")
+            
+            for artefactID, member in self.members.items():
+                if not isinstance(member, CategoryArtefact):
+                    raise Exception("CATEGORY SAVE ERROR: 'members' must contain CategoryArtefact objects; found type '{}' for artefact ID '{}'.".format(type(member), artefactID))
+                if member.categoryID != self.id:
+                    raise Exception("CATEGORY SAVE ERROR: CategoryArtefact with ID '{}' does not belong to this category (expected category ID '{}').".format(artefactID, self.id))
+            
+            cat = Category.load(name=self.name)
+            if isinstance(cat, Category) and cat.id != self.id:
+                raise Exception("CATEGORY SAVE ERROR: 'name' attribute uniqueness constraint fails due to category with ID '{}' with matching name '{}'.".format(cat.id, cat.name))
+
         return DI.save(self.represent(), self.originRef)
     
     def reload(self):
@@ -1278,6 +1318,21 @@ class Category(DIRepresentable):
                 raise Exception("CATEGORY LOADALLARTEFACTS ERROR: Member with ID '{}' is not a CategoryArtefact.".format(artefactID))
         
         return True
+    
+    def __str__(self):
+        return """<Category instance
+ID: {}
+Name: {}
+Description: {}
+Members:{}
+Created: {} />    
+        """.format(
+            self.id,
+            self.name,
+            self.description,
+            ("\n---\n- " + ("\n- ".join(str(member) if isinstance(member, CategoryArtefact) else "CORRUPTED MEMBER AT '{}'".format(member) for member in self.members.values())) + "\n---") if isinstance(self.members, dict) else " None",
+            self.created
+        )
     
     @staticmethod
     def rawLoad(data: dict, categoryID: str | None=None, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Category':
@@ -1495,6 +1550,15 @@ class CategoryArtefact(DIRepresentable):
         """
         
         return DI.save(self.represent(), self.originRef)
+    
+    def __str__(self):
+        return "CategoryArtefact(categoryID='{}', artefactID='{}', reason='{}', added='{}', artefactObject={})".format(
+            self.categoryID,
+            self.artefactID,
+            self.reason,
+            self.added,
+            self.artefact if isinstance(self.artefact, Artefact) else "None"
+        )
     
     @staticmethod
     def rawLoad(category: Category | str, artefact: Artefact | str, data: dict, withArtefact: bool=False, metadataRequired: bool=False) -> 'CategoryArtefact':
