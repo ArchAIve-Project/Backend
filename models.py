@@ -839,11 +839,12 @@ class BatchProcessingJob(DIRepresentable):
     def save(self):
         return DI.save(self.represent(), self.originRef)
     
-    def start(self, jobID: str) -> bool:
+    def start(self, jobID: str=None) -> bool:
         if self.status != BatchProcessingJob.Status.PENDING:
             Logger.log("BATCHPROCESSINGJOB START WARNING: Starting job with ID '{}' that is not in PENDING status; current status: '{}'.".format(self.jobID, self.status.value))
         
-        self.jobID = jobID
+        if self.jobID != None:
+            self.jobID = jobID
         self.status = BatchProcessingJob.Status.PROCESSING
         self.started = Universal.utcNowString()
         
