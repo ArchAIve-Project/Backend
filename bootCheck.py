@@ -68,7 +68,8 @@ class BootCheck:
         "numpy": "numpy",
         "facenet-pytorch": "facenet-pytorch",
         "uuid": "uuid",
-        "transformers": "transformers"
+        "transformers": "transformers",
+        "Pympler": "Pympler"
     }
     
     @staticmethod

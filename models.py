@@ -3,7 +3,7 @@ from database import DI, DIRepresentable, DIError
 from decorators import databaseDebug
 from fm import File, FileManager
 from utils import Ref
-from services import Universal
+from services import Universal, Logger
 from typing import List, Dict, Any, Literal
 
 class Artefact(DIRepresentable):
@@ -661,6 +661,26 @@ class Batch(DIRepresentable):
         self.artefacts.pop(artefactID, None)
         return True
     
+    @databaseDebug
+    def initJob(self, jobID: str=None, status: 'BatchProcessingJob.Status'=None, autoStart: bool=False) -> 'BatchProcessingJob':
+        if status is None:
+            status = BatchProcessingJob.Status.PENDING
+        
+        status = BatchProcessingJob.Status.validateAndReturn(status)
+        if status == False:
+            raise Exception("BATCH INITJOB ERROR: Invalid status provided; expected 'BatchProcessingJob.Status' or string representation of it.")
+        
+        if isinstance(self.job, BatchProcessingJob):
+            if self.job.status == BatchProcessingJob.Status.PROCESSING or self.job.ended is None:
+                Logger.log("BATCH INITJOB WARNING: Overwriting existing job with processing status or no 'ended' value with new job with ID: '{}' and status: '{}'.".format(jobID, status))
+        
+        self.job = BatchProcessingJob(self.id, jobID, status)
+        
+        if autoStart:
+            self.job.start(jobID)
+        
+        return self.job
+    
     def __str__(self):
         return """<Batch instance
 ID: {}
@@ -795,14 +815,14 @@ class BatchProcessingJob(DIRepresentable):
                 return False
     
     @databaseDebug
-    def __init__(self, batch: Batch | str, jobID: str, status: 'BatchProcessingJob.Status', started: str | None=None, ended: str | None=None):
+    def __init__(self, batch: Batch | str, jobID: str | None, status: 'BatchProcessingJob.Status', started: str | None=None, ended: str | None=None):
         batchID = batch.id if isinstance(batch, Batch) else batch
         status = BatchProcessingJob.Status.validateAndReturn(status)
         if status == False:
             raise Exception("BATCHPROCESSINGJOB INIT ERROR: Invalid status provided; expected 'BatchProcessingJob.Status' or string representation of it.")
         
         self.batchID: str = batchID
-        self.jobID: str = jobID
+        self.jobID: str | None = jobID
         self.status: BatchProcessingJob.Status = status
         self.started: str | None = started
         self.ended: str | None = ended
@@ -818,6 +838,37 @@ class BatchProcessingJob(DIRepresentable):
     
     def save(self):
         return DI.save(self.represent(), self.originRef)
+    
+    def start(self, jobID: str) -> bool:
+        if self.status != BatchProcessingJob.Status.PENDING:
+            Logger.log("BATCHPROCESSINGJOB START WARNING: Starting job with ID '{}' that is not in PENDING status; current status: '{}'.".format(self.jobID, self.status.value))
+        
+        self.jobID = jobID
+        self.status = BatchProcessingJob.Status.PROCESSING
+        self.started = Universal.utcNowString()
+        
+        return True
+    
+    def end(self) -> bool:
+        if self.status != BatchProcessingJob.Status.PROCESSING:
+            Logger.log("BATCHPROCESSINGJOB END WARNING: Ending job with ID '{}' that is not in PROCESSING status; current status: '{}'.".format(self.jobID, self.status.value))
+        
+        self.status = BatchProcessingJob.Status.COMPLETED
+        self.ended = Universal.utcNowString()
+        
+        return True
+    
+    def cancel(self, autoSave: bool=True) -> bool:
+        if self.status != BatchProcessingJob.Status.PROCESSING:
+            Logger.log("BATCHPROCESSINGJOB CANCEL WARNING: Cancelling job with ID '{}' that is not in PROCESSING status; current status: '{}'.".format(self.jobID, self.status.value))
+        
+        self.status = BatchProcessingJob.Status.CANCELLED
+        self.ended = Universal.utcNowString()
+        
+        if autoSave:
+            return self.save()
+        
+        return True
     
     @databaseDebug
     def reload(self):
@@ -839,14 +890,6 @@ class BatchProcessingJob(DIRepresentable):
             raise Exception("BATCHPROCESSINGJOB SETSTATUS ERROR: Invalid status provided; expected 'BatchProcessingJob.Status' or string representation of it.")
         
         self.status = newStatus
-        return True
-    
-    @databaseDebug
-    def cancel(self, autoSave: bool=True) -> bool:
-        self.status = BatchProcessingJob.Status.CANCELLED
-        if autoSave:
-            return self.save()
-        
         return True
     
     def __str__(self):
