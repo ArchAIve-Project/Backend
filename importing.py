@@ -1,14 +1,13 @@
-from models import Batch, Artefact
+import time
+from models import Batch, Artefact, Metadata, DI
 from services import ThreadManager
 from metagen import MetadataGenerator
-from models import Metadata
 from services import Logger
-import time
-
 
 class ImportProcessor:
     @staticmethod
     def processBatch(batch: Batch, chunk_size=10):
+        print("Processing batch: {}".format(batch.id))
         batch.getArtefacts(unprocessed=True)
         unprocessedItems = [a for a in batch.unprocessed.values() if isinstance(a, Artefact)]
         total = len(unprocessedItems)
@@ -21,20 +20,25 @@ class ImportProcessor:
 
             # Wait until all items in currentChunk are either processed or failed
             while not all(
-                artefact.id in batch.processed or artefact.id in failed_ids  # try batch.where() ?
+                artefact.id in batch.processed or artefact.id in failed_ids
                 for artefact in currentChunk if isinstance(artefact, Artefact)
             ) and not batch.cancelled:
+                batch.reload()
                 time.sleep(0.5)
 
             if batch.cancelled:
+                print("Batch processing cancellation detected.")
                 break
             i += chunk_size
         
         batch.processingJob = None
+        print("Batch processing completed. Processed {} items, failed {} items.".format(
+            len(batch.processed), len(failed_ids)
+        ))
         return True
 
     @staticmethod
-    def processChunk(chunk, batch, failed_ids: set):
+    def processChunk(chunk: list[Artefact], batch: Batch, failed_ids: set):
         for artefact in chunk:
             try:
                 ImportProcessor.processItem(artefact)
@@ -46,11 +50,12 @@ class ImportProcessor:
                 failed_ids.add(artefact.id)
 
             if batch.cancelled:
+                print("Batch processing cancelled during chunk processing.")
                 return
 
     @staticmethod
     def processItem(artefact: Artefact):
-        out = MetadataGenerator.generate(artefact.image)
+        out = MetadataGenerator.generate(artefact.getFMFile().path())
         if isinstance(out, str):
             raise Exception("IMPORTPROCESSOR PROCESSITEM ERROR: Unexpected output from MetadataGenerator when processing artefact '{}'; response: {}".format(artefact.id, out))
         artefact.metadata = Metadata.fromMetagen(artefact.id, out)
