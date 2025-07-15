@@ -484,7 +484,7 @@ class Batch(DIRepresentable):
             else:
                 return False
     
-    def __init__(self, userID: str, batchArtefacts: 'Dict[str, BatchArtefact]'=None, processingJob: str | None=None, cancelled: bool = False, created: str=None, id: str=None):
+    def __init__(self, userID: str, batchArtefacts: 'Dict[str, BatchArtefact]'=None, job: 'BatchProcessingJob | None'=None, created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -495,8 +495,7 @@ class Batch(DIRepresentable):
         self.id: str = id
         self.userID: str = userID
         self.artefacts: Dict[str, BatchArtefact] = batchArtefacts
-        self.processingJob: str | None = processingJob
-        self.cancelled: bool = cancelled
+        self.job: BatchProcessingJob | None = job
         self.user: User | None = None
         self.created: str = created
         self.originRef = Batch.ref(self.id)
@@ -520,6 +519,9 @@ class Batch(DIRepresentable):
                     raise Exception("BATCH SAVE ERROR: Found artefact ID '{}' in BatchArtefact when '{}' was expected.".format(batchArt.artefactID, artefactID))
                 if Batch.Stage.validateAndReturn(batchArt.stage) == False:
                     raise Exception("BATCH SAVE ERROR: Invalid stage '{}' for artefact with ID '{}'.".format(batchArt.stage, artefactID))
+            
+            if self.job != None and not isinstance(self.job, BatchProcessingJob):
+                raise Exception("BATCH SAVE ERROR: 'job' is not a valid BatchProcessingJob instance.")
         
         return DI.save(self.represent(), self.originRef)
 
@@ -527,8 +529,7 @@ class Batch(DIRepresentable):
         return {
             "userID": self.userID,
             "artefacts": {id: batchArt.represent() for id, batchArt in self.artefacts.items()},
-            'processingJob': self.processingJob,
-            'cancelled': self.cancelled,
+            'job': self.job.represent() if self.job != None else None,
             "created": self.created
         }
     
@@ -541,7 +542,7 @@ class Batch(DIRepresentable):
         if not isinstance(data, dict):
             raise Exception("BATCH RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
         
-        self.__dict__.update(self.rawLoad(data, self.id).__dict__)
+        self.__dict__.update(self.rawLoad(self.id, data).__dict__)
         return True
     
     def __str__(self):
@@ -618,32 +619,32 @@ class Batch(DIRepresentable):
             self.save(checkIntegrity=False)
 
     @staticmethod
-    def rawLoad(data: dict, batchID: str | None=None) -> 'Batch':
-        requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'processingJob', 'cancelled', 'created']
+    def rawLoad(batchID: str, data: dict) -> 'Batch':
+        requiredParams = ['userID', 'artefacts', 'job', 'created']
         for reqParam in requiredParams:
             if reqParam not in data:
-                if reqParam in ['unprocessed', 'processed', 'confirmed']:
-                    data[reqParam] = []
-                elif reqParam in ['cancelled']:
-                    data[reqParam] = False
+                if reqParam == 'artefacts':
+                    data[reqParam] = {}
                 else:
                     data[reqParam] = None
         
-        if not isinstance(data['unprocessed'], list):
-            data['unprocessed'] = []
-        if not isinstance(data['processed'], list):
-            data['processed'] = []
-        if not isinstance(data['confirmed'], list):
-            data['confirmed'] = []
+        if not isinstance(data['artefacts'], dict):
+            data['artefacts'] = {}
+        
+        arts = {}
+        for artefactID, batchArtData in data['artefacts'].items():
+            if isinstance(batchArtData, dict):
+                arts[artefactID] = BatchArtefact.rawLoad(batchID, artefactID, batchArtData)
+        
+        job = None
+        if isinstance(data['job'], dict):
+            job = BatchProcessingJob.rawLoad(batchID, data['job'])
         
         return Batch(
-            userID=data['userID'],
-            unprocessed=data['unprocessed'],
-            processed=data['processed'],
-            confirmed=data['confirmed'],
-            processingJob=data['processingJob'],
-            cancelled=data['cancelled'],
-            created=data['created'],
+            userID=data.get('userID'),
+            batchArtefacts=arts,
+            job=job,
+            created=data.get('created'),
             id=batchID
         )
     
@@ -665,16 +666,21 @@ class Batch(DIRepresentable):
         if id != None:
             data = DI.load(Batch.ref(id))
             if data is None:
-                return None
+                if userID is not None:
+                    return Batch.load(userID=userID, withUser=withUser, withArtefacts=withArtefacts, metadataRequired=metadataRequired)
             if isinstance(data, DIError):
                 raise Exception("BATCH LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
                 raise Exception("BATCH LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
-            batch = Batch.rawLoad(data, id)
+            batch = Batch.rawLoad(id, data)
+            if withUser:
+                batch.getUser()
+            if withArtefacts:
+                # TODO
+                pass
             
             return batch
-
         else:
             data = DI.load(Ref("batches"))
             if data is None:
@@ -687,7 +693,7 @@ class Batch(DIRepresentable):
             batches: Dict[str, Batch] = {}
             for id in data:
                 if isinstance(data[id], dict):
-                    batches[id] = Batch.rawLoad(data[id], id)
+                    batches[id] = Batch.rawLoad(id, data[id])
             
             if userID is None:
                 for batch in batches.values():
@@ -767,7 +773,7 @@ class BatchProcessingJob(DIRepresentable):
         if not isinstance(data, dict):
             raise Exception("BATCHPROCESSINGJOB RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
-        self.__dict__.update(self.rawLoad(data, self.batchID).__dict__)
+        self.__dict__.update(self.rawLoad(self.batchID, data).__dict__)
         return True
 
     @staticmethod
@@ -837,8 +843,20 @@ class BatchArtefact(DIRepresentable):
     def save(self):
         return DI.save(self.represent(), self.originRef)
     
+    def reload(self):
+        data = DI.load(self.originRef)
+        if isinstance(data, DIError):
+            raise Exception("BATCHARTEFACT RELOAD ERROR: DIError occurred: {}".format(data))
+        if data == None:
+            raise Exception("BATCHARTEFACT RELOAD ERROR: No data found at reference '{}'.".format(self.originRef))
+        if not isinstance(data, dict):
+            raise Exception("BATCHARTEFACT RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        self.__dict__.update(self.rawLoad(self.batchID, self.artefactID, data).__dict__)
+        return True
+    
     @staticmethod
-    def rawLoad(data: dict, batchID: str | None=None, artefactID: str | None=None):
+    def rawLoad(batchID: str, artefactID: str, data: dict):
         reqParams = ['stage', 'processedDuration', 'processedTime', 'processingError']
         for reqParam in reqParams:
             if reqParam not in data:
@@ -873,7 +891,7 @@ class BatchArtefact(DIRepresentable):
         if not isinstance(data, dict):
             raise Exception("BATCHARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
         
-        return BatchArtefact.rawLoad(data, batchID, artefactID)
+        return BatchArtefact.rawLoad(batchID, artefactID, data)
     
     @staticmethod
     def ref(batchID: str, artefactID: str) -> Ref:

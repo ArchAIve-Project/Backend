@@ -31,7 +31,7 @@ class ImportProcessor:
                 break
             i += chunk_size
         
-        batch.processingJob = None
+        batch.job = None
         print("Batch processing completed. Processed {} items, failed {} items.".format(
             len(batch.processed), len(failed_ids)
         ))
