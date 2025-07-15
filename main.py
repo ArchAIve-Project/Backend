@@ -14,14 +14,14 @@ from fm import FileManager, File
 from ai import LLMInterface
 from addons import ModelStore, ArchSmith
 from services import Universal, Logger, ThreadManager, Encryption
-from database import DI, DIError, JSONRes, ResType, FireConn
+from firebase import FireConn
+from database import DI, DIError
 from fm import FileManager
 from ccrPipeline import CCRPipeline
 from NERPipeline import NERPipeline
 from cnnclassifier import ImageClassifier
 from captioner import ImageCaptioning, Vocabulary
-from metagen import MetadataGenerator
-from models import User, Artefact, Metadata
+from models import User
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, origins="*", supports_credentials=True, allow_private_network=True)
