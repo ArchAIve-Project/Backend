@@ -6,7 +6,7 @@ from services import Logger
 
 class DataImportProcessor:
     @staticmethod
-    def processBatch(batch: Batch):
+    def processBatch(batch: Batch, chunkSize: int=10):
         # Start the job
         job = batch.job
         job.start()
@@ -14,19 +14,42 @@ class DataImportProcessor:
         
         # Pick out all artefacts to be processed
         targetArtefacts = [x for x in batch.artefacts.values() if x.stage == Batch.Stage.UNPROCESSED]
+        targetCount = len(targetArtefacts)
+        Logger.log("DATAIMPORT PROCESSBATCH: Processing batch '{}' with '{}' targets and chunk size '{}'.".format(batch.id, targetCount, chunkSize))
         
+        # Chunk
+        completionCount = 0
         
-        
-        pass
+        chunk = []
+        while len(targetArtefacts) > 0:
+            chunk = targetArtefacts[:chunkSize]
+            
+            for batchArt in chunk:
+                ThreadManager.defaultProcessor.addJob(DataImportProcessor.processItem, batchArt)
+            
+            while not all(batchArt.stage == Batch.Stage.PROCESSED for batchArt in chunk) and not job.status == BatchProcessingJob.Status.CANCELLED:
+                job.reload()
+                time.sleep(0.5)
+            
+            if job.status == BatchProcessingJob.Status.CANCELLED:
+                Logger.log("DATAIMPORT PROCESSBATCH: Processing of batch '{}' cancelled. Completion: {} out of {}".format(batch.id, completionCount, targetCount))
+                job.end()
+                job.save()
+                return
+            
+            completionCount += len(chunk)
+            targetArtefacts = targetArtefacts[chunkSize:]
+
+        Logger.log("DATAIMPORT PROCESSBATCH: Processed '{}' artefacts for batch '{}' out of '{}'.".format(completionCount, batch.id, targetCount))
+        job.end()
+        job.save()
     
     @staticmethod
-    def endProcessing(batchArt: BatchArtefact, processingStartTime: float, errorMsg: str=None, updateStageIfError: bool=False):
+    def endProcessing(batchArt: BatchArtefact, processingStartTime: float, errorMsg: str=None):
         batchArt.processedTime = Universal.utcNowString()
         batchArt.processedDuration = '{:.3f}'.format(time.time() - processingStartTime)
         batchArt.processingError = errorMsg
-        
-        if (errorMsg is None) or (errorMsg != None and updateStageIfError):
-            batchArt.stage = Batch.Stage.PROCESSED
+        batchArt.stage = Batch.Stage.PROCESSED
         
         batchArt.save()
     
@@ -69,65 +92,7 @@ class DataImportProcessor:
             DataImportProcessor.endProcessing(batchArtefact, processingStartTime, str(e))
         
         batchArtefact.artefact.save()
-        DataImportProcessor.endProcessing(batchArtefact, processingStartTime, errors, updateStageIfError=True)
+        DataImportProcessor.endProcessing(batchArtefact, processingStartTime, errors)
         
         Logger.log("DATAIMPORT PROCESSITEM: Artefact '{}' of batch '{}' processed.".format(batchArtefact.artefactID, batchArtefact.batchID))
         return
-    
-    
-    # @staticmethod
-    # def processBatch(batch: Batch, chunk_size=10):
-    #     print("Processing batch: {}".format(batch.id))
-    #     batch.getArtefacts(unprocessed=True)
-    #     unprocessedItems = [a for a in batch.unprocessed.values() if isinstance(a, Artefact)]
-    #     total = len(unprocessedItems)
-    #     i = 0
-    #     failed_ids = set()
-
-    #     while i < total:
-    #         currentChunk = unprocessedItems[i:i + chunk_size]
-    #         ThreadManager.defaultProcessor.addJob(ImportProcessor.processChunk, currentChunk, batch, failed_ids)
-
-    #         # Wait until all items in currentChunk are either processed or failed
-    #         while not all(
-    #             artefact.id in batch.processed or artefact.id in failed_ids
-    #             for artefact in currentChunk if isinstance(artefact, Artefact)
-    #         ) and not batch.cancelled:
-    #             batch.reload()
-    #             time.sleep(0.5)
-
-    #         if batch.cancelled:
-    #             print("Batch processing cancellation detected.")
-    #             break
-    #         i += chunk_size
-        
-    #     batch.job = None
-    #     print("Batch processing completed. Processed {} items, failed {} items.".format(
-    #         len(batch.processed), len(failed_ids)
-    #     ))
-    #     return True
-
-    # @staticmethod
-    # def processChunk(chunk: list[Artefact], batch: Batch, failed_ids: set):
-    #     for artefact in chunk:
-    #         try:
-    #             ImportProcessor.processItem(artefact)
-    #             batch.reload()
-    #             batch.move(artefact, Batch.Stage.PROCESSED)
-    #             batch.save()
-    #         except Exception as e:
-    #             Logger.log(f"Failed to process artefact {artefact.id}: {e}")
-    #             failed_ids.add(artefact.id)
-
-    #         if batch.cancelled:
-    #             print("Batch processing cancelled during chunk processing.")
-    #             return
-
-    # @staticmethod
-    # def processItem(artefact: Artefact):
-    #     out = MetadataGenerator.generate(artefact.getFMFile().path())
-    #     if isinstance(out, str):
-    #         raise Exception("IMPORTPROCESSOR PROCESSITEM ERROR: Unexpected output from MetadataGenerator when processing artefact '{}'; response: {}".format(artefact.id, out))
-    #     artefact.metadata = Metadata.fromMetagen(artefact.id, out)
-    #     artefact.save()
-    #     return artefact
