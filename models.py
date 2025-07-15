@@ -521,7 +521,7 @@ class Batch(DIRepresentable):
                     raise Exception("BATCH SAVE ERROR: Invalid stage '{}' for artefact with ID '{}'.".format(batchArt.stage, artefactID))
             
             if self.job != None and not isinstance(self.job, BatchProcessingJob):
-                raise Exception("BATCH SAVE ERROR: 'job' is not a valid BatchProcessingJob instance.")
+                raise Exception("BATCH SAVE ERROR: 'job' is neither None nor a valid BatchProcessingJob instance.")
         
         return DI.save(self.represent(), self.originRef)
 
@@ -563,6 +563,26 @@ class Batch(DIRepresentable):
             raise Exception("BATCH GETUSER ERROR: Failed to load User with ID '{}'; response: {}".format(self.userID, self.user))
         
         return True
+    
+    def loadAllArtefacts(self, withMetadata: bool=False) -> bool:
+        if not isinstance(self.artefacts, dict):
+            raise Exception("BATCH LOADARTEFACTS ERROR: Expected 'artefacts' to be a dictionary, but got '{}'.".format(type(self.artefacts).__name__))
+        
+        for artefactID, batchArt in self.artefacts.items():
+            if not isinstance(batchArt, BatchArtefact):
+                raise Exception("BATCH LOADARTEFACTS ERROR: Artefact with ID '{}' is not a valid BatchArtefact.".format(artefactID))
+            
+            batchArt.getArtefact(includeMetadata=withMetadata)
+        
+        return True
+    
+    def get(self, artefact: Artefact | str) -> 'BatchArtefact | None':
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        
+        if not self.has(artefactID):
+            return None
+        
+        return self.artefacts[artefactID]
     
     def add(self, artefact: Artefact | str, to: 'Batch.Stage') -> 'BatchArtefact':
         to = Batch.Stage.validateAndReturn(to)
@@ -613,13 +633,8 @@ class Batch(DIRepresentable):
         self.artefacts.pop(artefactID, None)
         return True
     
-    def cancel(self, autoSave: bool=True):
-        self.cancelled = True
-        if autoSave:
-            self.save(checkIntegrity=False)
-
     @staticmethod
-    def rawLoad(batchID: str, data: dict) -> 'Batch':
+    def rawLoad(batchID: str, data: dict, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch':
         requiredParams = ['userID', 'artefacts', 'job', 'created']
         for reqParam in requiredParams:
             if reqParam not in data:
@@ -640,13 +655,20 @@ class Batch(DIRepresentable):
         if isinstance(data['job'], dict):
             job = BatchProcessingJob.rawLoad(batchID, data['job'])
         
-        return Batch(
+        batch = Batch(
             userID=data.get('userID'),
             batchArtefacts=arts,
             job=job,
             created=data.get('created'),
             id=batchID
         )
+        
+        if withUser:
+            batch.getUser()
+        if withArtefacts:
+            batch.loadAllArtefacts(withMetadata=metadataRequired)
+        
+        return batch
     
     @staticmethod
     def load(id: str=None, userID: str=None, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch | Dict[Batch] | None':
@@ -668,17 +690,14 @@ class Batch(DIRepresentable):
             if data is None:
                 if userID is not None:
                     return Batch.load(userID=userID, withUser=withUser, withArtefacts=withArtefacts, metadataRequired=metadataRequired)
+                else:
+                    return None
             if isinstance(data, DIError):
                 raise Exception("BATCH LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
                 raise Exception("BATCH LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
 
-            batch = Batch.rawLoad(id, data)
-            if withUser:
-                batch.getUser()
-            if withArtefacts:
-                # TODO
-                pass
+            batch = Batch.rawLoad(id, data, withUser, withArtefacts, metadataRequired)
             
             return batch
         else:
@@ -693,27 +712,15 @@ class Batch(DIRepresentable):
             batches: Dict[str, Batch] = {}
             for id in data:
                 if isinstance(data[id], dict):
-                    batches[id] = Batch.rawLoad(id, data[id])
+                    batches[id] = Batch.rawLoad(id, data[id], withUser, withArtefacts, metadataRequired)
             
             if userID is None:
-                for batch in batches.values():
-                    if withUser:
-                        batch.getUser()
-                    if withArtefacts:
-                        batch.getArtefacts(metadataRequired=metadataRequired)
-                
                 return list(batches.values())
             
             userBatches: List[Batch] = []
             for batchID in batches:
                 if batches[batchID].userID == userID:
                     userBatches.append(batches[batchID])
-            
-            for batch in userBatches:
-                if withUser:
-                    batch.getUser()
-                if withArtefacts:
-                    batch.getArtefacts(metadataRequired=metadataRequired)
             
             return userBatches
     
@@ -775,6 +782,21 @@ class BatchProcessingJob(DIRepresentable):
 
         self.__dict__.update(self.rawLoad(self.batchID, data).__dict__)
         return True
+    
+    def setStatus(self, newStatus: 'BatchProcessingJob.Status') -> bool:
+        newStatus = BatchProcessingJob.Status.validateAndReturn(newStatus)
+        if newStatus == False:
+            raise Exception("BATCHPROCESSINGJOB SETSTATUS ERROR: Invalid status provided; expected 'BatchProcessingJob.Status' or string representation of it.")
+        
+        self.status = newStatus
+        return True
+    
+    def cancel(self, autoSave: bool=True) -> bool:
+        self.status = BatchProcessingJob.Status.CANCELLED
+        if autoSave:
+            return self.save()
+        
+        return True
 
     @staticmethod
     def rawLoad(batchID: str, data: dict):
@@ -830,6 +852,7 @@ class BatchArtefact(DIRepresentable):
         self.processedDuration: str | None = processedDuration
         self.processedTime: str | None = processedTime
         self.processingError: str | None = processingError
+        self.artefact: Artefact | None = artefact if isinstance(artefact, Artefact) else None
         self.originRef = BatchArtefact.ref(batchID, artefactID)
     
     def represent(self):
@@ -855,8 +878,27 @@ class BatchArtefact(DIRepresentable):
         self.__dict__.update(self.rawLoad(self.batchID, self.artefactID, data).__dict__)
         return True
     
+    def getArtefact(self, includeMetadata: bool=False) -> bool:
+        if not isinstance(self.artefactID, str):
+            raise Exception("BATCHARTEFACT GETARTEFACT ERROR: Invalid value set for 'artefactID'. Expected a string representing the Artefact ID.")
+        
+        self.artefact = Artefact.load(id=self.artefactID, includeMetadata=includeMetadata)
+        if not isinstance(self.artefact, Artefact):
+            self.artefact = None
+            raise Exception("BATCHARTEFACT GETARTEFACT ERROR: Failed to load Artefact with ID '{}'; response: {}".format(self.artefactID, self.artefact))
+        
+        return True
+    
+    def setStage(self, newStage: Batch.Stage) -> bool:
+        newStage = Batch.Stage.validateAndReturn(newStage)
+        if newStage == False:
+            raise Exception("BATCHARTEFACT SETSTAGE ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
+        
+        self.stage = newStage
+        return True
+    
     @staticmethod
-    def rawLoad(batchID: str, artefactID: str, data: dict):
+    def rawLoad(batchID: str, artefactID: str, data: dict, withArtefact: bool=False, metadataRequired: bool=False) -> 'BatchArtefact':
         reqParams = ['stage', 'processedDuration', 'processedTime', 'processingError']
         for reqParam in reqParams:
             if reqParam not in data:
@@ -869,7 +911,7 @@ class BatchArtefact(DIRepresentable):
         if stage == False:
             stage = Batch.Stage.UNPROCESSED
         
-        return BatchArtefact(
+        batchArt = BatchArtefact(
             batch=batchID,
             artefact=artefactID,
             stage=stage,
@@ -877,9 +919,14 @@ class BatchArtefact(DIRepresentable):
             processedTime=data.get('processedTime'),
             processingError=data.get('processingError')
         )
+        
+        if withArtefact:
+            batchArt.getArtefact(includeMetadata=metadataRequired)
+        
+        return batchArt
     
     @staticmethod
-    def load(batch: Batch | str, artefact: Artefact | str) -> 'BatchArtefact | None':
+    def load(batch: Batch | str, artefact: Artefact | str, withArtefact: bool=False, metadataRequired: bool=False) -> 'BatchArtefact | None':
         batchID = batch.id if isinstance(batch, Batch) else batch
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
@@ -891,7 +938,7 @@ class BatchArtefact(DIRepresentable):
         if not isinstance(data, dict):
             raise Exception("BATCHARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
         
-        return BatchArtefact.rawLoad(batchID, artefactID, data)
+        return BatchArtefact.rawLoad(batchID, artefactID, data, withArtefact, metadataRequired)
     
     @staticmethod
     def ref(batchID: str, artefactID: str) -> Ref:
