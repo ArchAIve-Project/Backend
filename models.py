@@ -496,7 +496,7 @@ class Batch(DIRepresentable):
                 return False
     
     @databaseDebug
-    def __init__(self, userID: str, batchArtefacts: 'Dict[str, BatchArtefact]'=None, job: 'BatchProcessingJob | None'=None, created: str=None, id: str=None):
+    def __init__(self, userID: str, batchArtefacts: 'List[BatchArtefact | Artefact]'=None, job: 'BatchProcessingJob | None'=None, created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -504,9 +504,18 @@ class Batch(DIRepresentable):
         if batchArtefacts is None:
             batchArtefacts = {}
         
+        batchArts = {}
+        for item in batchArtefacts:
+            if isinstance(item, BatchArtefact):
+                batchArts[item.artefactID] = item
+            elif isinstance(item, Artefact):
+                batchArts[item.id] = BatchArtefact(id, item.id, Batch.Stage.UNPROCESSED)
+            else:
+                raise Exception("BATCH INIT ERROR: Expected item in 'batchArtefacts' to be either BatchArtefact or Artefact, but got '{}'.".format(type(item).__name__))
+        
         self.id: str = id
         self.userID: str = userID
-        self.artefacts: Dict[str, BatchArtefact] = batchArtefacts
+        self.artefacts: Dict[str, BatchArtefact] = batchArts
         self.job: BatchProcessingJob | None = job
         self.user: User | None = None
         self.created: str = created
@@ -596,10 +605,7 @@ class Batch(DIRepresentable):
     def get(self, artefact: Artefact | str) -> 'BatchArtefact | None':
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
-        if not self.has(artefactID):
-            return None
-        
-        return self.artefacts[artefactID]
+        return self.artefacts.get(artefactID, None)
     
     @databaseDebug
     def add(self, artefact: Artefact | str, to: 'Batch.Stage') -> 'BatchArtefact':
@@ -655,6 +661,23 @@ class Batch(DIRepresentable):
         self.artefacts.pop(artefactID, None)
         return True
     
+    def __str__(self):
+        return """<Batch instance
+ID: {}
+User ID: {}
+User Object: {}
+Artefacts:{}
+Job: {}
+Created: {} />
+        """.format(
+            self.id,
+            self.userID,
+            self.user.represent() if self.user is not None else " None",
+            ("\n---\n- " + ("\n- ".join(str(batchArt) if isinstance(batchArt, BatchArtefact) else "CORRUPTED BATCHARTEFACT AT '{}'".format(artID) for artID, batchArt in self.artefacts.items())) + "\n---") if isinstance(self.artefacts, dict) else " None",
+            self.job,
+            self.created
+        )
+    
     @staticmethod
     @databaseDebug
     def rawLoad(batchID: str, data: dict, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch':
@@ -669,10 +692,10 @@ class Batch(DIRepresentable):
         if not isinstance(data['artefacts'], dict):
             data['artefacts'] = {}
         
-        arts = {}
+        arts = []
         for artefactID, batchArtData in data['artefacts'].items():
             if isinstance(batchArtData, dict):
-                arts[artefactID] = BatchArtefact.rawLoad(batchID, artefactID, batchArtData)
+                arts.append(BatchArtefact.rawLoad(batchID, artefactID, batchArtData))
         
         job = None
         if isinstance(data['job'], dict):
@@ -825,6 +848,15 @@ class BatchProcessingJob(DIRepresentable):
             return self.save()
         
         return True
+    
+    def __str__(self):
+        return "BatchProcessingJob(batchID='{}', jobID='{}', status='{}', started='{}', ended='{}')".format(
+            self.batchID,
+            self.jobID,
+            self.status.value,
+            self.started,
+            self.ended
+        )
 
     @staticmethod
     @databaseDebug
@@ -870,7 +902,7 @@ class BatchProcessingJob(DIRepresentable):
 
 class BatchArtefact(DIRepresentable):
     @databaseDebug
-    def __init__(self, batch: Batch | str, artefact: Artefact | str, stage: Batch.Stage, processedDuration: str | None, processedTime: str | None=None, processingError: str | None=None):
+    def __init__(self, batch: Batch | str, artefact: Artefact | str, stage: Batch.Stage, processedDuration: str | None=None, processedTime: str | None=None, processingError: str | None=None):
         batchID = batch.id if isinstance(batch, Batch) else batch
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         stage = Batch.Stage.validateAndReturn(stage)
@@ -930,6 +962,17 @@ class BatchArtefact(DIRepresentable):
         
         self.stage = newStage
         return True
+    
+    def __str__(self):
+        return "BatchArtefact(batchID='{}', artefactID='{}', stage='{}', processedDuration='{}', processedTime='{}', processingError='{}', artefact={})".format(
+            self.batchID,
+            self.artefactID,
+            self.stage.value,
+            self.processedDuration,
+            self.processedTime,
+            self.processingError,
+            self.artefact if self.artefact != None else None
+        )
     
     @staticmethod
     @databaseDebug
@@ -1355,7 +1398,7 @@ class Category(DIRepresentable):
         self.__dict__.update(self.rawLoad(data, self.id).__dict__)
         return True
     
-    def add(self, artefact: Artefact | str, reason: str, checkIntegrity: bool=True, loadArtefactObject: bool=False, metadataRequired: bool=False) -> bool:
+    def add(self, artefact: Artefact | str, reason: str, loadArtefactObject: bool=False, metadataRequired: bool=False) -> bool:
         """Adds an artefact to the category.
 
         Args:
@@ -1384,11 +1427,6 @@ class Category(DIRepresentable):
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         if artefactID in self.members:
             raise Exception("CATEGORY ADD ERROR: Artefact with ID '{}' already exists.".format(artefactID))
-        
-        if checkIntegrity:
-            artefact = Artefact.load(artefactID, includeMetadata=False)
-            if not isinstance(artefact, Artefact):
-                raise Exception("CATEGORY ADD ERROR: Failed to load Artefact with ID '{}'; response: {}".format(artefactID, artefact))
         
         catArt = CategoryArtefact(
             category=self.id,
