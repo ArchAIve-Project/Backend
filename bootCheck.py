@@ -27,6 +27,7 @@ class EnvVariable:
             EnvVariable("DEBUG_MS_AUTOLOAD", True, False),
             EnvVariable("FM_DEBUG_MODE", True, False),
             EnvVariable("DECORATOR_DEBUG_MODE", True, False),
+            EnvVariable("DB_DEBUG_MODE", True, False),
             EnvVariable("ARCHSMITH_ENABLED", True, True),
             EnvVariable("API_KEY", False, True),
             EnvVariable("SECRET_KEY", False, True),

@@ -25,6 +25,22 @@ def debug(func):
         return value
     return wrapper_debug
 
+def databaseDebug(func):
+    """Print the function signature and return value"""
+    @functools.wraps(func)
+    def wrapper_debug(*args, **kwargs):
+        if not os.environ.get("DB_DEBUG_MODE", "False") == "True":
+            return func(*args, **kwargs)
+        
+        args_repr = [repr(a) for a in args]
+        kwargs_repr = [f"{k}={repr(v)}" for k, v in kwargs.items()]
+        signature = ", ".join(args_repr + kwargs_repr)
+        print(f"Calling {func.__name__}({signature})")
+        value = func(*args, **kwargs)
+        print(f"{func.__name__}() returned {repr(value)}")
+        return value
+    return wrapper_debug
+
 def sessionCheckDebug(func):
     """Examine how the session was checked."""
     @functools.wraps(func)
