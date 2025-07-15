@@ -518,7 +518,7 @@ class Batch(DIRepresentable):
                     raise Exception("BATCH SAVE ERROR: Artefact with ID '{}' does not belong to this batch (ID: '{}').".format(artefactID, self.id))
                 if batchArt.artefactID != artefactID:
                     raise Exception("BATCH SAVE ERROR: Found artefact ID '{}' in BatchArtefact when '{}' was expected.".format(batchArt.artefactID, artefactID))
-                if batchArt.stage not in [Batch.Stage.UNPROCESSED, Batch.Stage.PROCESSED, Batch.Stage.CONFIRMED]:
+                if Batch.Stage.validateAndReturn(batchArt.stage) == False:
                     raise Exception("BATCH SAVE ERROR: Invalid stage '{}' for artefact with ID '{}'.".format(batchArt.stage, artefactID))
         
         return DI.save(self.represent(), self.originRef)
@@ -545,6 +545,8 @@ class Batch(DIRepresentable):
         return True
     
     def __str__(self):
+        # TODO: Change to more readable format, like Category
+        
         completeData = self.represent()
         completeData['user'] = self.user.represent() if self.user is not None else None
         
@@ -556,6 +558,7 @@ class Batch(DIRepresentable):
         
         self.user = User.load(id=self.userID)
         if not isinstance(self.user, User):
+            self.user = None
             raise Exception("BATCH GETUSER ERROR: Failed to load User with ID '{}'; response: {}".format(self.userID, self.user))
         
         return True
@@ -591,8 +594,6 @@ class Batch(DIRepresentable):
             raise Exception("BATCH MOVE ERROR: Artefact with ID '{}' does not exist in the batch.".format(artefactID))
         
         batchArt = self.artefacts[artefactID]
-        if batchArt.stage == to:
-            raise Exception("BATCH MOVE ERROR: Artefact with ID '{}' is already in stage '{}'.".format(artefactID, to))
         batchArt.stage = to
         
         return True
@@ -713,6 +714,101 @@ class Batch(DIRepresentable):
     @staticmethod
     def ref(id: str) -> Ref:
         return Ref("batches", id)
+
+class BatchProcessingJob(DIRepresentable):
+    class Status(str, Enum):
+        PENDING = "pending"
+        PROCESSING = "processing"
+        COMPLETED = "completed"
+        CANCELLED = "cancelled"
+        
+        @staticmethod
+        def validateAndReturn(status) -> 'BatchProcessingJob.Status | Literal[False]':
+            if isinstance(status, BatchProcessingJob.Status):
+                return status
+            elif isinstance(status, str):
+                try:
+                    return BatchProcessingJob.Status(status.lower())
+                except ValueError:
+                    return False
+            else:
+                return False
+    
+    def __init__(self, batch: Batch | str, jobID: str, status: 'BatchProcessingJob.Status', started: str | None=None, ended: str | None=None):
+        batchID = batch.id if isinstance(batch, Batch) else batch
+        status = BatchProcessingJob.Status.validateAndReturn(status)
+        if status == False:
+            raise Exception("BATCHPROCESSINGJOB INIT ERROR: Invalid status provided; expected 'BatchProcessingJob.Status' or string representation of it.")
+        
+        self.batchID: str = batchID
+        self.jobID: str = jobID
+        self.status: BatchProcessingJob.Status = status
+        self.started: str | None = started
+        self.ended: str | None = ended
+        self.originRef = BatchProcessingJob.ref(batchID)
+    
+    def represent(self):
+        return {
+            "jobID": self.jobID,
+            "status": self.status.value,
+            "started": self.started,
+            "ended": self.ended
+        }
+    
+    def save(self):
+        return DI.save(self.represent(), self.originRef)
+    
+    def reload(self):
+        data = DI.load(self.originRef)
+        if isinstance(data, DIError):
+            raise Exception("BATCHPROCESSINGJOB RELOAD ERROR: DIError occurred: {}".format(data))
+        if data == None:
+            raise Exception("BATCHPROCESSINGJOB RELOAD ERROR: No data found at reference '{}'.".format(self.originRef))
+        if not isinstance(data, dict):
+            raise Exception("BATCHPROCESSINGJOB RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+
+        self.__dict__.update(self.rawLoad(data, self.batchID).__dict__)
+        return True
+
+    @staticmethod
+    def rawLoad(batchID: str, data: dict):
+        reqParams = ['jobID', 'status', 'started', 'ended']
+        for reqParam in reqParams:
+            if reqParam not in data:
+                if reqParam == 'status':
+                    data[reqParam] = BatchProcessingJob.Status.PENDING.value
+                else:
+                    data[reqParam] = None
+        
+        status = BatchProcessingJob.Status.validateAndReturn(data['status'])
+        if status == False:
+            status = BatchProcessingJob.Status.PENDING
+        
+        return BatchProcessingJob(
+            batch=batchID,
+            jobID=data.get('jobID'),
+            status=status,
+            started=data.get('started'),
+            ended=data.get('ended')
+        )
+    
+    @staticmethod
+    def load(batch: Batch | str) -> 'BatchProcessingJob | None':
+        batchID = batch.id if isinstance(batch, Batch) else batch
+        
+        data = DI.load(BatchProcessingJob.ref(batchID))
+        if data is None:
+            return None
+        if isinstance(data, DIError):
+            raise Exception("BATCHPROCESSINGJOB LOAD ERROR: DIError occurred: {}".format(data))
+        if not isinstance(data, dict):
+            raise Exception("BATCHPROCESSINGJOB LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        return BatchProcessingJob.rawLoad(batchID, data)
+    
+    @staticmethod
+    def ref(batchID: str) -> Ref:
+        return Ref("batches", batchID, "job")
 
 class BatchArtefact(DIRepresentable):
     def __init__(self, batch: Batch | str, artefact: Artefact | str, stage: Batch.Stage, processedDuration: str | None, processedTime: str | None=None, processingError: str | None=None):
