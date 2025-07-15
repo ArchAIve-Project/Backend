@@ -4,7 +4,6 @@ from fm import File, FileManager
 from utils import Ref
 from services import Universal
 from typing import List, Dict, Any, Literal
-from datetime import datetime 
 
 class Artefact(DIRepresentable):
     def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
@@ -31,7 +30,7 @@ class Artefact(DIRepresentable):
     
     def save(self) -> bool:
         return DI.save(self.represent(), self.originRef)
-    
+
     def destroy(self):
         return DI.save(None, self.originRef)
     
@@ -46,7 +45,7 @@ class Artefact(DIRepresentable):
         
         self.__dict__.update(self.rawLoad(data, self.id).__dict__)
         return True
-    
+
     def getFMFile(self) -> File:
         return File(self.image, "artefacts")
     
@@ -600,7 +599,7 @@ class Batch(DIRepresentable):
         
         return True
     
-    def getArtefacts(self, unprocessed: bool=True, processed: bool=True, confirmed: bool=True, metadataRequired: bool=False) -> bool:
+    def getArtefacts(self, unprocessed: bool=False, processed: bool=False, confirmed: bool=False, metadataRequired: bool=False) -> bool:
         if not (unprocessed or processed or confirmed):
             raise Exception("BATCH GETARTEFACTS ERROR: At least one of unprocessed, processed, or confirmed must be True.")
         
