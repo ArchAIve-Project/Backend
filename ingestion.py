@@ -1,6 +1,6 @@
 import time
 from models import Batch, BatchProcessingJob, BatchArtefact, Artefact, Metadata
-from services import ThreadManager
+from services import ThreadManager, Universal
 from metagen import MetadataGenerator
 from services import Logger
 
@@ -20,12 +20,59 @@ class DataImportProcessor:
         pass
     
     @staticmethod
+    def endProcessing(batchArt: BatchArtefact, processingStartTime: float, errorMsg: str=None, updateStageIfError: bool=False):
+        batchArt.processedTime = Universal.utcNowString()
+        batchArt.processedDuration = '{:.3f}'.format(time.time() - processingStartTime)
+        batchArt.processingError = errorMsg
+        
+        if (errorMsg is None) or (errorMsg != None and updateStageIfError):
+            batchArt.stage = Batch.Stage.PROCESSED
+        
+        batchArt.save()
+    
+    @staticmethod
     def processItem(batchArtefact: BatchArtefact):
+        if batchArtefact.stage != Batch.Stage.UNPROCESSED:
+            Logger.log("DATAIMPORT PROCESSITEM WARNING: Processing Artefact '{}' of batch '{}' despite stage of '{}'.".format(batchArtefact.artefactID, batchArtefact.batchID, batchArtefact.stage.value))
+        
+        processingStartTime = time.time()
+        
         if not isinstance(batchArtefact.artefact, Artefact):
             try:
                 batchArtefact.getArtefact(includeMetadata=True)
             except Exception as e:
-                Logger.log("DATAIMPORT PROCESSITEM: ")
+                Logger.log("DATAIMPORT PROCESSITEM ERROR: Failed to obtain Artefact object (BatchID: {}, ArtefactID: {}); error: {}".format(batchArtefact.batchID, batchArtefact.artefactID, e))
+                DataImportProcessor.endProcessing(batchArtefact, processingStartTime, e)
+                return
+        
+        out = None
+        try:
+            out = MetadataGenerator.generate(batchArtefact.artefact.getFMFile().path())
+            if isinstance(out, str):
+                raise Exception(out)
+        except Exception as e:
+            Logger.log("DATAIMPORT PROCESSITEM ERROR: Failure in metadata generation (BatchID: {}, ArtefactID: {}); error: {}".format(batchArtefact.batchID, batchArtefact.artefactID, e))
+            DataImportProcessor.endProcessing(batchArtefact, processingStartTime, str(e))
+            return
+
+        errors = None
+        if 'errors' in out:
+            if isinstance(out['errors'], str):
+                errors = out['errors']
+            elif isinstance(out['errors'], list):
+                errors = ", ".join([e for e in out['errors'] if isinstance(e, str)])
+        
+        try:
+            batchArtefact.artefact.metadata = Metadata.fromMetagen(batchArtefact.artefactID, out)
+        except Exception as e:
+            Logger.log("DATAIMPORT PROCESSITEM ERROR: Failed to construct Metadata object from generator output (BatchID: {}, ArtefactID: {}); error: {}".format(e))
+            DataImportProcessor.endProcessing(batchArtefact, processingStartTime, str(e))
+        
+        batchArtefact.artefact.save()
+        DataImportProcessor.endProcessing(batchArtefact, processingStartTime, errors, updateStageIfError=True)
+        
+        Logger.log("DATAIMPORT PROCESSITEM: Artefact '{}' of batch '{}' processed.".format(batchArtefact.artefactID, batchArtefact.batchID))
+        return
     
     
     # @staticmethod
