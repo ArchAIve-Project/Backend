@@ -12,37 +12,43 @@ class DataImportProcessor:
         job.start()
         job.save()
         
-        # Pick out all artefacts to be processed
-        targetArtefacts = [x for x in batch.artefacts.values() if x.stage == Batch.Stage.UNPROCESSED]
-        targetCount = len(targetArtefacts)
-        Logger.log("DATAIMPORT PROCESSBATCH: Processing batch '{}' with '{}' targets and chunk size '{}'.".format(batch.id, targetCount, chunkSize))
+        targetBatchArtefacts = [x for x in batch.artefacts.values() if x.stage == Batch.Stage.UNPROCESSED]
+        chunk: list[BatchArtefact] = []
         
-        # Chunk
+        targetCount = len(targetBatchArtefacts)
         completionCount = 0
         
-        chunk = []
-        while len(targetArtefacts) > 0:
-            chunk = targetArtefacts[:chunkSize]
+        processingComplete = False
+        
+        Logger.log("DATAIMPORT PROCESSBATCH: Processing batch '{}' with '{}' targets and chunk size '{}'.".format(batch.id, targetCount, chunkSize))
+        
+        while (len(targetBatchArtefacts) > 0) or (not processingComplete):
+            processedChunkIndices = [i for i, x in enumerate(chunk) if x.stage == Batch.Stage.PROCESSED]
+            for i in processedChunkIndices:
+                chunk.pop(i)
+                completionCount += 1
             
-            for batchArt in chunk:
+            if len(chunk) == 0 and len(targetBatchArtefacts) == 0:
+                processingComplete = True
+                continue
+            
+            if len(chunk) < chunkSize and len(targetBatchArtefacts) > 0: # if the chunk is not full, add more artefacts
+                batchArt = targetBatchArtefacts.pop(0)
+                chunk.append(batchArt)
                 ThreadManager.defaultProcessor.addJob(DataImportProcessor.processItem, batchArt)
             
-            while not all(batchArt.stage == Batch.Stage.PROCESSED for batchArt in chunk) and not job.status == BatchProcessingJob.Status.CANCELLED:
-                job.reload()
-                time.sleep(0.5)
-            
+            job.reload() # reload the job to check its status
             if job.status == BatchProcessingJob.Status.CANCELLED:
                 Logger.log("DATAIMPORT PROCESSBATCH: Processing of batch '{}' cancelled. Completion: {} out of {}".format(batch.id, completionCount, targetCount))
                 job.end()
                 job.save()
                 return
-            
-            completionCount += len(chunk)
-            targetArtefacts = targetArtefacts[chunkSize:]
-
+            time.sleep(0.5) # Sleep to avoid busy-waiting
+        
         Logger.log("DATAIMPORT PROCESSBATCH: Processed '{}' artefacts for batch '{}' out of '{}'.".format(completionCount, batch.id, targetCount))
         job.end()
         job.save()
+        return
     
     @staticmethod
     def endProcessing(batchArt: BatchArtefact, processingStartTime: float, errorMsg: str=None):
@@ -50,7 +56,7 @@ class DataImportProcessor:
         batchArt.processedDuration = '{:.3f}'.format(time.time() - processingStartTime)
         batchArt.processingError = errorMsg
         batchArt.stage = Batch.Stage.PROCESSED
-        
+        batchArt.artefact = None # Clear the artefact reference to free memory
         batchArt.save()
     
     @staticmethod
