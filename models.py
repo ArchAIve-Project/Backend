@@ -298,7 +298,7 @@ class MMData(DIRepresentable):
         )
         
     @staticmethod
-    def load(artefactID: str) -> 'MMData | None' :
+    def load(artefactID: str) -> 'MMData | None':
         data = DI.load(MMData.ref(artefactID))
         if data == None:
             return None
@@ -467,13 +467,101 @@ class Book(DIRepresentable):
         return Ref("books", id)
 
 class Batch(DIRepresentable):
+    """A collection of references to artefacts that are processed together. A `DIRepresentable` model.
+    
+    Notes:
+    - `Batch` is a larger model that has a collection of `BatchArtefact` objects, which are references to `Artefact` objects.
+    - Processing job data associated with a batch is stored as `BatchProcessingJob` under the `job` attribute.
+    - The memory size of this model can get quite extensive if all sub-units of data are loaded and there are many artefacts.
+    - Each `BatchArtefact` has a `stage` attribute that indicates its processing stage, among other parameters to store processing information.
+    - Each `job: BatchProcessingJob` has a `status` attribute that indicates the status of the processing job. It also contains a `jobID`, which is meant to be the `ThreadManager` job ID.
+    - Methods below are excluding those already defined in `DIRepresentable`.
+    
+    Attributes:
+        id (str): Unique identifier for the batch.
+        userID (str): ID of the user who created the batch.
+        artefacts (Dict[str, BatchArtefact]): Dictionary of `BatchArtefact` objects keyed by artefact ID.
+        job (BatchProcessingJob | None): The processing job associated with the batch, if any.
+        user (User | None): The user object associated with the batch, if loaded.
+        created (str): Timestamp of when the batch was created.
+        originRef (Ref): Reference to the batch in the database.
+    
+    Methods:
+        `save(checkIntegrity: bool=True)`: Saves the batch to the database, checking integrity if specified.
+        `represent()`: Returns a dictionary representation of the batch.
+        `reload()`: Reloads the batch data from the database.
+        `getUser()`: Loads the user associated with the batch.
+        `loadAllArtefacts(withMetadata: bool=False)`: Loads all artefacts in the batch, optionally including metadata. Artefacts are loaded internally in the `BatchArtefact` objects (`artefact` attribute).
+        `get(artefact: Artefact | str)`: Retrieves a `BatchArtefact` by its artefact ID or `Artefact` object.
+        `add(artefact: Artefact | str, to: Batch.Stage)`: Adds an artefact to the batch at a specified stage.
+        `has(artefact: Artefact | str)`: Checks if an artefact is in the batch.
+        `move(artefact: Artefact | str, to: Batch.Stage)`: Moves an artefact to a different stage in the batch.
+        `where(artefact: Artefact | str)`: Returns the stage of an artefact in the batch.
+        `remove(artefact: Artefact | str)`: Removes an artefact from the batch.
+        `initJob(jobID: str=None, status: BatchProcessingJob.Status=None, autoStart: bool=False)`: Initializes a processing job for the batch with an optional job ID and status, and optionally starts it.
+        `__str__()`: Returns a string representation of the batch, including its ID, user ID, artefacts, job, and creation timestamp.
+    
+    Static Methods:
+        `rawLoad(batchID: str, data: dict, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False)`: Loads a batch from raw data, optionally including user and artefact information.
+        `load(id: str=None, userID: str=None, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False)`: Loads a batch by ID or user ID, optionally including user and artefact information.
+        `ref(id: str)`: Returns a reference to the batch in the database.
+    
+    Example usage:
+    ```python
+    from models import DI, Batch, BatchArtefact, BatchProcessingJob, User, Artefact
+    DI.setup()
+    
+    user = User.load()[0] # Load the first user available
+    arts = Artefact.load()
+    
+    batch: Batch = Batch(user.id, arts) # Create a new batch, associated with the given user, containing the artefacts. Artefacts are automatically converted to BatchArtefact objects in the 'unprocessed' stage.
+    
+    batch.loadAllArtefacts(withMetadata=True) # Loads all artefacts in the batch, including their metadata if available. Warning: time- and memory-intensive operation.
+    print(list(batch.artefacts.values())[0].artefact) # outputs the Artefact object of the first BatchArtefact reference in the batch
+    
+    print(batch.where(arts[0])) # outputs: Batch.Stage.UNPROCESSED
+    
+    newArt = Artefact.load('some_artefact_not_in_batch')
+    
+    print(batch.has(newArt)) # outputs: False
+    batch.add(newArt, Batch.Stage.UNPROCESSED) # constructs BatchArtefact reference to new artefact with the 'unprocessed' stage
+    print(batch.has(newArt)) # outputs: True
+
+    print(batch.move(arts[0], Batch.Stage.PROCESSED))
+    print(batch.where(arts[0])) # outputs: Batch.Stage.PROCESSED
+    
+    batch.initJob(jobID='someJobID', autoStart=True) # Initializes a processing job for the batch
+    print(batch.job) # outputs BatchProcessingJob instance
+    
+    batch.job.end() # note: .cancel() auto saves by default
+    batch.save() # remember to save after any modifications
+    print(batch) # outputs the string representation of the batch with all artefacts and job information
+    ```
+    """
+    
     class Stage(str, Enum):
+        """Represents the various stages a batch can be in.
+        
+        Options:
+            UNPROCESSED: The artefact has not been processed yet.
+            PROCESSED: The artefact has been processed.
+            CONFIRMED: The artefact has been confirmed after processing.
+        """
+        
         UNPROCESSED = "unprocessed"
         PROCESSED = "processed"
         CONFIRMED = "confirmed"
         
         @staticmethod
-        def validateAndReturn(stage) -> 'Batch.Stage | Literal[False]':
+        def validateAndReturn(stage: 'Batch.Stage | str') -> 'Batch.Stage | Literal[False]':
+            """Validates the given stage and returns it if valid, or False if invalid.
+
+            Args:
+                stage (str | Batch.Stage): The stage to validate.
+
+            Returns: `Batch.Stage | Literal[False]`: The validated stage or False if invalid.
+            """
+            
             if isinstance(stage, Batch.Stage):
                 return stage
             elif isinstance(stage, str):
@@ -485,6 +573,19 @@ class Batch(DIRepresentable):
                 return False
     
     def __init__(self, userID: str, batchArtefacts: 'List[BatchArtefact | Artefact]'=None, job: 'BatchProcessingJob | None'=None, created: str=None, id: str=None):
+        """Initializes a new Batch instance.
+
+        Args:
+            userID (str): The ID of the user associated with the batch.
+            batchArtefacts (List[BatchArtefact | Artefact], optional): The artefacts to include in the batch. Both `BatchArtefact` and `Artefact` objects are accepted. `Artefact` objects are converted into 'unprocessed' `BatchArtefact` objects. Defaults to None.
+            job (BatchProcessingJob | None, optional): The processing job associated with the batch. Defaults to None.
+            created (str, optional): The creation timestamp of the batch. Defaults to None.
+            id (str, optional): The unique ID of the batch. Defaults to None.
+
+        Raises:
+            Exception: If the initialization fails or if the provided artefacts are not of the expected type.
+        """
+        
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -510,6 +611,23 @@ class Batch(DIRepresentable):
         self.originRef = Batch.ref(self.id)
     
     def save(self, checkIntegrity: bool=True) -> bool:
+        """Saves the batch to the database.
+
+        Args:
+            checkIntegrity (bool, optional): Whether to check the integrity of the batch before saving. Defaults to True.
+
+        Raises:
+            Exception: If the batch does not have a userID set.
+            Exception: If the user associated with the batch does not exist.
+            Exception: If any artefact in the batch is not a valid BatchArtefact.
+            Exception: If the batch's job is not a valid BatchProcessingJob.
+            Exception: If a batch artefact's batch ID does not match `self.batchID`.
+            Exception: If a batch artefact's artefact ID does not match the expected ID.
+
+        Returns:
+            bool: True if the batch was saved successfully.
+        """
+        
         if checkIntegrity:
             if self.userID is None:
                 raise Exception("BATCH SAVE ERROR: Batch does not have a userID set.")
@@ -555,14 +673,32 @@ class Batch(DIRepresentable):
         return True
     
     def __str__(self):
-        # TODO: Change to more readable format, like Category
-        
-        completeData = self.represent()
-        completeData['user'] = self.user.represent() if self.user is not None else None
-        
-        return str(completeData)
+        return """<Batch instance
+ID: {}
+User ID: {}
+User Object:{}
+Artefact References:{}
+Job:{}
+Created: {} />
+        """.format(
+            self.id,
+            self.userID,
+            self.user.represent() if isinstance(self.user, User) else " None",
+            ("\n---\n- " + ("\n- ".join(str(batchArt) if isinstance(batchArt, BatchArtefact) else "CORRUPTED BATCHARTEFACT AT '{}'".format(artID) for artID, batchArt in self.artefacts.items())) + "\n---") if isinstance(self.artefacts, dict) else " None",
+            self.job if isinstance(self.job, BatchProcessingJob) else " None",
+            self.created
+        )
     
     def getUser(self) -> bool:
+        """Loads the user associated with the batch into the `user` attribute.
+
+        Raises:
+            Exception: If the `userID` is invalid or if the user cannot be loaded.
+
+        Returns:
+            bool: True if the user was successfully loaded, False otherwise.
+        """
+        
         if not isinstance(self.userID, str):
             raise Exception("BATCH GETUSER ERROR: Invalid value set for 'userID'. Expected a string representing the User ID.")
         
@@ -574,6 +710,20 @@ class Batch(DIRepresentable):
         return True
     
     def loadAllArtefacts(self, withMetadata: bool=False) -> bool:
+        """Loads all artefacts associated with the batch.
+
+        Args:
+            withMetadata (bool, optional): If True, includes metadata in the artefact loading process. Defaults to False.
+
+        Raises:
+            Exception: If the `artefacts` attribute is not a dictionary.
+            Exception: If a value in `artefacts` is not a valid `BatchArtefact`.
+            Exception: If an artefact cannot be loaded.
+
+        Returns:
+            bool: True if all artefacts were successfully loaded.
+        """
+        
         if not isinstance(self.artefacts, dict):
             raise Exception("BATCH LOADARTEFACTS ERROR: Expected 'artefacts' to be a dictionary, but got '{}'.".format(type(self.artefacts).__name__))
         
@@ -586,11 +736,33 @@ class Batch(DIRepresentable):
         return True
     
     def get(self, artefact: Artefact | str) -> 'BatchArtefact | None':
+        """Retrieves a `BatchArtefact` reference from the batch.
+
+        Args:
+            artefact (Artefact | str): The artefact to retrieve, either as an Artefact instance or its ID.
+
+        Returns: `BatchArtefact | None`: The requested artefact if it exists, None otherwise.
+        """
+        
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
         return self.artefacts.get(artefactID, None)
     
     def add(self, artefact: Artefact | str, to: 'Batch.Stage') -> 'BatchArtefact':
+        """Adds an artefact to the batch, creating a `BatchArtefact` reference.
+
+        Args:
+            artefact (Artefact | str): The artefact to add, either as an Artefact instance or its ID.
+            to (Batch.Stage): The stage of the artefact reference.
+
+        Raises:
+            Exception: If the `artefact` value is not valid.
+            Exception: If the artefact reference already exists in the batch.
+
+        Returns:
+            BatchArtefact: The added artefact reference object.
+        """
+        
         to = Batch.Stage.validateAndReturn(to)
         if to == False:
             raise Exception("BATCH ADD ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
@@ -605,12 +777,35 @@ class Batch(DIRepresentable):
         
         return batchArt
     
-    def has(self, artefact: Artefact | str) -> bool: 
+    def has(self, artefact: Artefact | str) -> bool:
+        """Checks if a reference to an artefact exists in the batch.
+
+        Args:
+            artefact (Artefact | str): The artefact to check, either as an Artefact instance or its ID.
+
+        Returns:
+            bool: True if the artefact exists in the batch, False otherwise.
+        """
+        
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
         return artefactID in self.artefacts
     
     def move(self, artefact: Artefact | str, to: 'Batch.Stage') -> bool:
+        """Moves an artefact reference to a different stage in the batch.
+
+        Args:
+            artefact (Artefact | str): The artefact to move, either as an Artefact instance or its ID.
+            to (Batch.Stage): The stage to which the artefact should be moved.
+
+        Raises:
+            Exception: If the `artefact` value is not valid.
+            Exception: If the artefact reference does not exist in the batch.
+
+        Returns:
+            bool: True if the artefact was moved successfully, False otherwise.
+        """
+        
         to = Batch.Stage.validateAndReturn(to)
         if to == False:
             raise Exception("BATCH MOVE ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
@@ -626,20 +821,48 @@ class Batch(DIRepresentable):
         return True
     
     def where(self, artefact: Artefact | str) -> 'Batch.Stage | None':
+        """Retrieves the stage of a specific artefact reference in the batch.
+
+        Args:
+            artefact (Artefact | str): The artefact to check, either as an Artefact instance or its ID.
+
+        Returns: `Batch.Stage | None`: The stage of the artefact if it exists in the batch, None otherwise.
+        """
+        
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
         return self.artefacts[artefactID].stage if self.has(artefactID) else None
     
     def remove(self, artefact: Artefact | str) -> bool:
-        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        """Removes an artefact reference from the batch.
+
+        Args:
+            artefact (Artefact | str): The artefact to remove, either as an Artefact instance or its ID.
+
+        Returns:
+            bool: True if the artefact was removed successfully.
+        """
         
-        if not self.has(artefactID):
-            raise Exception("BATCH REMOVE ERROR: Artefact with ID '{}' does not exist in the batch.".format(artefactID))
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
         self.artefacts.pop(artefactID, None)
         return True
     
     def initJob(self, jobID: str=None, status: 'BatchProcessingJob.Status'=None, autoStart: bool=False) -> 'BatchProcessingJob':
+        """Initializes a new `BatchProcessingJob` under the `job` attribute.
+
+        Args:
+            jobID (str, optional): The ID of the job. Defaults to None.
+            status (BatchProcessingJob.Status, optional): The status of the job. Defaults to `BatchProcessingJob.Status.PENDING`.
+            autoStart (bool, optional): Whether to start the job automatically. Defaults to False.
+
+        Raises:
+            Exception: If the `status` value is provided but not valid.
+
+        Returns:
+            BatchProcessingJob: The initialized batch processing job object.
+        """
+        
         if status is None:
             status = BatchProcessingJob.Status.PENDING
         
@@ -677,6 +900,19 @@ Created: {} />
     
     @staticmethod
     def rawLoad(batchID: str, data: dict, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch':
+        """Constructs a `Batch` from raw dictionary data.
+
+        Args:
+            batchID (str): The ID of the batch.
+            data (dict): The raw data for the batch.
+            withUser (bool, optional): Whether to automatically load the associated `User` object. Defaults to False.
+            withArtefacts (bool, optional): Whether to automatically load `Artefact` objects internally in `BatchArtefact` references. Defaults to False.
+            metadataRequired (bool, optional): Whether metadata should be loaded in the Artefact loading process. Defaults to False. Effective if `withArtefacts` is True. Warning: may cause high memory usage.
+
+        Returns:
+            Batch: The loaded batch object.
+        """
+        
         requiredParams = ['userID', 'artefacts', 'job', 'created']
         for reqParam in requiredParams:
             if reqParam not in data:
@@ -714,19 +950,18 @@ Created: {} />
     
     @staticmethod
     def load(id: str=None, userID: str=None, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch | Dict[Batch] | None':
-        '''
-        If id found load specific batch from the database
-        else loads all batches from the database and filter based on userID // Gets all batch under that userID
+        """Loads a batch from the database.
 
         Args:
             id (str, optional): The ID of the batch to load. Defaults to None.
-            userID (str, optional): The user ID of the batch to load. Defaults to None.
-            withUser (bool, optional): Whether to include user information in the loaded batch. Defaults to False.
-            withArtefacts (bool, optional): Whether to include artefacts in the loaded batch. Defaults to False.
+            userID (str, optional): Produces a list of batches associated with the user ID. Defaults to None.
+            withUser (bool, optional): Whether to automatically load the associated `User` object. Defaults to False.
+            withArtefacts (bool, optional): Whether to automatically load `Artefact` objects internally in `BatchArtefact` references. Defaults to False.
+            metadataRequired (bool, optional): Whether metadata should be loaded in the Artefact loading process. Defaults to False. Effective if `withArtefacts` is True. Warning: may cause high memory usage.
 
-        Returns:
-            Batch | Dict[Batch] | None: The loaded batch or list of batches, or None if not found.
-        '''
+        Returns: `Batch | Dict[Batch] | None`: The loaded batch or list of batches, or None if not found.
+        """
+        
         if id != None:
             data = DI.load(Batch.ref(id))
             if data is None:
@@ -771,7 +1006,57 @@ Created: {} />
         return Ref("batches", id)
 
 class BatchProcessingJob(DIRepresentable):
+    """Represents a batch processing job. Contains key attributes such as job ID, status and timestamps for when the job started and ended. A `DIRepresentable` model.
+
+    Attributes:
+        batchID (str): The ID of the batch this job is associated with.
+        jobID (str | None): The ID of the job, if available.
+        status (BatchProcessingJob.Status): The current status of the job.
+        started (str | None): The timestamp when the job started, if available.
+        ended (str | None): The timestamp when the job ended, if available.
+    
+    Methods:
+        `save()`: Saves the job data to the database.
+        `represent()`: Returns a dictionary representation of the job.
+        `start(jobID: str=None)`: Starts the job, setting its status to PROCESSING and updating the started timestamp. Optionally sets a job ID.
+        `end()`: Ends the job, setting its status to COMPLETED and updating the ended timestamp.
+        `cancel(autoSave: bool=True)`: Cancels the job, setting its status to CANCELLED and updating the ended timestamp. Optionally saves the job data.
+        `reload()`: Reloads the job data from the database.
+        `setStatus(newStatus: BatchProcessingJob.Status)`: Sets the job's status to a new value, validating it first.
+        `__str__()`: Returns a string representation of the job.
+    
+    Static Methods:
+        `rawLoad(batchID: str, data: dict)`: Constructs a `BatchProcessingJob` from raw data, validating required parameters and setting defaults if necessary.
+        `load(batch: Batch | str)`: Loads a `BatchProcessingJob` for a given batch, either by batch ID or `Batch` object. Returns None if no job is found.
+        `ref(batchID: str)`: Returns a reference to the job in the database.
+    
+    Example usage:
+    ```python
+    import time
+    from models import DI, Batch, BatchProcessingJob
+    DI.setup()
+    
+    job = BatchProcessingJob.load(batchID='some_batch_id')
+    job.start()
+    
+    time.sleep(2)  # Simulate processing time
+    
+    job.end()
+    job.save()  # Save the job data to the database
+    print(job)  # Outputs the string representation of the job
+    ```
+    """
+    
     class Status(str, Enum):
+        """Represents the various statuses a batch processing job can have.
+        
+        Options:
+            PENDING: The job is waiting to be processed.
+            PROCESSING: The job is currently being processed.
+            COMPLETED: The job has been successfully completed.
+            CANCELLED: The job has been cancelled.
+        """
+        
         PENDING = "pending"
         PROCESSING = "processing"
         COMPLETED = "completed"
@@ -790,6 +1075,19 @@ class BatchProcessingJob(DIRepresentable):
                 return False
     
     def __init__(self, batch: Batch | str, jobID: str | None, status: 'BatchProcessingJob.Status', started: str | None=None, ended: str | None=None):
+        """Initializes a new batch processing job.
+
+        Args:
+            batch (Batch | str): The batch object or ID associated with the job.
+            jobID (str | None): Typically the thread ID of the job.
+            status (BatchProcessingJob.Status): The current status of the job.
+            started (str | None, optional): The timestamp when the job was started. Defaults to None.
+            ended (str | None, optional): The timestamp when the job was ended. Defaults to None.
+
+        Raises:
+            Exception: If the provided status is invalid.
+        """
+        
         batchID = batch.id if isinstance(batch, Batch) else batch
         status = BatchProcessingJob.Status.validateAndReturn(status)
         if status == False:
@@ -814,6 +1112,15 @@ class BatchProcessingJob(DIRepresentable):
         return DI.save(self.represent(), self.originRef)
     
     def start(self, jobID: str=None) -> bool:
+        """Starts the batch processing job, setting its status to PROCESSING and updating the started timestamp.
+
+        Args:
+            jobID (str, optional): The unique identifier for the job. Defaults to None.
+
+        Returns:
+            bool: True if the job was successfully started.
+        """
+        
         if self.status != BatchProcessingJob.Status.PENDING:
             Logger.log("BATCHPROCESSINGJOB START WARNING: Starting job with ID '{}' that is not in PENDING status; current status: '{}'.".format(self.jobID, self.status.value))
         
@@ -825,6 +1132,12 @@ class BatchProcessingJob(DIRepresentable):
         return True
     
     def end(self) -> bool:
+        """Ends the batch processing job, setting its status to COMPLETED and updating the ended timestamp.
+
+        Returns:
+            bool: True if the job was successfully ended.
+        """
+        
         if self.status != BatchProcessingJob.Status.PROCESSING:
             Logger.log("BATCHPROCESSINGJOB END WARNING: Ending job with ID '{}' that is not in PROCESSING status; current status: '{}'.".format(self.jobID, self.status.value))
         
@@ -834,6 +1147,15 @@ class BatchProcessingJob(DIRepresentable):
         return True
     
     def cancel(self, autoSave: bool=True) -> bool:
+        """Cancels the batch processing job, setting its status to CANCELLED and updating the ended timestamp.
+
+        Args:
+            autoSave (bool, optional): Whether to automatically save the job state. Defaults to True.
+
+        Returns:
+            bool: True if the job was successfully cancelled.
+        """
+        
         if self.status != BatchProcessingJob.Status.PROCESSING:
             Logger.log("BATCHPROCESSINGJOB CANCEL WARNING: Cancelling job with ID '{}' that is not in PROCESSING status; current status: '{}'.".format(self.jobID, self.status.value))
         
@@ -858,6 +1180,18 @@ class BatchProcessingJob(DIRepresentable):
         return True
     
     def setStatus(self, newStatus: 'BatchProcessingJob.Status') -> bool:
+        """Sets the status of the batch processing job.
+
+        Args:
+            newStatus (BatchProcessingJob.Status): The new status to set.
+
+        Raises:
+            Exception: If the provided status is invalid.
+
+        Returns:
+            bool: True if the status was successfully updated.
+        """
+        
         newStatus = BatchProcessingJob.Status.validateAndReturn(newStatus)
         if newStatus == False:
             raise Exception("BATCHPROCESSINGJOB SETSTATUS ERROR: Invalid status provided; expected 'BatchProcessingJob.Status' or string representation of it.")
@@ -875,7 +1209,17 @@ class BatchProcessingJob(DIRepresentable):
         )
 
     @staticmethod
-    def rawLoad(batchID: str, data: dict):
+    def rawLoad(batchID: str, data: dict) -> 'BatchProcessingJob':
+        """Loads a batch processing job from the provided data dictionary.
+
+        Args:
+            batchID (str): The ID of the batch this job is associated with.
+            data (dict): The data dictionary containing job information.
+
+        Returns:
+            BatchProcessingJob: The job object.
+        """
+        
         reqParams = ['jobID', 'status', 'started', 'ended']
         for reqParam in reqParams:
             if reqParam not in data:
@@ -898,6 +1242,18 @@ class BatchProcessingJob(DIRepresentable):
     
     @staticmethod
     def load(batch: Batch | str) -> 'BatchProcessingJob | None':
+        """Loads a batch processing job from the provided batch identifier.
+
+        Args:
+            batch (Batch | str): The batch object or ID this job is associated with.
+
+        Raises:
+            Exception: If the provided batch is invalid.
+            Exception: If the job cannot be loaded.
+
+        Returns: `BatchProcessingJob | None`: The loaded job object or None if not found.
+        """
+        
         batchID = batch.id if isinstance(batch, Batch) else batch
         
         data = DI.load(BatchProcessingJob.ref(batchID))
@@ -915,7 +1271,63 @@ class BatchProcessingJob(DIRepresentable):
         return Ref("batches", batchID, "job")
 
 class BatchArtefact(DIRepresentable):
+    """Represents an artefact reference within a batch. A junction model between `Batch` and `Artefact`, this model contains key attributes
+    that link the two entities together with additional information.
+    
+    Attributes:
+        batchID (str): The ID of the batch this artefact is associated with.
+        artefactID (str): The ID of the artefact this reference points to.
+        stage (Batch.Stage): The current processing stage of the artefact within the batch.
+        processedDuration (str | None): The duration for which the artefact has been processed, if applicable.
+        processedTime (str | None): The timestamp when the artefact was processed, if applicable.
+        processingError (str | None): Any error that occurred during the processing of the artefact, if applicable.
+        artefact (Artefact | None): A convenience attribute that holds the `Artefact` object if it has been loaded.
+        originRef (Ref): The reference to the artefact in the database.
+    
+    Methods:
+        `save()`: Saves the artefact reference to the database.
+        `represent()`: Returns a dictionary representation of the artefact reference.
+        `reload()`: Reloads the artefact reference from the database.
+        `getArtefact(includeMetadata: bool=False)`: Loads the associated `Artefact` object into the `artefact` attribute, optionally including metadata.
+        `setStage(newStage: Batch.Stage)`: Sets the stage of the artefact reference to a new value, validating it first
+        `__str__()`: Returns a string representation of the artefact reference.
+    
+    Static Methods:
+        `rawLoad(batchID: str, artefactID: str, data: dict, withArtefact: bool=False, metadataRequired: bool=False)`: Constructs a `BatchArtefact` from raw data, validating required parameters and setting defaults if necessary.
+        `load(batch: Batch | str, artefact: Artefact | str, withArtefact: bool=False, metadataRequired: bool=False)`: Loads a `BatchArtefact` for a given batch and artefact, either by IDs or objects. Returns None if not found.
+        `ref(batchID: str, artefactID: str)`: Returns a reference to the artefact in the database.
+    
+    Example usage:
+    ```python
+    from services import Universal
+    from models import DI, Batch, Artefact, BatchArtefact
+    DI.setup()
+    
+    batch = Batch.load(id='some_batch_id')
+    artefact = Artefact.load(id='some_artefact_id')
+    
+    batchArtefact = BatchArtefact(batch=batch, artefact=artefact, stage=Batch.Stage.PROCESSED)
+    
+    batchArtefact.processedDuration = "32.456"
+    batchArtefact.processedTime = Universal.utcNowString()
+    batchArtefact.save() # Save the artefact reference to the database
+    
+    print(batchArtefact)  # Outputs the string representation of the artefact reference
+    ```
+    """
+    
     def __init__(self, batch: Batch | str, artefact: Artefact | str, stage: Batch.Stage, processedDuration: str | None=None, processedTime: str | None=None, processingError: str | None=None):
+        """Initializes a BatchArtefact instance.
+
+        Args:
+            batch (Batch | str): The batch object or ID this artefact is associated with.
+            artefact (Artefact | str): The artefact object or ID this reference is associated with.
+            stage (Batch.Stage): The current processing stage of the artefact.
+            processedDuration (str | None, optional): The duration for which the artefact has been processed, if applicable. Defaults to None.
+            processedTime (str | None, optional): The timestamp when the artefact was processed, if applicable. Defaults to None.
+            processingError (str | None, optional): Any error that occurred during the processing of the artefact, if applicable. Defaults to None.
+        """
+        
         batchID = batch.id if isinstance(batch, Batch) else batch
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         stage = Batch.Stage.validateAndReturn(stage)
@@ -955,6 +1367,18 @@ class BatchArtefact(DIRepresentable):
         return True
     
     def getArtefact(self, includeMetadata: bool=False) -> bool:
+        """Retrieves the associated `Artefact` object into `artefact` for convenience.
+
+        Args:
+            includeMetadata (bool, optional): Whether to include metadata in the retrieval. Defaults to False.
+
+        Raises:
+            Exception: If the `artefactID` is not a string or if the artefact cannot be loaded.
+
+        Returns:
+            bool: True if the artefact was successfully retrieved.
+        """
+        
         if not isinstance(self.artefactID, str):
             raise Exception("BATCHARTEFACT GETARTEFACT ERROR: Invalid value set for 'artefactID'. Expected a string representing the Artefact ID.")
         
@@ -966,6 +1390,18 @@ class BatchArtefact(DIRepresentable):
         return True
     
     def setStage(self, newStage: Batch.Stage) -> bool:
+        """Sets the processing stage of the artefact reference.
+
+        Args:
+            newStage (Batch.Stage): The new stage to set.
+
+        Raises:
+            Exception: If the provided stage is invalid.
+
+        Returns:
+            bool: True if the stage was successfully set.
+        """
+        
         newStage = Batch.Stage.validateAndReturn(newStage)
         if newStage == False:
             raise Exception("BATCHARTEFACT SETSTAGE ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
@@ -986,6 +1422,19 @@ class BatchArtefact(DIRepresentable):
     
     @staticmethod
     def rawLoad(batchID: str, artefactID: str, data: dict, withArtefact: bool=False, metadataRequired: bool=False) -> 'BatchArtefact':
+        """Loads a BatchArtefact from raw dictionary data.
+
+        Args:
+            batchID (str): The ID of the batch this artefact is associated with.
+            artefactID (str): The ID of the referred artefact.
+            data (dict): The raw batch artefact reference information.
+            withArtefact (bool, optional): Whether to automatically load the `Artefact` object internally. Defaults to False.
+            metadataRequired (bool, optional): Whether metadata is included in the `Artefact` loading process. Defaults to False. Effective if `withArtefact` is True. Warning: may cause high memory usage.
+
+        Returns:
+            BatchArtefact: The loaded BatchArtefact instance.
+        """
+        
         reqParams = ['stage', 'processedDuration', 'processedTime', 'processingError']
         for reqParam in reqParams:
             if reqParam not in data:
@@ -1014,6 +1463,17 @@ class BatchArtefact(DIRepresentable):
     
     @staticmethod
     def load(batch: Batch | str, artefact: Artefact | str, withArtefact: bool=False, metadataRequired: bool=False) -> 'BatchArtefact | None':
+        """Loads a BatchArtefact instance.
+
+        Args:
+            batch (Batch | str): The batch object or ID associated with the artefact reference.
+            artefact (Artefact | str): The artefact object or ID associated with the artefact reference.
+            withArtefact (bool, optional): Whether to automatically load the `Artefact` object internally. Defaults to False.
+            metadataRequired (bool, optional): Whether metadata is included in the `Artefact` loading process. Defaults to False. Effective if `withArtefact` is True. Warning: may cause high memory usage.
+
+        Returns: `BatchArtefact | None`: The loaded BatchArtefact instance or None if not found.
+        """
+        
         batchID = batch.id if isinstance(batch, Batch) else batch
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
