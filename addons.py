@@ -636,7 +636,7 @@ class ArchSmith:
     paused: bool = False
     autoPersist: bool = True
     autoPersistCount: int = 0
-    autoPersistThreshold: int = 10 if os.environ.get("DEBUG_MODE", "False") != "True" or True else 1  # Default to 10, but 1 in debug mode for faster testing
+    autoPersistThreshold: int = 10 if os.environ.get("DEBUG_MODE", "False") != "True" else 1  # Default to 10, but 1 in debug mode for faster testing
     
     @staticmethod
     def checkPermissions():
