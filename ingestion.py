@@ -28,15 +28,17 @@ class DataImportProcessor:
         Logger.log("DATAIMPORT PROCESSBATCH: Started processing batch '{}' with {} target artefacts and chunk size {}.".format(batch.id, len(targetBatchArtefacts), chunkSize))
         
         chunk_i = 0
-        splits = []
+        splits = [0] * chunkSize
+        left = len(targetBatchArtefacts)
         
-        base_split_per_chunk = len(targetBatchArtefacts) // chunkSize
-        last_split_size = len(targetBatchArtefacts) % chunkSize
-        if last_split_size == 0:
-            last_split_size = base_split_per_chunk
-        
-        splits.extend([base_split_per_chunk] * (chunkSize - 1))
-        splits.append(last_split_size)
+        c_i = 0
+        while left > 0:
+            splits[c_i] += 1
+            left -= 1
+            if c_i == (chunkSize - 1):
+                c_i = 0
+            else:
+                c_i += 1
         
         current_index = 0
         while chunk_i < chunkSize:
