@@ -3,6 +3,7 @@ from fm import FileManager, File
 from utils import JSONRes, ResType
 import mimetypes
 from services import Logger
+from models import Category
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
@@ -97,3 +98,48 @@ def getAsset(filename):
         Logger.log(f"CDN GETASSET ERROR: {e}")
         return JSONRes.new(500, ResType.error, "Error sending file.")
 
+@cdnBP.route('/getCatalogue')
+def getAllCategoriesWithArtefacts():
+    try:
+        categories = Category.load()
+        if not categories or not isinstance(categories, list):
+            return JSONRes.new(404, ResType.ERROR, "No categories available.")
+
+        result = {}
+
+        for cat in categories:
+            if not cat.members:
+                continue
+
+            artefactsList = []
+            for catArt in cat.members.values():
+                # Load Artefact properly
+                loaded = catArt.getArtefact()
+                if not loaded:
+                    continue
+
+                artefact = catArt.artefact
+                if not artefact:
+                    continue
+
+                file = FileManager.prepFile("artefacts", artefact.image)
+                if isinstance(file, str):
+                    Logger.log(f"CDN GETGETCATALOGUE ERROR: Failed to prepare file '{artefact.image}'; response: {file}")
+                    continue
+
+                artefactsList.append({
+                    "id": artefact.id,
+                    "name": artefact.name,
+                })
+
+            if artefactsList:
+                result[cat.name] = artefactsList
+
+        if not result:
+            return JSONRes.new(404, ResType.ERROR, "No artefacts found in any category.")
+
+        return JSONRes.new(200, ResType.SUCCESS, data=result)
+
+    except Exception as e:
+        Logger.log(f"CDN GETALL EXCEPTION: {e}")
+        return JSONRes.new(500, ResType.ERROR, "Unexpected error occurred.")

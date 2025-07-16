@@ -358,6 +358,48 @@ def resetLocalDataFiles():
     print()
     
     sys.exit(0)
+    
+def addCategories():
+    from models import Category, Artefact
+
+    categories = [
+        ("Human Grp1", ["ed418edc96e849c890f61a0101f48c7e"]),
+        ("Human Grp2", ["e1ac49b252e8466fb1e75249331a55ca"]),
+        ("Meeting Minutes Grp", ["f355fa1da7cc45d58711b52145d96662", "17521cd1a7fc41bf9e9a87216d22f673", "08da11fc6dc1401aad13d5c57e272526"]),
+    ]
+
+    for cat_name, artefact_files in categories:
+        cat = Category.load(name=cat_name)
+        if not cat:
+            cat = Category(name=cat_name, description=f"Category for {cat_name.lower()}")
+
+        for art_file in artefact_files:
+            try:
+                cat.add(art_file, reason=f"Dummy link for {cat_name}")
+            except Exception as e:
+                print(f"Warning: Could not add '{art_file}' to '{cat_name}': {e}")
+        
+        cat.save()
+        print(f"Category '{cat.name}' populated with artefacts:", artefact_files)
+
+def removeCategories():
+    from models import Category
+    
+    requireDI()
+
+    categories = [
+        "Human Grp1",
+        "Human Grp2",
+        "Meeting Minutes Grp1",
+        "Meeting Minutes Grp2",
+        "Meeting Minutes Grp"
+    ]
+
+    for cat_name in categories:
+        cat = Category.load(name=cat_name)
+        cat.destroy()
+        cat.save()
+        print(f"All artefacts removed from category '{cat.name}'.")
 
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
@@ -381,12 +423,14 @@ def main(choices: list[int] | None=None):
             print("7. Wipe DB")
             print("8. Wipe FM")
             print("9. Reset local data files")
+            print("10. Remove hardcoded categories")
+            print("11. Add hardcoded categories")
             print("0. Exit")
             print()
         
         try:
             choice = int(input("Enter choice: ")) if choice is None else choice
-            if choice not in range(10):
+            if choice not in range(12):
                 raise Exception()
         except KeyboardInterrupt:
             print("\nExiting...")
@@ -417,6 +461,10 @@ def main(choices: list[int] | None=None):
             wipeFM()
         elif choice == 9:
             resetLocalDataFiles()
+        elif choice == 10:
+            removeCategories()
+        elif choice == 11:
+            addCategories()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)
