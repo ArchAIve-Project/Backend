@@ -1,4 +1,4 @@
-import os, sys, json, shutil
+import os, sys, json, threading
 from typing import List, Dict, Any
 from abc import ABC, abstractmethod
 from services import Logger
@@ -144,6 +144,7 @@ class DI:
     failoverStrategy = "comprehensive" if not ('DI_FAILOVER_STRATEGY' in os.environ and os.environ.get('DI_FAILOVER_STRATEGY') == 'efficient') else 'efficient' # "comprehensive" or "efficient"
     syncStatus = True
     unsyncedRefs: List[Ref] = []
+    _saveLock = threading.Lock()
     
     @staticmethod
     def setup():
@@ -466,42 +467,43 @@ class DI:
         
         Returns `True` almost exclusively.
         '''
-        if ref == None:
-            ref = Ref()
-        removed = ref.removeIllegalChars()
-        if removed:
-            Logger.log("DI SAVE WARNING: Reference '{}' has been modified to remove illegal characters.".format(ref))
-        
-        DI.efficientDataWrite(payload, ref)
-        DI.synchronise()
-        
-        # Check if Firebase is enabled
-        if not FireRTDB.checkPermissions():
-            return True
-        if not FireConn.connected:
-            Logger.log("DI SAVE WARNING: Save only persisted locally; FireRTDB enabled but connection is not established.")
-            return True
-        if not DI.syncStatus:
-            # Unsync-ed state, unsafe for FB operations
-            DI.newUnsyncedRef(ref)
-            return True
-        
-        ## Firebase enabled and connected
-        try:
-            res = None
-            if payload == None:
-                res = FireRTDB.clearRef(str(ref))
-            else:
-                res = FireRTDB.setRef(FireRTDB.translateForCloud(payload, rootTranslatable=True), str(ref))
+        with DI._saveLock:
+            if ref == None:
+                ref = Ref()
+            removed = ref.removeIllegalChars()
+            if removed:
+                Logger.log("DI SAVE WARNING: Reference '{}' has been modified to remove illegal characters.".format(ref))
             
-            if res != True:
+            DI.efficientDataWrite(payload, ref)
+            DI.synchronise()
+            
+            # Check if Firebase is enabled
+            if not FireRTDB.checkPermissions():
+                return True
+            if not FireConn.connected:
+                Logger.log("DI SAVE WARNING: Save only persisted locally; FireRTDB enabled but connection is not established.")
+                return True
+            if not DI.syncStatus:
+                # Unsync-ed state, unsafe for FB operations
+                DI.newUnsyncedRef(ref)
+                return True
+            
+            ## Firebase enabled and connected
+            try:
+                res = None
+                if payload == None:
+                    res = FireRTDB.clearRef(str(ref))
+                else:
+                    res = FireRTDB.setRef(FireRTDB.translateForCloud(payload, rootTranslatable=True), str(ref))
+                
+                if res != True:
+                    DI.syncStatus = False
+                    DI.newUnsyncedRef(ref)
+                    Logger.log("DI SAVE WARNING: Save only persisted locally; FireRTDB save failed.")
+                
+            except Exception as e:
                 DI.syncStatus = False
                 DI.newUnsyncedRef(ref)
-                Logger.log("DI SAVE WARNING: Save only persisted locally; FireRTDB save failed.")
+                Logger.log("DI SAVE WARNING: Save only persisted locally; error in FireRTDB save: {}".format(e))
             
-        except Exception as e:
-            DI.syncStatus = False
-            DI.newUnsyncedRef(ref)
-            Logger.log("DI SAVE WARNING: Save only persisted locally; error in FireRTDB save: {}".format(e))
-        
-        return True
+            return True

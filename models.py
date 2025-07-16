@@ -6,7 +6,25 @@ from services import Universal
 from typing import List, Dict, Any, Literal
 
 class Artefact(DIRepresentable):
+    """
+    Represents an artefact (e.g., image or document) within the DI system.
+
+    Artefacts contain metadata and are associated with stored files. This class handles the creation,
+    persistence, file management, and metadata binding of artefact objects.
+    """
     def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
+        """
+        Initializes a new Artefact instance.
+
+        Args:
+            name: Name of the artefact.
+            image: Filename of the artefact image.
+            metadata: Metadata object or raw metadata dictionary.
+            public: Whether the artefact is publicly accessible. Defaults to False.
+            created: UTC timestamp string of creation. Auto-generated if None.
+            metadataLoaded: Whether to load metadata during initialization. Defaults to True.
+            id: Unique identifier. Auto-generated if None.
+        """
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -35,6 +53,15 @@ class Artefact(DIRepresentable):
         return DI.save(None, self.originRef)
     
     def reload(self):
+        """
+        Reloads the artefact state from the data store.
+        
+        Returns:
+            bool: True if reload succeeded
+
+        Raises:
+            Exception: If data loading fails
+        """
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
             raise Exception("ARTEFACT RELOAD ERROR: DIError occurred: {}".format(data))
@@ -47,13 +74,37 @@ class Artefact(DIRepresentable):
         return True
 
     def getFMFile(self) -> File:
+        """
+        Constructs and returns a FileManager-compatible File object from the artefact's image name information.
+        
+        Returns:
+            File: A File object representing the artefact's image path.
+        """
         return File(self.image, "artefacts")
     
     def fmSave(self):
+        """
+        Saves the artefact's image file via FileManager.
+
+        Returns:
+            File | str: The updated File object if the save succeeded, or an error string otherwise.
+
+        Notes:
+            This method constructs a FileManager-compatible `File` object using the artefact's image name.
+        """
         fmFile = self.getFMFile()
         return FileManager.save(fmFile.store, fmFile.filename)
     
     def fmDelete(self):
+        """
+        Deletes the artefact's image file via FileManager.
+
+        Returns:
+            bool | str: True if deletion succeeded, or an error message string if it failed.
+
+        Notes:
+            Constructs a FileManager-compatible `File` object using the artefact's image name.
+        """
         fmFile = self.getFMFile()
         return FileManager.delete(file=fmFile)
 
@@ -79,6 +130,17 @@ class Artefact(DIRepresentable):
 
     @staticmethod
     def rawLoad(data: dict, artefactID: str | None=None, includeMetadata: bool=True) -> 'Artefact':
+        """
+        Constructs an Artefact from raw data dictionary.
+
+        Args:
+            data (dict): Raw artefact data. 
+            artefactID (str, optional): Optional ID for the artefact. Will be auto-generated if not provided.
+            includeMetadata (bool, optional): Whether to load metadata. Defaults to True.
+
+        Returns:
+            Artefact: Constructed artefact object.
+        """
         requiredParams = ['public', 'name', 'image', 'created', 'metadata']
         for param in requiredParams:
             if param not in data:
@@ -105,6 +167,18 @@ class Artefact(DIRepresentable):
 
     @staticmethod
     def load(id: str = None, name: str=None, image: str=None, includeMetadata: bool=True) -> 'List[Artefact] | Artefact | None':
+        """
+        Loads artefacts from the DI system.
+
+        Args:
+            id (str): Specific artefact ID.
+            name (str): Artefact name to filter by.
+            image (str): Artefact image name to filter by.
+            includeMetadata (bool): Whether to include metadata.
+
+        Returns:
+            Artefact | List[Artefact] | Single artefact, list, or None.
+        """
         if id is not None:
             data = DI.load(Artefact.ref(id))
             if isinstance(data, DIError):
@@ -158,6 +232,17 @@ class Artefact(DIRepresentable):
 
 class Metadata(DIRepresentable):
     def __init__(self, artefactID: str=None, dataObject: 'MMData | HFData'=None):
+        """
+        Wrapper for artefact metadata, either MMData or HFData, with helper methods for storage and format conversion.
+        Initializes a Metadata wrapper with MMData or HFData.
+
+        Args:
+            artefactID (str): Artefact ID to associate.
+            dataObject (MMData | HFData): Metadata content.
+        
+        Raises:
+            Exception: If dataObject is not MMData or HFData.
+        """
         self.raw: MMData | HFData | None = None
 
         if dataObject is not None:
@@ -188,6 +273,23 @@ class Metadata(DIRepresentable):
     
     @staticmethod
     def rawLoad(artefactID: str, data: Dict[str, Any]) -> 'Metadata':
+        """
+        WARNING:
+        Do NOT use this method to generate a Metadata object from `MetadataGenerator.generate` output.
+        Use `Metadata.fromMetagen` instead.
+
+        Determines and loads the correct metadata type from raw dictionary.
+
+        Args:
+            artefactID (str): Artefact ID.
+            data (dict): Raw metadata.
+
+        Returns:
+            Metadata: Loaded metadata wrapper.
+
+        Raises:
+        Exception: If metadata type cannot be determined from the input dictionary.
+        """
         if 'tradCN' in data:
             return Metadata(artefactID, MMData.rawLoad(data, artefactID))
         elif 'faceFiles' in data:
@@ -209,10 +311,19 @@ class Metadata(DIRepresentable):
 
     @staticmethod
     def fromMetagen(artefactID: str, metagenDict: dict) -> 'Metadata':
-        # 1. identify whether it is mm data or hf data
-        # 2. manually feed in the values to either constructor to product a MMData | HFData object
-        # 3. Pass the data object to Metadata constructor
-        # 4. Return the Metadata object
+        """
+        Constructs Metadata from `metadataGenerator.generate` dictionary (from form(s) or user input).
+
+        Args:
+            artefactID (str): Associated artefact ID.
+            metagenDict (dict): Raw metadata dictionary from user input.
+
+        Returns:
+            Metadata: Constructed Metadata object.
+
+        Raises:
+            Exception: If metadata type cannot be determined from input.
+        """
         if 'traditional_chinese' in metagenDict:
             mm = MMData(
                 artefactID=artefactID,
@@ -243,6 +354,24 @@ class Metadata(DIRepresentable):
 
 class MMData(DIRepresentable):
     def __init__(self, artefactID: str, tradCN: str, preCorrectionAcc: str, postCorrectionAcc: str, simplifiedCN: str, english: str, summary: str, nerLabels: str, corrected: bool = False):
+        """
+        Metadata for meeting minutes artefacts.
+    
+        Contains structured data from meeting minutes including Chinese text (both traditional
+        and simplified), English translations, accuracy metrics for text processing,
+        summaries, and named entity labels. Tracks correction status and processing history.
+
+        Args:
+            artefactID (str): Associated artefact identifier.
+            tradCN (str): Traditional Chinese text from meeting minutes.
+            corrected (bool): Flag indicating if text has been manually corrected.
+            preCorrectionAcc (str): Accuracy score before any corrections.
+            postCorrectionAcc (str): Accuracy score after corrections.
+            simplifiedCN (str): Simplified Chinese version of the text.
+            english (str): English translation of the meeting minutes.
+            summary (str): Concise summary of the meeting content.
+            nerLabels (str): Named entity recognition labels extracted from text.
+        """
         self.artefactID = artefactID
         self.tradCN = tradCN
         self.corrected = corrected
@@ -315,6 +444,19 @@ class MMData(DIRepresentable):
 
 class HFData(DIRepresentable):
     def __init__(self, artefactID: str, faceFiles: list[str], caption: str, addInfo: str=None):
+        """
+        Metadata for human figure(s) in artefacts.
+    
+        Contains information about human figures detected in images, including references
+        to face image files, captions describing the scene (e.g., "people in a meeting"), and optional additional
+        information. Used for artefacts containing human imagery that requires annotation.
+
+        Args:
+            artefactID (str): Associated artefact identifier.
+            faceFiles (list[str]): List of image files containing detected faces.
+            caption (str): Descriptive caption for the human figures.
+            addInfo (str | None): Additional context about the figures if available.
+        """
         self.artefactID = artefactID
         self.faceFiles = faceFiles
         self.caption = caption
@@ -366,6 +508,15 @@ class HFData(DIRepresentable):
     
 class Book(DIRepresentable):
     def __init__(self, title: str, subtitle: str, mmIDs: List[str], id: str=None):
+        """
+        Represents a curated collection of MMData artefacts as a Book.
+
+        Args:
+            title (str): The title of the book.
+            subtitle (str): Subtitle or additional description.
+            mmIDs (List[str]): A list of artefact IDs that are part of the book.
+            id (str, optional): Unique ID for the book. Auto-generated if not provided.
+        """
         if id is None:
             id = Universal.generateUniqueID()
         
@@ -416,13 +567,17 @@ class Book(DIRepresentable):
     
     @staticmethod
     def load(id: str=None, title: str=None, withMMID: str=None) -> 'Book | List[Book] | None':
-        '''
-        Load a book by its ID, title, or MMID.
-        If id is provided, it loads the specific book.
-        If title is provided, it searches for a book with that title.
-        If withMMID is provided, it searches for a book that contains that MMID in its mmIDs list.
-        If neither id nor title is provided, it loads all books and returns the first one that matches the criteria.
-        '''
+        """
+        Loads a book(s) by ID, title, or MMData artefact ID.
+
+        Args:
+            id (str): Book ID.
+            title (str): Book title to search for.
+            withMMID (str, optional): MMData artefact ID to search in book's mmIDs.
+
+        Returns:
+            Book | List[Book] | None
+        """
         if id != None:
             data = DI.load(Book.ref(id))
             if data is None:
@@ -484,58 +639,19 @@ class Batch(DIRepresentable):
             else:
                 return False
     
-    def __init__(self, userID: str, unprocessed: List[Artefact | str]=None, processed: List[Artefact | str]=None, confirmed: List[Artefact | str]=None, created: str=None, id: str=None):
+    def __init__(self, userID: str, batchArtefacts: 'Dict[str, BatchArtefact]'=None, processingJob: str | None=None, cancelled: bool = False, created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
             created = Universal.utcNowString()
-        if unprocessed is None:
-            unprocessed = []
-        if processed is None:
-            processed = []
-        if confirmed is None:
-            confirmed = []
-
-        if not isinstance(unprocessed, list):
-            raise TypeError("BATCH INIT ERROR: 'unprocessed' must be a list of Artefact or str.")
-        if not isinstance(processed, list):
-            raise TypeError("BATCH INIT ERROR: 'processed' must be a list of Artefact or str.")
-        if not isinstance(confirmed, list):
-            raise TypeError("BATCH INIT ERROR: 'confirmed' must be a list of Artefact or str.")
-        
-        unprocessedData = {}
-        processedData = {}
-        confirmedData = {}
-        
-        for artefactItem in unprocessed:
-            if isinstance(artefactItem, Artefact):
-                unprocessedData[artefactItem.id] = artefactItem
-            elif isinstance(artefactItem, str):
-                unprocessedData[artefactItem] = None
-            else:
-                raise TypeError("BATCH INIT ERROR: 'unprocessed' list must contain Artefact objects or strings representing Artefact IDs.")
-        
-        for artefactItem in processed:
-            if isinstance(artefactItem, Artefact):
-                processedData[artefactItem.id] = artefactItem
-            elif isinstance(artefactItem, str):
-                processedData[artefactItem] = None
-            else:
-                raise TypeError("BATCH INIT ERROR: 'processed' list must contain Artefact objects or strings representing Artefact IDs.")
-        
-        for artefactItem in confirmed:
-            if isinstance(artefactItem, Artefact):
-                confirmedData[artefactItem.id] = artefactItem
-            elif isinstance(artefactItem, str):
-                confirmedData[artefactItem] = None
-            else:
-                raise TypeError("BATCH INIT ERROR: 'confirmed' list must contain Artefact objects or strings representing Artefact IDs.")
+        if batchArtefacts is None:
+            batchArtefacts = {}
         
         self.id: str = id
         self.userID: str = userID
-        self.unprocessed: Dict[str, Artefact | None] = unprocessedData
-        self.processed: Dict[str, Artefact | None] = processedData
-        self.confirmed: Dict[str, Artefact | None] = confirmedData
+        self.artefacts: Dict[str, BatchArtefact] = batchArtefacts
+        self.processingJob: str | None = processingJob
+        self.cancelled: bool = cancelled
         self.user: User | None = None
         self.created: str = created
         self.originRef = Batch.ref(self.id)
@@ -550,21 +666,24 @@ class Batch(DIRepresentable):
                 raise Exception("BATCH SAVE ERROR: User with ID '{}' does not exist.".format(self.userID))
             del data  # We don't need the user data here, just checking existence
             
-            allIDs = []
-            for stage in [self.unprocessed, self.processed, self.confirmed]:
-                for id in stage:
-                    if id in allIDs:
-                        raise Exception("BATCH SAVE ERROR: Duplicate Artefact ID '{}' from stage '{}' found.".format(id, stage))
-                    allIDs.append(id)
+            for artefactID, batchArt in self.artefacts.items():
+                if not isinstance(batchArt, BatchArtefact):
+                    raise Exception("BATCH SAVE ERROR: Artefact with ID '{}' is not a valid BatchArtefact.".format(artefactID))
+                if batchArt.batchID != self.id:
+                    raise Exception("BATCH SAVE ERROR: Artefact with ID '{}' does not belong to this batch (ID: '{}').".format(artefactID, self.id))
+                if batchArt.artefactID != artefactID:
+                    raise Exception("BATCH SAVE ERROR: Found artefact ID '{}' in BatchArtefact when '{}' was expected.".format(batchArt.artefactID, artefactID))
+                if batchArt.stage not in [Batch.Stage.UNPROCESSED, Batch.Stage.PROCESSED, Batch.Stage.CONFIRMED]:
+                    raise Exception("BATCH SAVE ERROR: Invalid stage '{}' for artefact with ID '{}'.".format(batchArt.stage, artefactID))
         
         return DI.save(self.represent(), self.originRef)
 
     def represent(self) -> Dict[str, Any]:
         return {
             "userID": self.userID,
-            "unprocessed": list(self.unprocessed.keys()),
-            "processed": list(self.processed.keys()),
-            "confirmed": list(self.confirmed.keys()),
+            "artefacts": {id: batchArt.represent() for id, batchArt in self.artefacts.items()},
+            'processingJob': self.processingJob,
+            'cancelled': self.cancelled,
             "created": self.created
         }
     
@@ -583,9 +702,6 @@ class Batch(DIRepresentable):
     def __str__(self):
         completeData = self.represent()
         completeData['user'] = self.user.represent() if self.user is not None else None
-        completeData['unprocessed'] = {id: (self.unprocessed[id].represent() if isinstance(self.unprocessed[id], Artefact) else None) for id in self.unprocessed.keys()}
-        completeData['processed'] = {id: (self.processed[id].represent() if isinstance(self.processed[id], Artefact) else None) for id in self.processed.keys()}
-        completeData['confirmed'] = {id: (self.confirmed[id].represent() if isinstance(self.confirmed[id], Artefact) else None) for id in self.confirmed.keys()}
         
         return str(completeData)
     
@@ -599,45 +715,25 @@ class Batch(DIRepresentable):
         
         return True
     
-    def getArtefacts(self, unprocessed: bool=False, processed: bool=False, confirmed: bool=False, metadataRequired: bool=False) -> bool:
-        if not (unprocessed or processed or confirmed):
-            raise Exception("BATCH GETARTEFACTS ERROR: At least one of unprocessed, processed, or confirmed must be True.")
-        
-        for stageDict in [self.unprocessed, self.processed, self.confirmed]:
-            for id in stageDict:
-                if stageDict[id] is None:
-                    data = Artefact.load(id=id, includeMetadata=metadataRequired)
-                    if not isinstance(data, Artefact):
-                        raise Exception("BATCH GETARTEFACTS ERROR: Failed to load Artefact with ID '{}'; response: {}".format(id, data))
-                    stageDict[id] = data
-        
-        return True
-    
-    def add(self, artefact: Artefact | str, to: 'Batch.Stage') -> bool:
+    def add(self, artefact: Artefact | str, to: 'Batch.Stage') -> 'BatchArtefact':
         to = Batch.Stage.validateAndReturn(to)
         if to == False:
             raise Exception("BATCH ADD ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
         
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
-        artefactObject = artefact if isinstance(artefact, Artefact) else None
         
         if self.has(artefactID):
             raise Exception("BATCH ADD ERROR: Artefact with ID '{}' already exists in the batch.".format(artefactID))
         
-        if to == Batch.Stage.UNPROCESSED:
-            self.unprocessed[artefactID] = artefactObject
-        elif to == Batch.Stage.PROCESSED:
-            self.processed[artefactID] = artefactObject
-        elif to == Batch.Stage.CONFIRMED:
-            self.confirmed[artefactID] = artefactObject
+        batchArt = BatchArtefact(self.id, artefactID, to)
+        self.artefacts[artefactID] = batchArt
         
-        return True
+        return batchArt
     
     def has(self, artefact: Artefact | str) -> bool: 
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
-        allIDs = list(self.unprocessed.keys()) + list(self.processed.keys()) + list(self.confirmed.keys())
-        return artefactID in allIDs
+        return artefactID in self.artefacts
     
     def move(self, artefact: Artefact | str, to: 'Batch.Stage') -> bool:
         to = Batch.Stage.validateAndReturn(to)
@@ -645,38 +741,21 @@ class Batch(DIRepresentable):
             raise Exception("BATCH MOVE ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
         
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
-        artefactObject = artefact if isinstance(artefact, Artefact) else None
         
         if not self.has(artefactID):
             raise Exception("BATCH MOVE ERROR: Artefact with ID '{}' does not exist in the batch.".format(artefactID))
         
-        # Find which stage the artefact is currently in
-        for stage in [self.unprocessed, self.processed, self.confirmed]:
-            if artefactID in stage:
-                del stage[artefactID]
-                break
-        
-        # Add the artefact to the new stage
-        if to == Batch.Stage.UNPROCESSED:
-            self.unprocessed[artefactID] = artefactObject
-        elif to == Batch.Stage.PROCESSED:
-            self.processed[artefactID] = artefactObject
-        elif to == Batch.Stage.CONFIRMED:
-            self.confirmed[artefactID] = artefactObject
+        batchArt = self.artefacts[artefactID]
+        if batchArt.stage == to:
+            raise Exception("BATCH MOVE ERROR: Artefact with ID '{}' is already in stage '{}'.".format(artefactID, to))
+        batchArt.stage = to
         
         return True
     
     def where(self, artefact: Artefact | str) -> 'Batch.Stage | None':
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
-        if artefactID in self.unprocessed:
-            return Batch.Stage.UNPROCESSED
-        elif artefactID in self.processed:
-            return Batch.Stage.PROCESSED
-        elif artefactID in self.confirmed:
-            return Batch.Stage.CONFIRMED
-        else:
-            return None
+        return self.artefacts[artefactID].stage if self.has(artefactID) else None
     
     def remove(self, artefact: Artefact | str) -> bool:
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
@@ -684,24 +763,23 @@ class Batch(DIRepresentable):
         if not self.has(artefactID):
             raise Exception("BATCH REMOVE ERROR: Artefact with ID '{}' does not exist in the batch.".format(artefactID))
         
-        # Find which stage the artefact is currently in and remove it
-        stage = self.where(artefactID)
-        if stage == Batch.Stage.UNPROCESSED:
-            del self.unprocessed[artefactID]
-        elif stage == Batch.Stage.PROCESSED:
-            del self.processed[artefactID]
-        elif stage == Batch.Stage.CONFIRMED:
-            del self.confirmed[artefactID]
-        
+        self.artefacts.pop(artefactID, None)
         return True
+    
+    def cancel(self, autoSave: bool=True):
+        self.cancelled = True
+        if autoSave:
+            self.save(checkIntegrity=False)
 
     @staticmethod
     def rawLoad(data: dict, batchID: str | None=None) -> 'Batch':
-        requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'created']
+        requiredParams = ['userID', 'unprocessed', 'processed', 'confirmed', 'processingJob', 'cancelled', 'created']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam in ['unprocessed', 'processed', 'confirmed']:
                     data[reqParam] = []
+                elif reqParam in ['cancelled']:
+                    data[reqParam] = False
                 else:
                     data[reqParam] = None
         
@@ -717,25 +795,30 @@ class Batch(DIRepresentable):
             unprocessed=data['unprocessed'],
             processed=data['processed'],
             confirmed=data['confirmed'],
+            processingJob=data['processingJob'],
+            cancelled=data['cancelled'],
             created=data['created'],
             id=batchID
         )
     
     @staticmethod
     def load(id: str=None, userID: str=None, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch | Dict[Batch] | None':
-        '''
-        If id found load specific batch from the database
-        else loads all batches from the database and filter based on userID // Gets all batch under that userID
-
+        """
+        Loads batches from the data store.
+        
         Args:
-            id (str, optional): The ID of the batch to load. Defaults to None.
-            userID (str, optional): The user ID of the batch to load. Defaults to None.
-            withUser (bool, optional): Whether to include user information in the loaded batch. Defaults to False.
-            withArtefacts (bool, optional): Whether to include artefacts in the loaded batch. Defaults to False.
+            id: Specific batch ID to load
+            userID: User ID to filter by
+            withUser: Whether to load user objects
+            withArtefacts: Whether to load artefact objects
+            metadataRequired: Whether to load artefact metadata
 
         Returns:
-            Batch | Dict[Batch] | None: The loaded batch or list of batches, or None if not found.
-        '''
+            Matching Batch(es) or None if not found
+
+        Raises:
+            Exception: If data loading fails
+        """
         if id != None:
             data = DI.load(Batch.ref(id))
             if data is None:
@@ -788,6 +871,75 @@ class Batch(DIRepresentable):
     @staticmethod
     def ref(id: str) -> Ref:
         return Ref("batches", id)
+
+class BatchArtefact(DIRepresentable):
+    def __init__(self, batch: Batch | str, artefact: Artefact | str, stage: Batch.Stage, processedDuration: str | None, processedTime: str | None=None, processingError: str | None=None):
+        batchID = batch.id if isinstance(batch, Batch) else batch
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        stage = Batch.Stage.validateAndReturn(stage)
+        if stage == False:
+            raise Exception("BATCHARTEFACT INIT ERROR: Invalid stage provided; expected 'Batch.Stage' or string representation of it.")
+        
+        self.batchID: str = batchID
+        self.artefactID: str = artefactID
+        self.stage: Batch.Stage = stage
+        self.processedDuration: str | None = processedDuration
+        self.processedTime: str | None = processedTime
+        self.processingError: str | None = processingError
+        self.originRef = BatchArtefact.ref(batchID, artefactID)
+    
+    def represent(self):
+        return {
+            "stage": self.stage.value,
+            "processedDuration": self.processedDuration,
+            "processedTime": self.processedTime,
+            "processingError": self.processingError
+        }
+    
+    def save(self):
+        return DI.save(self.represent(), self.originRef)
+    
+    @staticmethod
+    def rawLoad(data: dict, batchID: str | None=None, artefactID: str | None=None):
+        reqParams = ['stage', 'processedDuration', 'processedTime', 'processingError']
+        for reqParam in reqParams:
+            if reqParam not in data:
+                if reqParam == 'stage':
+                    data[reqParam] = Batch.Stage.UNPROCESSED.value
+                else:
+                    data[reqParam] = None
+        
+        stage = Batch.Stage.validateAndReturn(data['stage'])
+        if stage == False:
+            stage = Batch.Stage.UNPROCESSED
+        
+        return BatchArtefact(
+            batch=batchID,
+            artefact=artefactID,
+            stage=stage,
+            processedDuration=data.get('processedDuration'),
+            processedTime=data.get('processedTime'),
+            processingError=data.get('processingError')
+        )
+    
+    @staticmethod
+    def load(batch: Batch | str, artefact: Artefact | str) -> 'BatchArtefact | None':
+        batchID = batch.id if isinstance(batch, Batch) else batch
+        artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
+        
+        data = DI.load(BatchArtefact.ref(batchID, artefactID))
+        if data is None:
+            return None
+        if isinstance(data, DIError):
+            raise Exception("BATCHARTEFACT LOAD ERROR: DIError occurred: {}".format(data))
+        if not isinstance(data, dict):
+            raise Exception("BATCHARTEFACT LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        return BatchArtefact.rawLoad(data, batchID, artefactID)
+    
+    @staticmethod
+    def ref(batchID: str, artefactID: str) -> Ref:
+        return Ref("batches", batchID, "artefacts", artefactID)
 
 class User(DIRepresentable):
     """User model representation.
