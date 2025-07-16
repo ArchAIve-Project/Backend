@@ -1,12 +1,13 @@
 import time
 from models import Batch, BatchProcessingJob, BatchArtefact, Artefact, Metadata
 from services import ThreadManager, Universal
+from fm import FileManager, File
 from metagen import MetadataGenerator
 from services import Logger
 
 class DataImportProcessor:
     @staticmethod
-    def processBatch(batch: Batch, chunkSize: int=10):
+    def processBatch(batch: Batch, chunkSize: int=10, offloadArtefactPostProcessing: bool=True):
         # Start the job
         job = batch.job
         job.start()
@@ -25,7 +26,10 @@ class DataImportProcessor:
         while (len(targetBatchArtefacts) > 0) or (not processingComplete):
             processedChunkIndices = [i for i, x in enumerate(chunk) if x.stage == Batch.Stage.PROCESSED]
             for i in processedChunkIndices:
-                chunk.pop(i)
+                try:
+                    chunk.remove(chunk[i])
+                except:
+                    pass # Ignore if the index is out of range or already removed
                 completionCount += 1
             
             if len(chunk) == 0 and len(targetBatchArtefacts) == 0:
@@ -35,7 +39,7 @@ class DataImportProcessor:
             if len(chunk) < chunkSize and len(targetBatchArtefacts) > 0: # if the chunk is not full, add more artefacts
                 batchArt = targetBatchArtefacts.pop(0)
                 chunk.append(batchArt)
-                ThreadManager.defaultProcessor.addJob(DataImportProcessor.processItem, batchArt)
+                ThreadManager.defaultProcessor.addJob(DataImportProcessor.processItem, batchArt, offloadArtefactPostProcessing)
             
             job.reload() # reload the job to check its status
             if job.status == BatchProcessingJob.Status.CANCELLED:
@@ -51,7 +55,12 @@ class DataImportProcessor:
         return
     
     @staticmethod
-    def endProcessing(batchArt: BatchArtefact, processingStartTime: float, errorMsg: str=None):
+    def endProcessing(batchArt: BatchArtefact, fmFile: File, processingStartTime: float, errorMsg: str=None, offloadArtefactPostProcessing: bool=True):
+        if offloadArtefactPostProcessing and isinstance(fmFile, File):
+            res = FileManager.offload(fmFile)
+            if isinstance(res, str):
+                Logger.log("DATAIMPORT ENDPROCESSING WARNING: Non-success response in offload attempt for artefact '{}' of batch '{}' (file: '{}'); response: {}".format(batchArt.artefactID, batchArt.batchID, fmFile.identifierPath(), res))
+        
         batchArt.processedTime = Universal.utcNowString()
         batchArt.processedDuration = '{:.3f}'.format(time.time() - processingStartTime)
         batchArt.processingError = errorMsg
@@ -60,7 +69,7 @@ class DataImportProcessor:
         batchArt.save()
     
     @staticmethod
-    def processItem(batchArtefact: BatchArtefact):
+    def processItem(batchArtefact: BatchArtefact, offloadArtefactPostProcessing: bool=True):
         if batchArtefact.stage != Batch.Stage.UNPROCESSED:
             Logger.log("DATAIMPORT PROCESSITEM WARNING: Processing Artefact '{}' of batch '{}' despite stage of '{}'.".format(batchArtefact.artefactID, batchArtefact.batchID, batchArtefact.stage.value))
         
@@ -71,17 +80,23 @@ class DataImportProcessor:
                 batchArtefact.getArtefact(includeMetadata=True)
             except Exception as e:
                 Logger.log("DATAIMPORT PROCESSITEM ERROR: Failed to obtain Artefact object (BatchID: {}, ArtefactID: {}); error: {}".format(batchArtefact.batchID, batchArtefact.artefactID, e))
-                DataImportProcessor.endProcessing(batchArtefact, processingStartTime, e)
+                DataImportProcessor.endProcessing(batchArtefact, None, processingStartTime, str(e))
                 return
+        
+        fmFile = FileManager.prepFile(file=batchArtefact.artefact.getFMFile())
+        if not isinstance(fmFile, File):
+            Logger.log("DATAIMPORT PROCESSITEM ERROR: Failed to prepare file for Artefact (BatchID: {}, ArtefactID: {}); FM response: {}".format(batchArtefact.batchID, batchArtefact.artefactID, fmFile))
+            DataImportProcessor.endProcessing(batchArtefact, None, processingStartTime, fmFile)
+            return
         
         out = None
         try:
-            out = MetadataGenerator.generate(batchArtefact.artefact.getFMFile().path())
+            out = MetadataGenerator.generate(fmFile.path())
             if isinstance(out, str):
                 raise Exception(out)
         except Exception as e:
             Logger.log("DATAIMPORT PROCESSITEM ERROR: Failure in metadata generation (BatchID: {}, ArtefactID: {}); error: {}".format(batchArtefact.batchID, batchArtefact.artefactID, e))
-            DataImportProcessor.endProcessing(batchArtefact, processingStartTime, str(e))
+            DataImportProcessor.endProcessing(batchArtefact, fmFile, processingStartTime, str(e), offloadArtefactPostProcessing)
             return
 
         errors = None
@@ -95,10 +110,10 @@ class DataImportProcessor:
             batchArtefact.artefact.metadata = Metadata.fromMetagen(batchArtefact.artefactID, out)
         except Exception as e:
             Logger.log("DATAIMPORT PROCESSITEM ERROR: Failed to construct Metadata object from generator output (BatchID: {}, ArtefactID: {}); error: {}".format(e))
-            DataImportProcessor.endProcessing(batchArtefact, processingStartTime, str(e))
+            DataImportProcessor.endProcessing(batchArtefact, fmFile, processingStartTime, str(e), offloadArtefactPostProcessing)
         
         batchArtefact.artefact.save()
-        DataImportProcessor.endProcessing(batchArtefact, processingStartTime, errors)
+        DataImportProcessor.endProcessing(batchArtefact, fmFile, processingStartTime, errors, offloadArtefactPostProcessing)
         
         Logger.log("DATAIMPORT PROCESSITEM: Artefact '{}' of batch '{}' processed.".format(batchArtefact.artefactID, batchArtefact.batchID))
         return

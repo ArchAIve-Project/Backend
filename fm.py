@@ -468,7 +468,7 @@ class FileManager:
         """
         
         try:
-            res = FileOps.deleteFile(file.identifierPath())
+            res = FileOps.deleteFile(file.path())
             if res != True:
                 raise Exception(res)
             
@@ -842,7 +842,7 @@ class FileManager:
             # File does not exist. Delete from filesystem and context if it exists            
             res = FileManager.removeLocally(File(filename, store))
             if res != True:
-                return "ERROR: Failed to delete file '{}' that does not exist on cloud storage; error: {}".format(idPath, res)
+                Logger.log("FILEMANAGER PREPFILE WARNING: Failed to remove cloud-unmatched file '{}' locally; error: {}".format(idPath, res))
             
             return "ERROR: File does not exist."
         
