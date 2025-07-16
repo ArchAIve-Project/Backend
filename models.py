@@ -1,13 +1,11 @@
 from enum import Enum
 from database import DI, DIRepresentable, DIError
-from decorators import databaseDebug
 from fm import File, FileManager
 from utils import Ref
 from services import Universal, Logger
 from typing import List, Dict, Any, Literal
 
 class Artefact(DIRepresentable):
-    @databaseDebug
     def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
         if id is None:
             id = Universal.generateUniqueID()
@@ -30,15 +28,12 @@ class Artefact(DIRepresentable):
         self.metadataLoaded: bool = metadataLoaded
         self.originRef = Artefact.ref(self.id)
     
-    @databaseDebug
     def save(self) -> bool:
         return DI.save(self.represent(), self.originRef)
     
-    @databaseDebug
     def destroy(self):
         return DI.save(None, self.originRef)
     
-    @databaseDebug
     def reload(self):
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
@@ -83,7 +78,6 @@ class Artefact(DIRepresentable):
         )
 
     @staticmethod
-    @databaseDebug
     def rawLoad(data: dict, artefactID: str | None=None, includeMetadata: bool=True) -> 'Artefact':
         requiredParams = ['public', 'name', 'image', 'created', 'metadata']
         for param in requiredParams:
@@ -110,7 +104,6 @@ class Artefact(DIRepresentable):
         return output
 
     @staticmethod
-    @databaseDebug
     def load(id: str = None, name: str=None, image: str=None, includeMetadata: bool=True) -> 'List[Artefact] | Artefact | None':
         if id is not None:
             data = DI.load(Artefact.ref(id))
@@ -164,7 +157,6 @@ class Artefact(DIRepresentable):
         return Ref("artefacts", id)
 
 class Metadata(DIRepresentable):
-    @databaseDebug
     def __init__(self, artefactID: str=None, dataObject: 'MMData | HFData'=None):
         self.raw: MMData | HFData | None = None
 
@@ -195,7 +187,6 @@ class Metadata(DIRepresentable):
         return isinstance(self.raw, HFData)
     
     @staticmethod
-    @databaseDebug
     def rawLoad(artefactID: str, data: Dict[str, Any]) -> 'Metadata':
         if 'tradCN' in data:
             return Metadata(artefactID, MMData.rawLoad(data, artefactID))
@@ -205,7 +196,6 @@ class Metadata(DIRepresentable):
             raise Exception("METADATA RAWLOAD ERROR: Unable to determine metadata type from raw dictionary data.")
 
     @staticmethod
-    @databaseDebug
     def load(artefactID: str) -> 'Metadata | None':
         data = DI.load(Metadata.ref(artefactID))
         if data is None:
@@ -218,7 +208,6 @@ class Metadata(DIRepresentable):
         return Metadata.rawLoad(artefactID, data)
 
     @staticmethod
-    @databaseDebug
     def fromMetagen(artefactID: str, metagenDict: dict) -> 'Metadata':
         # 1. identify whether it is mm data or hf data
         # 2. manually feed in the values to either constructor to product a MMData | HFData object
@@ -495,7 +484,6 @@ class Batch(DIRepresentable):
             else:
                 return False
     
-    @databaseDebug
     def __init__(self, userID: str, batchArtefacts: 'List[BatchArtefact | Artefact]'=None, job: 'BatchProcessingJob | None'=None, created: str=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
@@ -521,7 +509,6 @@ class Batch(DIRepresentable):
         self.created: str = created
         self.originRef = Batch.ref(self.id)
     
-    @databaseDebug
     def save(self, checkIntegrity: bool=True) -> bool:
         if checkIntegrity:
             if self.userID is None:
@@ -555,7 +542,6 @@ class Batch(DIRepresentable):
             "created": self.created
         }
     
-    @databaseDebug
     def reload(self):
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
@@ -576,7 +562,6 @@ class Batch(DIRepresentable):
         
         return str(completeData)
     
-    @databaseDebug
     def getUser(self) -> bool:
         if not isinstance(self.userID, str):
             raise Exception("BATCH GETUSER ERROR: Invalid value set for 'userID'. Expected a string representing the User ID.")
@@ -588,7 +573,6 @@ class Batch(DIRepresentable):
         
         return True
     
-    @databaseDebug
     def loadAllArtefacts(self, withMetadata: bool=False) -> bool:
         if not isinstance(self.artefacts, dict):
             raise Exception("BATCH LOADARTEFACTS ERROR: Expected 'artefacts' to be a dictionary, but got '{}'.".format(type(self.artefacts).__name__))
@@ -601,13 +585,11 @@ class Batch(DIRepresentable):
         
         return True
     
-    @databaseDebug
     def get(self, artefact: Artefact | str) -> 'BatchArtefact | None':
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
         return self.artefacts.get(artefactID, None)
     
-    @databaseDebug
     def add(self, artefact: Artefact | str, to: 'Batch.Stage') -> 'BatchArtefact':
         to = Batch.Stage.validateAndReturn(to)
         if to == False:
@@ -623,13 +605,11 @@ class Batch(DIRepresentable):
         
         return batchArt
     
-    @databaseDebug
     def has(self, artefact: Artefact | str) -> bool: 
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
         return artefactID in self.artefacts
     
-    @databaseDebug
     def move(self, artefact: Artefact | str, to: 'Batch.Stage') -> bool:
         to = Batch.Stage.validateAndReturn(to)
         if to == False:
@@ -645,13 +625,11 @@ class Batch(DIRepresentable):
         
         return True
     
-    @databaseDebug
     def where(self, artefact: Artefact | str) -> 'Batch.Stage | None':
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
         return self.artefacts[artefactID].stage if self.has(artefactID) else None
     
-    @databaseDebug
     def remove(self, artefact: Artefact | str) -> bool:
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
         
@@ -661,7 +639,6 @@ class Batch(DIRepresentable):
         self.artefacts.pop(artefactID, None)
         return True
     
-    @databaseDebug
     def initJob(self, jobID: str=None, status: 'BatchProcessingJob.Status'=None, autoStart: bool=False) -> 'BatchProcessingJob':
         if status is None:
             status = BatchProcessingJob.Status.PENDING
@@ -699,7 +676,6 @@ Created: {} />
         )
     
     @staticmethod
-    @databaseDebug
     def rawLoad(batchID: str, data: dict, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch':
         requiredParams = ['userID', 'artefacts', 'job', 'created']
         for reqParam in requiredParams:
@@ -737,7 +713,6 @@ Created: {} />
         return batch
     
     @staticmethod
-    @databaseDebug
     def load(id: str=None, userID: str=None, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch | Dict[Batch] | None':
         '''
         If id found load specific batch from the database
@@ -814,7 +789,6 @@ class BatchProcessingJob(DIRepresentable):
             else:
                 return False
     
-    @databaseDebug
     def __init__(self, batch: Batch | str, jobID: str | None, status: 'BatchProcessingJob.Status', started: str | None=None, ended: str | None=None):
         batchID = batch.id if isinstance(batch, Batch) else batch
         status = BatchProcessingJob.Status.validateAndReturn(status)
@@ -871,7 +845,6 @@ class BatchProcessingJob(DIRepresentable):
         
         return True
     
-    @databaseDebug
     def reload(self):
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
@@ -884,7 +857,6 @@ class BatchProcessingJob(DIRepresentable):
         self.__dict__.update(self.rawLoad(self.batchID, data).__dict__)
         return True
     
-    @databaseDebug
     def setStatus(self, newStatus: 'BatchProcessingJob.Status') -> bool:
         newStatus = BatchProcessingJob.Status.validateAndReturn(newStatus)
         if newStatus == False:
@@ -903,7 +875,6 @@ class BatchProcessingJob(DIRepresentable):
         )
 
     @staticmethod
-    @databaseDebug
     def rawLoad(batchID: str, data: dict):
         reqParams = ['jobID', 'status', 'started', 'ended']
         for reqParam in reqParams:
@@ -926,7 +897,6 @@ class BatchProcessingJob(DIRepresentable):
         )
     
     @staticmethod
-    @databaseDebug
     def load(batch: Batch | str) -> 'BatchProcessingJob | None':
         batchID = batch.id if isinstance(batch, Batch) else batch
         
@@ -945,7 +915,6 @@ class BatchProcessingJob(DIRepresentable):
         return Ref("batches", batchID, "job")
 
 class BatchArtefact(DIRepresentable):
-    @databaseDebug
     def __init__(self, batch: Batch | str, artefact: Artefact | str, stage: Batch.Stage, processedDuration: str | None=None, processedTime: str | None=None, processingError: str | None=None):
         batchID = batch.id if isinstance(batch, Batch) else batch
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
@@ -973,7 +942,6 @@ class BatchArtefact(DIRepresentable):
     def save(self):
         return DI.save(self.represent(), self.originRef)
     
-    @databaseDebug
     def reload(self):
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
@@ -986,7 +954,6 @@ class BatchArtefact(DIRepresentable):
         self.__dict__.update(self.rawLoad(self.batchID, self.artefactID, data).__dict__)
         return True
     
-    @databaseDebug
     def getArtefact(self, includeMetadata: bool=False) -> bool:
         if not isinstance(self.artefactID, str):
             raise Exception("BATCHARTEFACT GETARTEFACT ERROR: Invalid value set for 'artefactID'. Expected a string representing the Artefact ID.")
@@ -998,7 +965,6 @@ class BatchArtefact(DIRepresentable):
         
         return True
     
-    @databaseDebug
     def setStage(self, newStage: Batch.Stage) -> bool:
         newStage = Batch.Stage.validateAndReturn(newStage)
         if newStage == False:
@@ -1019,7 +985,6 @@ class BatchArtefact(DIRepresentable):
         )
     
     @staticmethod
-    @databaseDebug
     def rawLoad(batchID: str, artefactID: str, data: dict, withArtefact: bool=False, metadataRequired: bool=False) -> 'BatchArtefact':
         reqParams = ['stage', 'processedDuration', 'processedTime', 'processingError']
         for reqParam in reqParams:
@@ -1048,7 +1013,6 @@ class BatchArtefact(DIRepresentable):
         return batchArt
     
     @staticmethod
-    @databaseDebug
     def load(batch: Batch | str, artefact: Artefact | str, withArtefact: bool=False, metadataRequired: bool=False) -> 'BatchArtefact | None':
         batchID = batch.id if isinstance(batch, Batch) else batch
         artefactID = artefact.id if isinstance(artefact, Artefact) else artefact
