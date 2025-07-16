@@ -7,6 +7,21 @@ from typing import List, Dict, Any, Literal
 
 class Artefact(DIRepresentable):
     def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
+        """
+        Represents an artefact, such as an image or object, with associated metadata and storage references.
+        Used to manage artefacts' data and files within the DI system. 
+        Manages artefact data and files within the DI system, including images and metadata.
+        Supports persistence, retrieval, and file management operations.
+
+        Args:
+            name: Name of the artefact.
+            image: Filename of the artefact image.
+            metadata: Metadata object or raw metadata dictionary.
+            public: Whether the artefact is publicly accessible. Defaults to False.
+            created: UTC timestamp string of creation. Auto-generated if None.
+            metadataLoaded: Whether to load metadata during initialization. Defaults to True.
+            id: Unique identifier. Auto-generated if None.
+        """
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -35,6 +50,15 @@ class Artefact(DIRepresentable):
         return DI.save(None, self.originRef)
     
     def reload(self):
+        """
+        Reloads the artefact state from the data store.
+        
+        Returns:
+            bool: True if reload succeeded
+
+        Raises:
+            Exception: If data loading fails
+        """
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
             raise Exception("ARTEFACT RELOAD ERROR: DIError occurred: {}".format(data))
@@ -47,13 +71,31 @@ class Artefact(DIRepresentable):
         return True
 
     def getFMFile(self) -> File:
+        """
+        Gets the File object for the artefact's image.
+        
+        Returns:
+            File: Configured File object for the image
+        """
         return File(self.image, "artefacts")
     
     def fmSave(self):
+        """
+        Saves the artefact's image file via FileManager.
+        
+        Returns:
+            bool: True if save succeeded
+        """
         fmFile = self.getFMFile()
         return FileManager.save(fmFile.store, fmFile.filename)
     
     def fmDelete(self):
+        """
+        Deletes the artefact's image file via FileManager.
+        
+        Returns:
+            bool: True if deletion succeeded
+        """
         fmFile = self.getFMFile()
         return FileManager.delete(file=fmFile)
 
@@ -79,6 +121,17 @@ class Artefact(DIRepresentable):
 
     @staticmethod
     def rawLoad(data: dict, artefactID: str | None=None, includeMetadata: bool=True) -> 'Artefact':
+        """
+        Constructs an Artefact from raw data dictionary.
+
+        Args:
+            data (dict): Raw artefact data. 
+            artefactID (str): Optional ID for the artefact.
+            includeMetadata (bool): Whether to load metadata.
+
+        Returns:
+            Artefact: Constructed artefact object.
+        """
         requiredParams = ['public', 'name', 'image', 'created', 'metadata']
         for param in requiredParams:
             if param not in data:
@@ -105,6 +158,18 @@ class Artefact(DIRepresentable):
 
     @staticmethod
     def load(id: str = None, name: str=None, image: str=None, includeMetadata: bool=True) -> 'List[Artefact] | Artefact | None':
+        """
+        Loads artefacts from the DI system.
+
+        Args:
+            id (str): Specific artefact ID.
+            name (str): Artefact name to filter by.
+            image (str): Artefact image name to filter by.
+            includeMetadata (bool): Whether to include metadata.
+
+        Returns:
+            Artefact | List[Artefact] | Single artefact, list, or None.
+        """
         if id is not None:
             data = DI.load(Artefact.ref(id))
             if isinstance(data, DIError):
@@ -158,6 +223,17 @@ class Artefact(DIRepresentable):
 
 class Metadata(DIRepresentable):
     def __init__(self, artefactID: str=None, dataObject: 'MMData | HFData'=None):
+        """
+        Wrapper for artefact metadata, either MMData or HFData, with helper methods for storage and format conversion.
+        Initializes a Metadata wrapper with MMData or HFData.
+
+        Args:
+            artefactID (str): Artefact ID to associate.
+            dataObject (MMData | HFData): Metadata content.
+        
+        Raises:
+            Exception: If dataObject is not MMData or HFData.
+        """
         self.raw: MMData | HFData | None = None
 
         if dataObject is not None:
@@ -188,6 +264,16 @@ class Metadata(DIRepresentable):
     
     @staticmethod
     def rawLoad(artefactID: str, data: Dict[str, Any]) -> 'Metadata':
+        """
+        Determines and loads the correct metadata type from raw dictionary.
+
+        Args:
+            artefactID (str): Artefact ID.
+            data (dict): Raw metadata.
+
+        Returns:
+            Metadata: Loaded metadata wrapper.
+        """
         if 'tradCN' in data:
             return Metadata(artefactID, MMData.rawLoad(data, artefactID))
         elif 'faceFiles' in data:
@@ -209,10 +295,19 @@ class Metadata(DIRepresentable):
 
     @staticmethod
     def fromMetagen(artefactID: str, metagenDict: dict) -> 'Metadata':
-        # 1. identify whether it is mm data or hf data
-        # 2. manually feed in the values to either constructor to product a MMData | HFData object
-        # 3. Pass the data object to Metadata constructor
-        # 4. Return the Metadata object
+        """
+        Constructs Metadata from a metagen dictionary (from form(s) or user input).
+
+        Args:
+            artefactID (str): Associated artefact ID.
+            metagenDict (dict): Raw metadata dictionary from user input.
+
+        Returns:
+            Metadata: Constructed Metadata object.
+
+        Raises:
+            Exception: If metadata type cannot be determined from input.
+        """
         if 'traditional_chinese' in metagenDict:
             mm = MMData(
                 artefactID=artefactID,
@@ -243,6 +338,24 @@ class Metadata(DIRepresentable):
 
 class MMData(DIRepresentable):
     def __init__(self, artefactID: str, tradCN: str, preCorrectionAcc: str, postCorrectionAcc: str, simplifiedCN: str, english: str, summary: str, nerLabels: str, corrected: bool = False):
+        """
+        Metadata for meeting minutes artefacts.
+    
+        Contains structured data from meeting minutes including Chinese text (both traditional
+        and simplified), English translations, accuracy metrics for text processing,
+        summaries, and named entity labels. Tracks correction status and processing history.
+
+        Args:
+            artefactID (str): Associated artefact identifier.
+            tradCN (str): Traditional Chinese text from meeting minutes.
+            corrected (bool): Flag indicating if text has been manually corrected.
+            preCorrectionAcc (str): Accuracy score before any corrections.
+            postCorrectionAcc (str): Accuracy score after corrections.
+            simplifiedCN (str): Simplified Chinese version of the text.
+            english (str): English translation of the meeting minutes.
+            summary (str): Concise summary of the meeting content.
+            nerLabels (str): Named entity recognition labels extracted from text.
+        """
         self.artefactID = artefactID
         self.tradCN = tradCN
         self.corrected = corrected
@@ -315,6 +428,19 @@ class MMData(DIRepresentable):
 
 class HFData(DIRepresentable):
     def __init__(self, artefactID: str, faceFiles: list[str], caption: str, addInfo: str=None):
+        """
+        Metadata for human figure(s) in artefacts.
+    
+        Contains information about human figures detected in images, including references
+        to face image files, captions describing the scene (e.g., "people in a meeting"), and optional additional
+        information. Used for artefacts containing human imagery that requires annotation.
+
+        Args:
+            artefactID (str): Associated artefact identifier.
+            faceFiles (list[str]): List of image files containing detected faces.
+            caption (str): Descriptive caption for the human figures.
+            addInfo (str | None): Additional context about the figures if available.
+        """
         self.artefactID = artefactID
         self.faceFiles = faceFiles
         self.caption = caption
@@ -366,6 +492,15 @@ class HFData(DIRepresentable):
     
 class Book(DIRepresentable):
     def __init__(self, title: str, subtitle: str, mmIDs: List[str], id: str=None):
+        """
+        Represents a curated collection of MMData artefacts as a Book.
+
+        Args:
+            title (str): The title of the book.
+            subtitle (str): Subtitle or additional description.
+            mmIDs (List[str]): A list of artefact IDs that are part of the book.
+            id (str, optional): Unique ID for the book. Auto-generated if not provided.
+        """
         if id is None:
             id = Universal.generateUniqueID()
         
@@ -416,13 +551,17 @@ class Book(DIRepresentable):
     
     @staticmethod
     def load(id: str=None, title: str=None, withMMID: str=None) -> 'Book | List[Book] | None':
-        '''
-        Load a book by its ID, title, or MMID.
-        If id is provided, it loads the specific book.
-        If title is provided, it searches for a book with that title.
-        If withMMID is provided, it searches for a book that contains that MMID in its mmIDs list.
-        If neither id nor title is provided, it loads all books and returns the first one that matches the criteria.
-        '''
+        """
+        Loads a book(s) by ID, title, or MMData artefact ID.
+
+        Args:
+            id (str): Book ID.
+            title (str): Book title to search for.
+            withMMID (str, optional): MMData artefact ID to search in book's mmIDs.
+
+        Returns:
+            Book | List[Book] | None
+        """
         if id != None:
             data = DI.load(Book.ref(id))
             if data is None:
@@ -648,19 +787,22 @@ class Batch(DIRepresentable):
     
     @staticmethod
     def load(id: str=None, userID: str=None, withUser: bool=False, withArtefacts: bool=False, metadataRequired: bool=False) -> 'Batch | Dict[Batch] | None':
-        '''
-        If id found load specific batch from the database
-        else loads all batches from the database and filter based on userID // Gets all batch under that userID
-
+        """
+        Loads batches from the data store.
+        
         Args:
-            id (str, optional): The ID of the batch to load. Defaults to None.
-            userID (str, optional): The user ID of the batch to load. Defaults to None.
-            withUser (bool, optional): Whether to include user information in the loaded batch. Defaults to False.
-            withArtefacts (bool, optional): Whether to include artefacts in the loaded batch. Defaults to False.
+            id: Specific batch ID to load
+            userID: User ID to filter by
+            withUser: Whether to load user objects
+            withArtefacts: Whether to load artefact objects
+            metadataRequired: Whether to load artefact metadata
 
         Returns:
-            Batch | Dict[Batch] | None: The loaded batch or list of batches, or None if not found.
-        '''
+            Matching Batch(es) or None if not found
+
+        Raises:
+            Exception: If data loading fails
+        """
         if id != None:
             data = DI.load(Batch.ref(id))
             if data is None:
