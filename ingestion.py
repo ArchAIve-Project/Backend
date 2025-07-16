@@ -1,4 +1,4 @@
-import time, functools
+import time, functools, copy
 from models import Batch, BatchProcessingJob, BatchArtefact, Artefact, Metadata
 from services import ThreadManager, Universal
 from fm import FileManager, File
@@ -7,7 +7,11 @@ from services import Logger
 
 class DataImportProcessor:
     @staticmethod
-    def processBatch(batch: Batch, chunkSize: int=10, offloadArtefactPostProcessing: bool=True):
+    def processBatch(batch: Batch, chunkSize: int=10, offloadArtefactPostProcessing: bool=True, maxLife: int=None):
+        if maxLife is None:
+            maxLife = 60 * 10 # Default to 10 minutes
+        start = time.time()
+        
         # Start the job
         job = batch.job
         job.start()
@@ -15,36 +19,43 @@ class DataImportProcessor:
         
         targetBatchArtefacts = [x for x in batch.artefacts.values() if x.stage == Batch.Stage.UNPROCESSED]
         
-        def getNextTargetArtefact(batchArtIndex: int):
-            return targetBatchArtefacts[batchArtIndex + chunkSize] if (batchArtIndex + chunkSize) < len(targetBatchArtefacts) else None
-        
         if len(targetBatchArtefacts) == 0:
             Logger.log("DATAIMPORT PROCESSBATCH: Finished as no unprocessed artefacts found in batch '{}'.".format(batch.id))
             job.end()
             job.save()
             return
         
-        Logger.log("DATAIMPORT PROCESSBATCH: Starting processing batch '{}' with {} target artefacts.".format(batch.id, len(targetBatchArtefacts)))
+        Logger.log("DATAIMPORT PROCESSBATCH: Started processing batch '{}' with {} target artefacts and chunk size {}.".format(batch.id, len(targetBatchArtefacts), chunkSize))
         
-        i = 0
-        while i < chunkSize and i < len(targetBatchArtefacts):
-            batchArtSequence = [targetBatchArtefacts[i]]
-            index = i
-            nextBatchArt = getNextTargetArtefact(index)
-            while nextBatchArt is not None:
-                batchArtSequence.append(nextBatchArt)
-                index += chunkSize
-                nextBatchArt = getNextTargetArtefact(index)
+        chunk_i = 0
+        scheduled = 0
+        while chunk_i < chunkSize and scheduled < len(targetBatchArtefacts):
+            batchArtSequence = targetBatchArtefacts[scheduled : scheduled + chunkSize]
             
             if len(batchArtSequence) > 0:
                 ThreadManager.defaultProcessor.addJob(
-                    DataImportProcessor.constructHandoffChain(batchArtSequence, offloadArtefactPostProcessing)
+                    DataImportProcessor.constructHandoffChain(batch.id, batchArtSequence, chunk_i, offloadArtefactPostProcessing)
                 )
+                Logger.log("DATAIMPORT PROCESSBATCH: Chunk slot {} triggered with {} artefacts.".format(chunk_i, len(batchArtSequence)))
             
-            i += chunkSize
+            chunk_i += 1
+            scheduled += len(batchArtSequence)
         
-        while not all([x.stage == Batch.Stage.PROCESSED for x in targetBatchArtefacts]):
-            time.sleep(0.5)
+        while not all(x.stage == Batch.Stage.PROCESSED for x in targetBatchArtefacts):
+            if (time.time() - start) > maxLife:
+                Logger.log("DATAIMPORT PROCESSBATCH: Max life exceeded for batch '{}'. Stopping processing with {} processed out of {}.".format(batch.id, sum(x.stage == Batch.Stage.PROCESSED for x in targetBatchArtefacts), len(targetBatchArtefacts)))
+                job.end()
+                job.save()
+                return
+            
+            job.reload() # Refresh the job status. By memory reference, chunks will also terminate if the job is cancelled.
+            if job.status == BatchProcessingJob.Status.CANCELLED:
+                Logger.log("DATAIMPORT PROCESSBATCH: Job cancelled for batch '{}'. Stopping processing with {} processed out of {}.".format(batch.id, sum(x.stage == Batch.Stage.PROCESSED for x in targetBatchArtefacts), len(targetBatchArtefacts)))
+                job.end()
+                job.save()
+                return
+            
+            time.sleep(1)
         
         Logger.log("DATAIMPORT PROCESSBATCH: Finished processing batch '{}' with {} target artefacts.".format(batch.id, len(targetBatchArtefacts)))
         job.end()
@@ -52,8 +63,16 @@ class DataImportProcessor:
         return
     
     @staticmethod
-    def constructHandoffChain(batchArtSequence: list[BatchArtefact], offloadArtefactPostProcessing: bool=True):
+    def constructHandoffChain(batchID: str, batchArtSequence: list[BatchArtefact], chainIndex: int, offloadArtefactPostProcessing: bool=True):
+        job = BatchProcessingJob.load(batchID)
+        
         def scheduleNextProcess():
+            if isinstance(job, BatchProcessingJob):
+                job.reload() # refresh job status
+                if job.status == BatchProcessingJob.Status.CANCELLED:
+                    Logger.log("DATAIMPORT SCHEDULENEXTPROCESS: {} {}: Job cancelled for batch '{}'. Terminating chain with {} remaining artefacts.".format(batchID, chainIndex, batchID, len(batchArtSequence)))
+                    return
+            
             if len(batchArtSequence) > 0:
                 nextBatchArt = batchArtSequence.pop(0)
                 ThreadManager.defaultProcessor.addJob(DataImportProcessor.processItem, nextBatchArt, offloadArtefactPostProcessing, scheduleNextProcess)
