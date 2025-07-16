@@ -28,9 +28,20 @@ class DataImportProcessor:
         Logger.log("DATAIMPORT PROCESSBATCH: Started processing batch '{}' with {} target artefacts and chunk size {}.".format(batch.id, len(targetBatchArtefacts), chunkSize))
         
         chunk_i = 0
-        scheduled = 0
-        while chunk_i < chunkSize and scheduled < len(targetBatchArtefacts):
-            batchArtSequence = targetBatchArtefacts[scheduled : scheduled + chunkSize]
+        splits = []
+        
+        base_split_per_chunk = len(targetBatchArtefacts) // chunkSize
+        last_split_size = len(targetBatchArtefacts) % chunkSize
+        if last_split_size == 0:
+            last_split_size = base_split_per_chunk
+        
+        splits.extend([base_split_per_chunk] * (chunkSize - 1))
+        splits.append(last_split_size)
+        
+        current_index = 0
+        while chunk_i < chunkSize:
+            batchArtSequence = targetBatchArtefacts[current_index: current_index + splits[chunk_i]]
+            current_index += splits[chunk_i]
             
             if len(batchArtSequence) > 0:
                 ThreadManager.defaultProcessor.addJob(
@@ -39,7 +50,6 @@ class DataImportProcessor:
                 Logger.log("DATAIMPORT PROCESSBATCH: Chunk slot {} triggered with {} artefacts.".format(chunk_i, len(batchArtSequence)))
             
             chunk_i += 1
-            scheduled += len(batchArtSequence)
         
         while not all(x.stage == Batch.Stage.PROCESSED for x in targetBatchArtefacts):
             if (time.time() - start) > maxLife:
