@@ -6,12 +6,15 @@ from services import Universal
 from typing import List, Dict, Any, Literal
 
 class Artefact(DIRepresentable):
+    """
+    Represents an artefact (e.g., image or document) within the DI system.
+
+    Artefacts contain metadata and are associated with stored files. This class handles the creation,
+    persistence, file management, and metadata binding of artefact objects.
+    """
     def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
         """
-        Represents an artefact, such as an image or object, with associated metadata and storage references.
-        Used to manage artefacts' data and files within the DI system. 
-        Manages artefact data and files within the DI system, including images and metadata.
-        Supports persistence, retrieval, and file management operations.
+        Initializes a new Artefact instance.
 
         Args:
             name: Name of the artefact.
@@ -72,19 +75,22 @@ class Artefact(DIRepresentable):
 
     def getFMFile(self) -> File:
         """
-        Gets the File object for the artefact's image.
+        Constructs and returns a FileManager-compatible File object from the artefact's image name information.
         
         Returns:
-            File: Configured File object for the image
+            File: A File object representing the artefact's image path.
         """
         return File(self.image, "artefacts")
     
     def fmSave(self):
         """
         Saves the artefact's image file via FileManager.
-        
+
         Returns:
-            bool: True if save succeeded
+            File | str: The updated File object if the save succeeded, or an error string otherwise.
+
+        Notes:
+            This method constructs a FileManager-compatible `File` object using the artefact's image name.
         """
         fmFile = self.getFMFile()
         return FileManager.save(fmFile.store, fmFile.filename)
@@ -92,9 +98,12 @@ class Artefact(DIRepresentable):
     def fmDelete(self):
         """
         Deletes the artefact's image file via FileManager.
-        
+
         Returns:
-            bool: True if deletion succeeded
+            bool | str: True if deletion succeeded, or an error message string if it failed.
+
+        Notes:
+            Constructs a FileManager-compatible `File` object using the artefact's image name.
         """
         fmFile = self.getFMFile()
         return FileManager.delete(file=fmFile)
@@ -126,8 +135,8 @@ class Artefact(DIRepresentable):
 
         Args:
             data (dict): Raw artefact data. 
-            artefactID (str): Optional ID for the artefact.
-            includeMetadata (bool): Whether to load metadata.
+            artefactID (str, optional): Optional ID for the artefact. Will be auto-generated if not provided.
+            includeMetadata (bool, optional): Whether to load metadata. Defaults to True.
 
         Returns:
             Artefact: Constructed artefact object.
@@ -265,6 +274,10 @@ class Metadata(DIRepresentable):
     @staticmethod
     def rawLoad(artefactID: str, data: Dict[str, Any]) -> 'Metadata':
         """
+        WARNING:
+        Do NOT use this method to generate a Metadata object from `MetadataGenerator.generate` output.
+        Use `Metadata.fromMetagen` instead.
+
         Determines and loads the correct metadata type from raw dictionary.
 
         Args:
@@ -273,6 +286,9 @@ class Metadata(DIRepresentable):
 
         Returns:
             Metadata: Loaded metadata wrapper.
+
+        Raises:
+        Exception: If metadata type cannot be determined from the input dictionary.
         """
         if 'tradCN' in data:
             return Metadata(artefactID, MMData.rawLoad(data, artefactID))
@@ -296,7 +312,7 @@ class Metadata(DIRepresentable):
     @staticmethod
     def fromMetagen(artefactID: str, metagenDict: dict) -> 'Metadata':
         """
-        Constructs Metadata from a metagen dictionary (from form(s) or user input).
+        Constructs Metadata from `metadataGenerator.generate` dictionary (from form(s) or user input).
 
         Args:
             artefactID (str): Associated artefact ID.
