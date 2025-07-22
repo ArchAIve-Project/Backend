@@ -1322,6 +1322,21 @@ class BatchProcessingJob(DIRepresentable):
         
         return True
     
+    def fetchLatestStatus(self) -> 'BatchProcessingJob.Status | None':
+        self.status = BatchProcessingJob.getStatus(self.batchID)
+        return self.status
+    
+    def computeDuration(self) -> float | None:
+        if not isinstance(self.started, str) or not isinstance(self.ended, str):
+            return None
+        try:
+            start = Universal.fromUTC(self.started)
+            end = Universal.fromUTC(self.ended)
+            return (end - start).total_seconds()
+        except Exception as e:
+            Logger.log("BATCHPROCESSINGJOB COMPUTEDURATION ERROR: {}".format(e))
+            return None
+    
     def reload(self):
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
@@ -1420,6 +1435,37 @@ class BatchProcessingJob(DIRepresentable):
             raise Exception("BATCHPROCESSINGJOB LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
         
         return BatchProcessingJob.rawLoad(batchID, data)
+    
+    @staticmethod
+    def getStatus(batch: Batch | str) -> 'BatchProcessingJob.Status | None':
+        """Gets the status of the batch processing job.
+
+        Args:
+            batch (Batch | str): The batch object or ID to retrieve the job status for.
+
+        Raises:
+            Exception: If any error occurs during status retrieval and validation.
+
+        Returns: `BatchProcessingJob.Status | None`: The status of the job if it exists, None otherwise.
+        """
+        
+        batchID = batch.id if isinstance(batch, Batch) else batch
+        if not isinstance(batchID, str):
+            raise Exception("BATCHPROCESSINGJOB GETSTATUS ERROR: Expected 'batch' to be a Batch object or a string representing the batch ID, but got '{}'.".format(type(batch).__name__))
+        
+        data = DI.load(Ref("batches", batchID, "job", "status"))
+        if data is None:
+            return None
+        if isinstance(data, DIError):
+            raise Exception("BATCHPROCESSINGJOB GETSTATUS ERROR: DIError occurred: {}".format(data))
+        if not isinstance(data, str):
+            raise Exception("BATCHPROCESSINGJOB GETSTATUS ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        status = BatchProcessingJob.Status.validateAndReturn(data)
+        if status == False:
+            raise Exception("BATCHPROCESSINGJOB GETSTATUS ERROR: Invalid status value '{}' returned from DI.".format(data))
+        
+        return status
     
     @staticmethod
     def ref(batchID: str) -> Ref:
