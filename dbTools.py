@@ -374,7 +374,7 @@ def addCategories():
     all_artefacts = Artefact.load()
     image_to_id = {art.image: art.id for art in all_artefacts}
 
-    hf_files = [f"hf{i}.png" for i in range(3, 53)]
+    hf_files = [f"hf{i}.png" for i in range(1, 51)]
 
     categories = [
         ("Human Group 1", hf_files[:30]),
@@ -422,7 +422,7 @@ def removeCategories():
 def populateBooks():
     requireDI()
 
-    print("\nPopulating database with 10 books using mm1.jpg to mm53.jpg...\n")
+    print("\nPopulating database with 10 books using mm1.jpg to mm50.jpg...\n")
 
     mm_files = [f"mm{i}.jpg" for i in range(1, 54)]
 
@@ -458,7 +458,7 @@ def populateMore():
     requireFM()
 
     print()
-    print("Populating database with 100 additional dummy artefacts from /moreDummy (50 mm, 50 hf)...")
+    print("Populating database with additional dummy artefacts from /moreDummy (50 mm, 50 hf)...")
     print()
 
     moreDummyPath = os.path.join(os.getcwd(), "moreDummy")
