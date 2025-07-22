@@ -18,7 +18,7 @@ def getArtefactImage(filename):
 
     fileExists = file.exists()
     if isinstance(fileExists, str):
-        Logger.log(f"CDN GETFACE ERROR: Failed to check file existence; response: {fileExists}")
+        Logger.log(f"CDN GETARTEFACT ERROR: Failed to check file existence; response: {fileExists}")
         return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
 
     if not fileExists[0]:
@@ -88,7 +88,7 @@ def getAsset(filename):
 
     fileExists = file.exists()
     if isinstance(fileExists, str):
-        Logger.log(f"CDN GETFACE ERROR: Failed to check file existence; response: {fileExists}")
+        Logger.log(f"CDN GETASSET ERROR: Failed to check file existence; response: {fileExists}")
         return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
 
     if not fileExists[0]:
@@ -116,7 +116,7 @@ def getAsset(filename):
 def getAllCategoriesWithArtefacts():
     try:
         categories = Category.load()
-        if not categories or not isinstance(categories, list):
+        if not categories:
             return JSONRes.new(404, ResType.ERROR, "No categories available.")
 
         result = {}
@@ -127,17 +127,13 @@ def getAllCategoriesWithArtefacts():
 
             artefactsList = []
             for catArt in cat.members.values():
-                loaded = catArt.getArtefact()
-                if not loaded:
+                if not catArt.getArtefact() or not catArt.artefact:
                     continue
 
                 artefact = catArt.artefact
-                if not artefact:
-                    continue
-
-                file = FileManager.prepFile("artefacts", artefact.image)
-                if isinstance(file, str):
-                    Logger.log(f"CDN GETCATALOGUE ERROR: Failed to prepare file '{artefact.image}'; response: {file}")
+                file_check = FileManager.prepFile("artefacts", artefact.image)
+                if isinstance(file_check, str):
+                    Logger.log(f"CDN GETCATALOGUE ERROR: Failed to prepare file '{artefact.image}'; response: {file_check}")
                     continue
 
                 artefactsList.append({
@@ -153,16 +149,16 @@ def getAllCategoriesWithArtefacts():
         if not result:
             return JSONRes.new(404, ResType.ERROR, "No artefacts found in any category.")
 
-        books = Book.load()
-        bookList = []
-        if books and isinstance(books, list):
-            for book in books:
-                bookList.append({
-                    "id": book.id,
-                    "title": book.title,
-                    "subtitle": book.subtitle,
-                    "mmIDs": book.mmIDs
-                })
+        books = Book.load() or []
+        bookList = [
+            {
+                "id": book.id,
+                "title": book.title,
+                "subtitle": book.subtitle,
+                "mmIDs": book.mmIDs
+            }
+            for book in books
+        ]
 
         return JSONRes.new(200, ResType.SUCCESS, data={
             "categories": result,
