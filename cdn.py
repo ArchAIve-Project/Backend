@@ -19,10 +19,10 @@ def getArtefactImage(filename):
     fileExists = file.exists()
     if isinstance(fileExists, str):
         Logger.log(f"CDN GETFACE ERROR: Failed to check file existence; response: {fileExists}")
-        return JSONRes.new(500, ResType.error, "Something went wrong.")
+        return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
 
     if not fileExists[0]:
-        return JSONRes.new(404, ResType.error, "Requested file not found.")
+        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
 
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
@@ -40,7 +40,7 @@ def getArtefactImage(filename):
         return res
     except Exception as e:
         Logger.log(f"CDN GETARTEFACT ERROR: {e}")
-        return JSONRes.new(500, ResType.error, "Error sending file.")
+        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
 
 
@@ -55,10 +55,10 @@ def getFaceImage(filename):
     fileExists = file.exists()
     if isinstance(fileExists, str):
         Logger.log(f"CDN GETFACE ERROR: Failed to check file existence; response: {fileExists}")
-        return JSONRes.new(500, ResType.error, "Something went wrong.")
+        return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
 
     if not fileExists[0]:
-        return JSONRes.new(404, ResType.error, "Requested file not found.")
+        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
 
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
@@ -76,7 +76,7 @@ def getFaceImage(filename):
         return res
     except Exception as e:
         Logger.log(f"CDN GETFACE ERROR: {e}")
-        return JSONRes.new(500, ResType.error, "Error sending file.")
+        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
 @cdnBP.route('/asset/<filename>')
 @checkSession(strict=True)
@@ -89,10 +89,10 @@ def getAsset(filename):
     fileExists = file.exists()
     if isinstance(fileExists, str):
         Logger.log(f"CDN GETFACE ERROR: Failed to check file existence; response: {fileExists}")
-        return JSONRes.new(500, ResType.error, "Something went wrong.")
+        return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
 
     if not fileExists[0]:
-        return JSONRes.new(404, ResType.error, "Requested file not found.")
+        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
 
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
@@ -110,7 +110,7 @@ def getAsset(filename):
         return res
     except Exception as e:
         Logger.log(f"CDN GETASSET ERROR: {e}")
-        return JSONRes.new(500, ResType.error, "Error sending file.")
+        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
 @cdnBP.route('/getCatalogue')
 def getAllCategoriesWithArtefacts():
@@ -171,4 +171,4 @@ def getAllCategoriesWithArtefacts():
 
     except Exception as e:
         Logger.log(f"CDN GETALL EXCEPTION: {e}")
-        return JSONRes.new(500, ResType.ERROR, "Unexpected error occurred.")
+        return JSONRes.new(500, ResType.ERROR, "Unexpected ERROR occurred.")
