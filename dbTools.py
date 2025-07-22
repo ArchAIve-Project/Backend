@@ -374,12 +374,12 @@ def addCategories():
     all_artefacts = Artefact.load()
     image_to_id = {art.image: art.id for art in all_artefacts}
 
-    hf_files = [f"hf{i}.png" for i in range(3, 53)]  # hf3 to hf52
+    hf_files = [f"hf{i}.png" for i in range(3, 53)]
 
     categories = [
-        ("Human Group 1", hf_files[:30]),   # hf3 to hf32
-        ("Human Group 2", hf_files[30:45]), # hf33 to hf47
-        ("Human Group 3", hf_files[45:]),   # hf48 to hf52
+        ("Human Group 1", hf_files[:30]),
+        ("Human Group 2", hf_files[30:45]),
+        ("Human Group 3", hf_files[45:]),
     ]
 
     for cat_name, artefact_filenames in categories:
@@ -424,9 +424,8 @@ def populateBooks():
 
     print("\nPopulating database with 10 books using mm1.jpg to mm53.jpg...\n")
 
-    mm_files = [f"mm{i}.jpg" for i in range(1, 54)]  # mm1 to mm53
+    mm_files = [f"mm{i}.jpg" for i in range(1, 54)]
 
-    # Number of images per book (descending), last book empty
     mm_counts = [15, 10, 5, 5, 5, 5, 4, 3, 1, 0]
 
     created: list[Book] = []
