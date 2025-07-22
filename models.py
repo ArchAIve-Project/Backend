@@ -2536,20 +2536,81 @@ class CategoryArtefact(DIRepresentable):
         return Ref("categories", categoryID, "members", artefactID)
 
 class Face(DIRepresentable):
-    embeddingsData: 'Dict[str, list[torch.Tensor]] | None' = None
+    embeddingsData: 'Dict[str, Dict[str, torch.Tensor]] | None' = None
     embeddingsFile: 'File | None' = File("embeddings.pth", "people")
     
-    def __init__(self, figure: 'Figure | str', embeddings: List[FaceEmbedding]):
+    def __init__(self, figure: 'Figure | str', embeddings: 'List[FaceEmbedding] | Dict[str, FaceEmbedding]'):
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
             raise Exception("FACE INIT ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
+        
+        if isinstance(embeddings, list):
+            embeddings = {Universal.generateUniqueID(customLength=6): embedding for embedding in embeddings}
         
         self.embeddings = embeddings
         self.figureID = figureID
         self.originRef = Face.ref(figureID)
     
     def represent(self):
-        return {str(i): embedding.representForDB() for i, embedding in enumerate(self.embeddings)}
+        return {
+            "embeddings": {embeddingID: embedding.representForDB() for embeddingID, embedding in self.embeddings.items()}
+        }
+    
+    def save(self):
+        DI.save(self.represent(), self.originRef)
+        
+        Face.setEmbeddings(self.figureID, {id: embed.value for id, embed in self.embeddings.items()})
+        Face.saveEmbeddings()
+        return True
+    
+    @staticmethod
+    def rawLoad(figureID: str, data: dict, matchFMEmbeddings: bool=True) -> 'Face':
+        dbEmbeds: Dict[str, Dict[str, str]] = data.get('embeddings', {})
+        
+        faceEmbeds = Face.extractEmbeddings(figureID)
+        if faceEmbeds is None:
+            faceEmbeds = {}
+        
+        if matchFMEmbeddings:
+            # Remove embeddings that are not in the database
+            for embeddingID in list(faceEmbeds.keys()):
+                if embeddingID not in dbEmbeds:
+                    del faceEmbeds[embeddingID]
+            
+            Face.setEmbeddings(figureID, faceEmbeds)
+        
+        objectEmbeddings: Dict[str, FaceEmbedding] = {}
+        for embeddingID, data in dbEmbeds.items():
+            if isinstance(data, dict):
+                objectEmbeddings[embeddingID] = FaceEmbedding(
+                    value=faceEmbeds.get(embeddingID),
+                    origin=data.get('origin', 'Unknown'),
+                    added=data.get('added')
+                )
+        
+        return Face(figureID, objectEmbeddings)
+
+    @staticmethod
+    def load(figure: 'Figure | str', matchFMEmbeddings: bool=True, autoOffload: bool=False) -> 'Face | None':
+        figureID = figure.id if isinstance(figure, Figure) else figure
+        
+        data = DI.load(Face.ref(figureID))
+        if data == None:
+            return None
+        if isinstance(data, DIError):
+            raise Exception("FACE LOAD ERROR: DIError occurred: {}".format(data))
+        if not isinstance(data, dict):
+            raise Exception("FACE LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        if Face.embeddingsData is None:
+            Face.loadEmbeddings()
+        
+        out = Face.rawLoad(figureID, data, matchFMEmbeddings)
+        
+        if autoOffload:
+            Face.offloadEmbeddings()
+        
+        return out
     
     @staticmethod
     def ensureEmbeddingsFile():
@@ -2615,17 +2676,49 @@ class Face(DIRepresentable):
         return Face.embeddingsData.get(figureID, None)
     
     @staticmethod
-    def setEmbeddings(figure: 'Figure | str', embeddings: List[FaceEmbedding]):
+    def extractEmbedding(figure: 'Figure | str', embeddingID: str):
+        figureID = figure.id if isinstance(figure, Figure) else figure
+        if not isinstance(figureID, str):
+            raise Exception("FACE EXTRACTEMBEDDING ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
+        if not isinstance(embeddingID, str):
+            raise Exception("FACE EXTRACTEMBEDDING ERROR: 'embeddingID' must be a string representing the embedding ID.")
+        
+        if Face.embeddingsData is None:
+            raise Exception("FACE EXTRACTEMBEDDING ERROR: Embeddings data is not loaded; call Face.loadEmbeddings() first.")
+        
+        return Face.embeddingsData.get(figureID, {}).get(embeddingID, None)
+    
+    @staticmethod
+    def setEmbeddings(figure: 'Figure | str', embeddings: Dict[str, torch.Tensor]):
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
             raise Exception("FACE SETEMBEDDINGS ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
+        if not isinstance(embeddings, dict):
+            raise Exception("FACE SETEMBEDDINGS ERROR: 'embeddings' must be a dictionary of embeddings.")
         
         if Face.embeddingsData is None:
             raise Exception("FACE SETEMBEDDINGS ERROR: Embeddings data is not loaded; call Face.loadEmbeddings() first.")
         
-        Face.embeddingsData[figureID] = [x for x in embeddings if isinstance(x, FaceEmbedding)]
-        if len(Face.embeddingsData[figureID]) == 0:
-            del Face.embeddingsData[figureID]
+        Face.embeddingsData[figureID] = embeddings
+        
+        return True
+    
+    @staticmethod
+    def setEmbedding(figure: 'Figure | str', embeddingID: str, embedding: torch.Tensor):
+        figureID = figure.id if isinstance(figure, Figure) else figure
+        if not isinstance(figureID, str):
+            raise Exception("FACE SETEMBEDDING ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
+        if not isinstance(embeddingID, str):
+            raise Exception("FACE SETEMBEDDING ERROR: 'embeddingID' must be a string representing the embedding ID.")
+        if not isinstance(embedding, torch.Tensor):
+            raise Exception("FACE SETEMBEDDING ERROR: 'embedding' must be a torch.Tensor object.")
+        if Face.embeddingsData is None:
+            raise Exception("FACE SETEMBEDDING ERROR: Embeddings data is not loaded; call Face.loadEmbeddings() first.")
+        
+        if figureID not in Face.embeddingsData:
+            Face.embeddingsData[figureID] = {}
+        
+        Face.embeddingsData[figureID][embeddingID] = embedding
         
         return True
     
