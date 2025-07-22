@@ -1,9 +1,8 @@
-import os, shutil, json, base64, random, datetime, uuid, functools, threading
+import os, shutil, json, base64, random, datetime, uuid, threading, torch
 from enum import Enum
 from typing import List, Dict
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
-from firebase import FireStorage
 from passlib.hash import sha256_crypt as sha
 from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -310,6 +309,10 @@ class Universal:
     copyright = "© 2025 The ArchAIve Team. All Rights Reserved."
     version = None
     store = {}
+    device = os.environ.get(
+        "DEVICE",
+        "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+    )
     
     @staticmethod
     def getVersion():

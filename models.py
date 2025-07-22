@@ -1,9 +1,11 @@
+import torch
 from enum import Enum
 from database import DI, DIRepresentable, DIError
 from fm import File, FileManager
 from utils import Ref
-from services import Universal, Logger
+from services import Universal, Logger, FileOps
 from typing import List, Dict, Any, Literal
+from faceRecog import FaceEmbedding
 
 class Artefact(DIRepresentable):
     """
@@ -2532,3 +2534,148 @@ class CategoryArtefact(DIRepresentable):
     @staticmethod
     def ref(categoryID: str, artefactID: str) -> Ref:
         return Ref("categories", categoryID, "members", artefactID)
+
+class Face(DIRepresentable):
+    embeddingsData: 'Dict[str, list[torch.Tensor]] | None' = None
+    embeddingsFile: 'File | None' = File("embeddings.pth", "people")
+    
+    def __init__(self, figure: 'Figure | str', embeddings: List[FaceEmbedding]):
+        figureID = figure.id if isinstance(figure, Figure) else figure
+        if not isinstance(figureID, str):
+            raise Exception("FACE INIT ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
+        
+        self.embeddings = embeddings
+        self.figureID = figureID
+        self.originRef = Face.ref(figureID)
+    
+    def represent(self):
+        return {str(i): embedding.representForDB() for i, embedding in enumerate(self.embeddings)}
+    
+    @staticmethod
+    def ensureEmbeddingsFile():
+        fileExists = Face.embeddingsFile.exists()
+        
+        if isinstance(fileExists, str):
+            raise Exception("FACE ENSUREEMBEDDINGSFILE ERROR: Failed to check if embeddings file exists; response: {}".format(fileExists))
+        elif not fileExists[0]:
+            Face.embeddingsData = {}
+            Face.saveEmbeddings()
+        elif not fileExists[1]:
+            prep = FileManager.prepFile(file=Face.embeddingsFile)
+            if not isinstance(prep, File):
+                raise Exception("FACE ENSUREEMBEDDINGSFILE ERROR: Failed to prepare embeddings file; response: {}".format(prep))
+        
+        return True
+    
+    @staticmethod
+    def loadEmbeddings():
+        Face.ensureEmbeddingsFile()
+        
+        try:
+            Face.embeddingsData = torch.load(Face.embeddingsFile.path(), map_location=Universal.device)
+        except Exception as e:
+            raise Exception("FACE LOADEMBEDDINGS ERROR: Failed to load embeddings data; error: {}".format(e)) from e
+        
+        return True
+    
+    @staticmethod
+    def offloadEmbeddings(includingFile: bool=False):
+        if Face.embeddingsData != None:
+            Face.embeddingsData = None
+        
+        if includingFile and FileOps.exists(Face.embeddingsFile.path(), "file"):
+            res = FileManager.offload(file=Face.embeddingsFile)
+            if isinstance(res, str):
+                raise Exception("FACE OFFLOADEMBEDDINGS ERROR: Failed to offload embeddings file; response: {}".format(res))
+        
+        return True
+    
+    @staticmethod
+    def saveEmbeddings():
+        try:
+            torch.save(Face.embeddingsData, Face.embeddingsFile.path())
+            
+            saveResult = FileManager.save(file=Face.embeddingsFile)
+            if isinstance(saveResult, str):
+                raise Exception(saveResult)
+        except Exception as e:
+            raise Exception("FACE SAVEEMBEDDINGS ERROR: Failed to save embeddings data; error: {}".format(e)) from e
+
+        return True
+    
+    @staticmethod
+    def extractEmbeddings(figure: 'Figure | str'):
+        figureID = figure.id if isinstance(figure, Figure) else figure
+        if not isinstance(figureID, str):
+            raise Exception("FACE EXTRACTEMBEDDINGS ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
+        
+        if not isinstance(Face.embeddingsData, dict):
+            return None
+        
+        return Face.embeddingsData.get(figureID, None)
+    
+    @staticmethod
+    def setEmbeddings(figure: 'Figure | str', embeddings: List[FaceEmbedding]):
+        figureID = figure.id if isinstance(figure, Figure) else figure
+        if not isinstance(figureID, str):
+            raise Exception("FACE SETEMBEDDINGS ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
+        
+        if Face.embeddingsData is None:
+            raise Exception("FACE SETEMBEDDINGS ERROR: Embeddings data is not loaded; call Face.loadEmbeddings() first.")
+        
+        Face.embeddingsData[figureID] = [x for x in embeddings if isinstance(x, FaceEmbedding)]
+        if len(Face.embeddingsData[figureID]) == 0:
+            del Face.embeddingsData[figureID]
+        
+        return True
+    
+    @staticmethod
+    def ref(figureID: str) -> Ref:
+        return Ref("figures", figureID, "face")
+
+class Figure(DIRepresentable):
+    def __init__(self, label: str, headshot: str, face: Face, profile: None=None, id: str=None):
+        if id is None:
+            id = Universal.generateUniqueID()
+        
+        self.label = label
+        self.headshot = headshot
+        self.face = face
+        self.profile = profile
+        self.id = id
+        self.originRef = Figure.ref(id)
+    
+    def represent(self) -> dict:
+        return {
+            "label": self.label,
+            "headshot": self.headshot,
+            "face": self.face.represent() if isinstance(self.face, Face) else None,
+            "profile": self.profile
+        }
+    
+    @staticmethod
+    def rawLoad(figureID: str, data: dict) -> 'Figure':
+        reqParams = ['label', 'headshot', 'face', 'profile']
+        for reqParam in reqParams:
+            if reqParam not in data:
+                if reqParam == 'face':
+                    data[reqParam] = {}
+                else:
+                    data[reqParam] = None
+        
+        face = None
+        if isinstance(data['face'], dict):
+            # TODO
+            face = Face()
+        
+        return Figure(
+            label=data['label'],
+            headshot=data['headshot'],
+            face=face,
+            profile=data['profile'],
+            id=figureID
+        )
+    
+    @staticmethod
+    def ref(id: str) -> Ref:
+        return Ref("figures", id)
