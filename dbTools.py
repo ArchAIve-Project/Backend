@@ -1,7 +1,7 @@
 import time, pprint, datetime, os, sys, shutil, json
 from services import Universal, ThreadManager, Encryption, Trigger
 from firebase import FireConn
-from models import DI, User, Artefact, Metadata, Category, CategoryArtefact
+from models import DI, User, Artefact, Metadata, Category, Book, CategoryArtefact
 from fm import File, FileManager, FileOps
 from ai import LLMInterface, InteractionContext, Interaction
 from addons import ModelStore, ArchSmith
@@ -52,13 +52,17 @@ def requireLLM():
         SetupStates.llmSetup = True
 
 # Functions:
-# 1. populate 2 users and 5 artefacts
-# 2. create/delete user
-# 3. create/delete artefact
-# 4. process artefact and save
-# 5. wipe DB
-# 6. wipe FM
-# 7. reset local data files
+# 1. Populate DB with 2 users and 5 artefacts
+# 2. Create a new user
+# 3. Delete a user
+# 4. Create a new artefact
+# 5. Delete an artefact
+# 6. Process an artefact and save metadata
+# 7. Wipe DB
+# 8. Wipe FM
+# 9. Reset local data files
+# 10. Remove hardcoded categories
+# 11. Add hardcoded categories
 
 def populateDB():
     requireDI()
@@ -360,7 +364,6 @@ def resetLocalDataFiles():
     sys.exit(0)
     
 def addCategories():
-    from models import Category, Artefact
 
     categories = [
         ("Human Grp1", ["ed418edc96e849c890f61a0101f48c7e"]),
@@ -397,6 +400,57 @@ def removeCategories():
             print(f"Category '{cat.name}' removed from the database.")
         else:
             print(f"Category '{cat_name}' not found.")
+            
+def populateBooks():
+    requireDI()
+
+    print("\nPopulating database with 2 books...")
+    print()
+
+    # Titles for the books
+    book1_title = "SCCCI Minutes Volume 1"
+    book2_title = "SCCCI Minutes Volume 2"
+
+    # MMIDs to be used in books (must match those in artefacts)
+    mm1 = "mm1.jpg"
+    mm2 = "mm2.jpg"
+    mm3 = "mm3.jpg"
+
+    created: list[Book] = []
+
+    # Create or load Book 1
+    existing_book1 = Book.load(title=book1_title)
+    if not existing_book1:
+        book1 = Book(
+            title=book1_title,
+            subtitle="Early 1900s Records",
+            mmIDs=[mm1, mm2]
+        )
+        book1.save()
+        created.append(book1)
+        print(f"Created Book: '{book1.title}' with MMIDs: {book1.mmIDs}")
+    else:
+        print(f"Book already exists: '{existing_book1.title}'")
+
+    # Create or load Book 2
+    existing_book2 = Book.load(title=book2_title)
+    if not existing_book2:
+        book2 = Book(
+            title=book2_title,
+            subtitle="Mid 1900s Records",
+            mmIDs=[mm3]
+        )
+        book2.save()
+        created.append(book2)
+        print(f"Created Book: '{book2.title}' with MMIDs: {book2.mmIDs}")
+    else:
+        print(f"Book already exists: '{existing_book2.title}'")
+
+    print()
+    print(f"{len(created)} book(s) created.")
+    print()
+
+    return True
 
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
@@ -422,12 +476,13 @@ def main(choices: list[int] | None=None):
             print("9. Reset local data files")
             print("10. Remove hardcoded categories")
             print("11. Add hardcoded categories")
+            print("12. Populate DB with 2 books")
             print("0. Exit")
             print()
         
         try:
             choice = int(input("Enter choice: ")) if choice is None else choice
-            if choice not in range(12):
+            if choice not in range(13):
                 raise Exception()
         except KeyboardInterrupt:
             print("\nExiting...")
@@ -462,6 +517,8 @@ def main(choices: list[int] | None=None):
             removeCategories()
         elif choice == 11:
             addCategories()
+        elif choice == 12:
+            populateBooks()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)
