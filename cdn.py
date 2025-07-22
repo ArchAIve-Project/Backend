@@ -130,6 +130,8 @@ def getAllCategoriesWithArtefacts():
                 artefactsList.append({
                     "id": artefact.id,
                     "name": artefact.name,
+                    "image": artefact.image,
+                    "description": artefact.description
                 })
 
             if artefactsList:

@@ -1,7 +1,7 @@
 import time, pprint, datetime, os, sys, shutil, json
 from services import Universal, ThreadManager, Encryption, Trigger
 from firebase import FireConn
-from models import DI, User, Artefact, Metadata
+from models import DI, User, Artefact, Metadata, Category, CategoryArtefact
 from fm import File, FileManager, FileOps
 from ai import LLMInterface, InteractionContext, Interaction
 from addons import ModelStore, ArchSmith
@@ -383,23 +383,20 @@ def addCategories():
         print(f"Category '{cat.name}' populated with artefacts:", artefact_files)
 
 def removeCategories():
-    from models import Category
-    
     requireDI()
 
     categories = [
-        "Human Grp1",
-        "Human Grp2",
         "Meeting Minutes Grp1",
         "Meeting Minutes Grp2",
-        "Meeting Minutes Grp"
     ]
 
     for cat_name in categories:
         cat = Category.load(name=cat_name)
-        cat.destroy()
-        cat.save()
-        print(f"All artefacts removed from category '{cat.name}'.")
+        if cat:
+            cat.destroy()
+            print(f"Category '{cat.name}' removed from the database.")
+        else:
+            print(f"Category '{cat_name}' not found.")
 
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")

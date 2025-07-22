@@ -6,7 +6,7 @@ from services import Universal
 from typing import List, Dict, Any, Literal
 
 class Artefact(DIRepresentable):
-    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
+    def __init__(self, name: str, image: str, description: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -22,6 +22,12 @@ class Artefact(DIRepresentable):
         self.id = id
         self.name = name
         self.image = image
+        
+        if metadata and hasattr(metadata, 'summary') and isinstance(metadata.summary, str):
+            self.description = metadata.summary[:30]
+        else:
+            self.description = description or ""
+        
         self.public = public
         self.created = created
         self.metadata: Metadata | None = metadata
@@ -62,6 +68,7 @@ class Artefact(DIRepresentable):
             'public': self.public,
             'name': self.name,
             'image': self.image,
+            'description': self.description,
             'created': self.created,
             'metadata': self.metadata.represent() if self.metadata is not None else None
         }
@@ -71,6 +78,7 @@ class Artefact(DIRepresentable):
             self.id,
             self.name,
             self.image,
+            self.description,
             self.public,
             self.created,
             self.metadataLoaded,
@@ -79,7 +87,7 @@ class Artefact(DIRepresentable):
 
     @staticmethod
     def rawLoad(data: dict, artefactID: str | None=None, includeMetadata: bool=True) -> 'Artefact':
-        requiredParams = ['public', 'name', 'image', 'created', 'metadata']
+        requiredParams = ['public', 'name', 'description', 'image', 'created', 'metadata']
         for param in requiredParams:
             if param not in data:
                 if param == 'public':
@@ -91,9 +99,14 @@ class Artefact(DIRepresentable):
         if includeMetadata and isinstance(data['metadata'], dict) and isinstance(artefactID, str):
             metadata = Metadata.rawLoad(artefactID, data['metadata'])
 
+        description = data['description']
+        if metadata and hasattr(metadata, 'summary') and isinstance(metadata.summary, str):
+            description = metadata.summary[:30]
+
         output = Artefact(
             name=data['name'], 
             image=data['image'],
+            description=description,
             metadata=metadata,
             public=data['public'],
             created=data['created'],
