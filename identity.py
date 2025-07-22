@@ -1,7 +1,8 @@
 from flask import Blueprint, request, redirect, url_for, session
 from utils import JSONRes, ResType
 from services import Logger, Encryption, Universal
-from decorators import jsonOnly, enforceSchema, checkSession
+from decorators import jsonOnly, enforceSchema
+from sessionManagement import checkSession
 from models import User
 
 identityBP = Blueprint('identity', __name__, url_prefix="/auth")

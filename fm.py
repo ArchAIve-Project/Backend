@@ -1,4 +1,4 @@
-import os, shutil, sys, json, pprint, datetime
+import os, shutil, sys, json, pprint, datetime, threading
 from typing import List, Dict
 from enum import Enum
 from services import FileOps, Logger, Universal
@@ -378,6 +378,7 @@ class FileManager:
     stores = ["FileStore", "people", "artefacts"]
     context: Dict[str, File] = {}
     initialised = False
+    _dataFileLock = threading.Lock()
     
     @staticmethod
     def ensureDataFile():
@@ -387,12 +388,12 @@ class FileManager:
         Returns:
             bool: Always returns True after creating or verifying the file.
         """
-        
         if not FileOps.exists(os.path.join(os.getcwd(), FileManager.dataFile), type="file"):
-            with open(FileManager.dataFile, "w") as f:
-                json.dump({
-                    "mode": FileManager.mode
-                }, f)
+            with FileManager._dataFileLock:
+                with open(FileManager.dataFile, "w") as f:
+                    json.dump({
+                        "mode": FileManager.mode
+                    }, f)
         
         return True
     
@@ -467,7 +468,7 @@ class FileManager:
         """
         
         try:
-            res = FileOps.deleteFile(file.identifierPath())
+            res = FileOps.deleteFile(file.path())
             if res != True:
                 raise Exception(res)
             
@@ -611,8 +612,9 @@ class FileManager:
         # Read JSON data from data file
         data: dict | None = None
         try:
-            with open(FileManager.dataFile, "r") as f:
-                data = json.load(f)
+            with FileManager._dataFileLock:
+                with open(FileManager.dataFile, "r") as f:
+                    data = json.load(f)
         except Exception as e:
             return "ERROR: Failed to load context data; error: {}".format(e)
         
@@ -666,11 +668,12 @@ class FileManager:
         """
         
         try:
-            with open(FileManager.dataFile, "w") as f:
-                data = {file.identifierPath(): file.represent() for file in FileManager.context.values()}
-                data['mode'] = FileManager.mode
-                
-                json.dump(data, f, indent=4)
+            with FileManager._dataFileLock:
+                with open(FileManager.dataFile, "w") as f:
+                    data = {file.identifierPath(): file.represent() for file in FileManager.context.values()}
+                    data['mode'] = FileManager.mode
+                    
+                    json.dump(data, f, indent=4)
         except Exception as e:
             return "ERROR: Failed to save context to file; error: {}".format(e)
         
@@ -839,7 +842,7 @@ class FileManager:
             # File does not exist. Delete from filesystem and context if it exists            
             res = FileManager.removeLocally(File(filename, store))
             if res != True:
-                return "ERROR: Failed to delete file '{}' that does not exist on cloud storage; error: {}".format(idPath, res)
+                Logger.log("FILEMANAGER PREPFILE WARNING: Failed to remove cloud-unmatched file '{}' locally; error: {}".format(idPath, res))
             
             return "ERROR: File does not exist."
         

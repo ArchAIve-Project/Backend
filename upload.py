@@ -8,7 +8,7 @@ from models import Metadata, Batch, Artefact, User
 from fm import FileManager
 from services import ThreadManager
 from metagen import MetadataGenerator
-from importing import ImportProcessor
+from ingestion import DataImportProcessor
 
 uploadBP = Blueprint('upload', __name__, url_prefix="/upload")
 
@@ -47,7 +47,7 @@ def upload(user: User):
 
     # Logger
 
-    ThreadManager.defaultProcessor.addJob(ImportProcessor.processBatch, batch)
+    ThreadManager.defaultProcessor.addJob(DataImportProcessor.processBatch, batch)
 
     return JSONRes.new(200, "Batch is processing.")
 
