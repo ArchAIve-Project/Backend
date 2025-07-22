@@ -98,7 +98,7 @@ class InItemChatbot:
 
         result = LLMInterface.engage(context)
         if isinstance(result, str):
-            return "Error: {}".format(result)
+            return "ERROR: {}".format(result)
         else:
             botResponse = result.content.strip()
 
