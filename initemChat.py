@@ -25,12 +25,9 @@ class InItemChatbot:
                 - 'artefact': The ID of the artefact.
                 - 'response': The generated chatbot response.
                 - 'history': Updated conversation history including the latest exchange.
-
-        Raises:
-            Exception: If the artefact is None.
         """
-        if artefact is None:
-            raise Exception("INITEMCHATBOT CHAT ERROR: Artefact is None.")
+        if not isinstance(artefact, Artefact):
+           return "ERROR: Invalid artefact. Expected an instance of Artefact model."     
 
         if artefact.metadata.isHF():
             role = ("""You are a cheerful museum guide helping a visitor learn about an event photo.\n
@@ -86,8 +83,9 @@ class InItemChatbot:
         # Replay past conversation if exists
         if history:
             for entry in history:
-                role = Interaction.Role.USER if entry["role"] == "user" else Interaction.Role.ASSISTANT
-                contextHistory.append(Interaction(role=role, content=entry["content"]))
+                if "role" in entry and "content" in entry:
+                    role = Interaction.Role.USER if entry["role"] == "user" else Interaction.Role.ASSISTANT
+                    contextHistory.append(Interaction(role=role, content=entry["content"]))
 
         # Add current user message
         contextHistory.append(Interaction(role=Interaction.Role.USER, content=userQuestion))
@@ -100,7 +98,7 @@ class InItemChatbot:
 
         result = LLMInterface.engage(context)
         if isinstance(result, str):
-            botResponse = "Error: {}".format(result)
+            return "Error: {}".format(result)
         else:
             botResponse = result.content.strip()
 
