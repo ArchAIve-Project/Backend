@@ -2545,7 +2545,16 @@ class Face(DIRepresentable):
             raise Exception("FACE INIT ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
         
         if isinstance(embeddings, list):
+            if not all(isinstance(embed, FaceEmbedding) for embed in embeddings):
+                raise Exception("FACE INIT ERROR: 'embeddings' must be a list or dictionary of FaceEmbedding objects.")
+            
             embeddings = {Universal.generateUniqueID(customLength=6): embedding for embedding in embeddings}
+        elif isinstance(embeddings, dict):
+            for embed in embeddings.values():
+                if not isinstance(embed, FaceEmbedding):
+                    raise Exception("FACE INIT ERROR: 'embeddings' must be a list or dictionary of FaceEmbedding objects.")
+        else:
+            raise Exception("FACE INIT ERROR: 'embeddings' must be a list or dictionary of FaceEmbedding objects.")
         
         self.embeddings = embeddings
         self.figureID = figureID
@@ -2556,28 +2565,42 @@ class Face(DIRepresentable):
             "embeddings": {embeddingID: embedding.representForDB() for embeddingID, embedding in self.embeddings.items()}
         }
     
-    def save(self):
+    def save(self, autoOffload: bool=False):
         DI.save(self.represent(), self.originRef)
+        
+        if Face.embeddingsData is None:
+            Face.loadEmbeddings()
         
         Face.setEmbeddings(self.figureID, {id: embed.value for id, embed in self.embeddings.items()})
         Face.saveEmbeddings()
+        
+        if autoOffload:
+            Face.offloadEmbeddings()
+        
         return True
     
+    def __str__(self):
+        return "Face(figureID='{}', embeddings={})".format(
+            self.figureID,
+            {embedID: str(embed) for embedID, embed in self.embeddings.items()} if isinstance(self.embeddings, dict) else None
+        )
+    
     @staticmethod
-    def rawLoad(figureID: str, data: dict, matchFMEmbeddings: bool=True) -> 'Face':
+    def rawLoad(figureID: str, data: dict, matchDBEmbeddings: bool=True) -> 'Face':
         dbEmbeds: Dict[str, Dict[str, str]] = data.get('embeddings', {})
         
         faceEmbeds = Face.extractEmbeddings(figureID)
         if faceEmbeds is None:
             faceEmbeds = {}
         
-        if matchFMEmbeddings:
+        if matchDBEmbeddings:
             # Remove embeddings that are not in the database
             for embeddingID in list(faceEmbeds.keys()):
                 if embeddingID not in dbEmbeds:
                     del faceEmbeds[embeddingID]
             
             Face.setEmbeddings(figureID, faceEmbeds)
+            Face.saveEmbeddings()
         
         objectEmbeddings: Dict[str, FaceEmbedding] = {}
         for embeddingID, data in dbEmbeds.items():
@@ -2591,7 +2614,7 @@ class Face(DIRepresentable):
         return Face(figureID, objectEmbeddings)
 
     @staticmethod
-    def load(figure: 'Figure | str', matchFMEmbeddings: bool=True, autoOffload: bool=False) -> 'Face | None':
+    def load(figure: 'Figure | str', matchDBEmbeddings: bool=True, autoOffload: bool=False) -> 'Face | None':
         figureID = figure.id if isinstance(figure, Figure) else figure
         
         data = DI.load(Face.ref(figureID))
@@ -2605,7 +2628,7 @@ class Face(DIRepresentable):
         if Face.embeddingsData is None:
             Face.loadEmbeddings()
         
-        out = Face.rawLoad(figureID, data, matchFMEmbeddings)
+        out = Face.rawLoad(figureID, data, matchDBEmbeddings)
         
         if autoOffload:
             Face.offloadEmbeddings()
@@ -2719,6 +2742,36 @@ class Face(DIRepresentable):
             Face.embeddingsData[figureID] = {}
         
         Face.embeddingsData[figureID][embeddingID] = embedding
+        
+        return True
+    
+    @staticmethod
+    def deleteFigure(figure: 'Figure | str'):
+        figureID = figure.id if isinstance(figure, Figure) else figure
+        if not isinstance(figureID, str):
+            raise Exception("FACE DELETEFIGURE ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
+        
+        if Face.embeddingsData is None:
+            raise Exception("FACE DELETEFIGURE ERROR: Embeddings data is not loaded; call Face.loadEmbeddings() first.")
+        
+        if figureID in Face.embeddingsData:
+            del Face.embeddingsData[figureID]
+        
+        return True
+    
+    @staticmethod
+    def deleteEmbedding(figure: 'Figure | str', embeddingID: str):
+        figureID = figure.id if isinstance(figure, Figure) else figure
+        if not isinstance(figureID, str):
+            raise Exception("FACE DELETEEMBEDDING ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
+        if not isinstance(embeddingID, str):
+            raise Exception("FACE DELETEEMBEDDING ERROR: 'embeddingID' must be a string representing the embedding ID.")
+        
+        if Face.embeddingsData is None:
+            raise Exception("FACE DELETEEMBEDDING ERROR: Embeddings data is not loaded; call Face.loadEmbeddings() first.")
+        
+        if figureID in Face.embeddingsData and embeddingID in Face.embeddingsData[figureID]:
+            del Face.embeddingsData[figureID][embeddingID]
         
         return True
     

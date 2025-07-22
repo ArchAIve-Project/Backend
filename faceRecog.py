@@ -30,6 +30,13 @@ class FaceEmbedding:
     def compareWith(self, other: 'FaceEmbedding') -> float:
         return FaceEmbedding.similarity(self, other)
     
+    def __str__(self):
+        return "FaceEmbedding(value={}, origin='{}', added='{}')".format(
+            self.value.shape,
+            self.origin,
+            self.added
+        )
+    
     @staticmethod
     def similarity(embedding1: 'FaceEmbedding', embedding2: 'FaceEmbedding') -> float:
         if not isinstance(embedding1, FaceEmbedding) or not isinstance(embedding2, FaceEmbedding):
