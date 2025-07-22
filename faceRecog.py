@@ -32,7 +32,7 @@ class FaceEmbedding:
     
     def __str__(self):
         return "FaceEmbedding(value={}, origin='{}', added='{}')".format(
-            self.value.shape,
+            self.value.shape if isinstance(self.value, torch.Tensor) else self.value,
             self.origin,
             self.added
         )

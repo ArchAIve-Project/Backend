@@ -2644,7 +2644,7 @@ class Face(DIRepresentable):
         elif not fileExists[0]:
             Face.embeddingsData = {}
             Face.saveEmbeddings()
-        elif not fileExists[1]:
+        elif not fileExists[1] or not FileManager.existsInSystem(Face.embeddingsFile):
             prep = FileManager.prepFile(file=Face.embeddingsFile)
             if not isinstance(prep, File):
                 raise Exception("FACE ENSUREEMBEDDINGSFILE ERROR: Failed to prepare embeddings file; response: {}".format(prep))
