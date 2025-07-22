@@ -62,7 +62,10 @@ def requireLLM():
 # 8. Wipe FM
 # 9. Reset local data files
 # 10. Remove hardcoded categories
-# 11. Add hardcoded categories
+# 11. Add hardcoded categories (after 13)
+# 12. Populate DB books (after 13)
+# 13. Populate more data
+# 0. Exit
 
 def populateDB():
     requireDI()
