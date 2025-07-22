@@ -113,6 +113,7 @@ def getAsset(filename):
         return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
 @cdnBP.route('/getCatalogue')
+@checkSession(strict=True)
 def getAllCategoriesWithArtefacts():
     try:
         categories = Category.load()
