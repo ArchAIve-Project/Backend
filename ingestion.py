@@ -60,7 +60,7 @@ class DataImportProcessor:
                 job.save()
                 return
             
-            job.reload() # Refresh the job status. By memory reference, chunks will also terminate if the job is cancelled.
+            job.fetchLatestStatus() # Refresh the job status. By memory reference, chunks will also terminate if the job is cancelled.
             if job.status == BatchProcessingJob.Status.CANCELLED:
                 Logger.log("DATAIMPORT PROCESSBATCH: Job cancelled for batch '{}'. Stopping processing with {} processed out of {}.".format(batch.id, sum(x.stage == Batch.Stage.PROCESSED for x in targetBatchArtefacts), len(targetBatchArtefacts)))
                 job.end()
@@ -76,14 +76,11 @@ class DataImportProcessor:
     
     @staticmethod
     def constructHandoffChain(batchID: str, batchArtSequence: list[BatchArtefact], chainIndex: int, offloadArtefactPostProcessing: bool=True):
-        job = BatchProcessingJob.load(batchID)
-        
         def scheduleNextProcess():
-            if isinstance(job, BatchProcessingJob):
-                job.reload() # refresh job status
-                if job.status == BatchProcessingJob.Status.CANCELLED:
-                    Logger.log("DATAIMPORT SCHEDULENEXTPROCESS: {} {}: Job cancelled for batch '{}'. Terminating chain with {} remaining artefacts.".format(batchID, chainIndex, batchID, len(batchArtSequence)))
-                    return
+            status = BatchProcessingJob.getStatus(batchID)
+            if status == BatchProcessingJob.Status.CANCELLED or status is None:
+                Logger.log("DATAIMPORT SCHEDULENEXTPROCESS: {} {}: Job cancelled for batch '{}'. Terminating chain with {} remaining artefacts.".format(batchID, chainIndex, batchID, len(batchArtSequence)))
+                return
             
             if len(batchArtSequence) > 0:
                 nextBatchArt = batchArtSequence.pop(0)
