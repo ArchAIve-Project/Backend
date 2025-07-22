@@ -1,43 +1,45 @@
-import os
-import torch
-from torch import nn
-from torchvision import transforms
+import os, torch, uuid
 from torch.nn import functional as F
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from matplotlib import pyplot as plt
 from PIL import Image, ImageDraw
-from addons import ArchSmith, ASReport, ASTracer, ModelStore
-from ai import LLMInterface
-from firebase import FireConn
-from fm import FileManager
-# from realEsrgan import RealESRGAN
+from services import Universal
+from addons import ASReport, ASTracer
 from captioner import ImageCaptioning, Vocabulary
-import uuid
 from dotenv import load_dotenv
 load_dotenv()
 
 DEVICE = torch.device("cpu")
 
 class FaceEmbedding:
-    def __init__(self, embedding: torch.Tensor, img_path: str=None):
+    def __init__(self, embedding: torch.Tensor, added: str=None):
+        if added is None:
+            added = Universal.utcNowString()
+        
         self.embedding = embedding
-        self.img_path = img_path
+        self.added = added
     
     def represent(self) -> dict:
         return {
             "embedding": self.embedding.tolist(),
-            "img_path": self.img_path
+            "added": self.added
         }
+    
+    def compareWith(self, other: 'FaceEmbedding') -> float:
+        return FaceEmbedding.similarity(self, other)
     
     @staticmethod
     def similarity(embedding1: 'FaceEmbedding', embedding2: 'FaceEmbedding') -> float:
+        if not isinstance(embedding1, FaceEmbedding) or not isinstance(embedding2, FaceEmbedding):
+            raise Exception("FACEEMBEDDING SIMILARITY ERROR: Both inputs must be FaceEmbedding instances.")
+        
         e1, e2 = F.normalize(embedding1.embedding), F.normalize(embedding2.embedding)
         return F.cosine_similarity(e1, e2).item()
     
     @staticmethod
     def from_dict(data: dict) -> 'FaceEmbedding':
         embedding = torch.tensor(data['embedding'])
-        return FaceEmbedding(embedding, data.get('img_path'))
+        return FaceEmbedding(embedding, data.get('added'))
 
 class FaceRecognition:
     mtcnn: MTCNN = None
@@ -118,120 +120,6 @@ class FaceRecognition:
             embedding = FaceRecognition.resnet(face_tensor).detach().cpu()
         
         return embedding
-    
-    @staticmethod
-    def processImage(img_path: str, tracer: ASTracer) -> list[str]:
-        faceCrops = FaceRecognition.detect_face_crops(img_path)
-        if not faceCrops:
-            tracer.addReport(
-                ASReport(
-                    source="FACEPROCESSOR PROCESSIMAGE ERROR",
-                    message=f"No faces detected in image '{img_path}'."
-                )
-            )
-        else:
-            tracer.addReport(
-                ASReport(
-                    source="FACEPROCESSOR PROCESSIMAGE",
-                    message=f"Detected {len(faceCrops)} faces in image '{img_path}'."
-                )
-            )
-        
-        filenames = []
-        for faceCrop in faceCrops:
-            try:
-                # Save to Local
-                local = False
-                cloud = False
-                try:
-                    uniqueId = uuid.uuid4().hex
-                    faceCrop.save(f"people/face_{uniqueId}.jpg")
-                    local = True
-                except Exception as e:
-                    tracer.addReport(ASReport(
-                        source="FACEPROCESSOR PROCESSIMAGE ERROR",
-                        message=f"Failed to save face {uniqueId} locally: {e}"
-                    ))
-                    continue
-                
-                # Save to Firebase
-                try:
-                    saveResult = FileManager.save("people", f"face_{uniqueId}.jpg")
-                    if isinstance(saveResult, str):
-                        raise Exception(f"Unexpected response from FileManager: {saveResult}")
-                    
-                    cloud = True
-                except Exception as e:
-                    tracer.addReport(ASReport(
-                        source="FACEPROCESSOR PROCESSIMAGE ERROR",
-                        message=f"Exception saving face {uniqueId} to Firebase: {e}"
-                    ))
-
-                tracer.addReport(
-                    ASReport(
-                        source="FACEPROCESSOR PROCESSIMAGE",
-                        message=f"Face {uniqueId} processing complete. See extra data for save status.",
-                        extraData={"local": local, "cloud": cloud}
-                    )
-                )
-                
-                filenames.append(f"face_{uniqueId}.jpg")
-            except Exception as e:
-                tracer.addReport(ASReport(
-                    source="FACEPROCESSOR PROCESSIMAGE ERROR",
-                    message=f"Exception while processing face {uniqueId}: {e}"
-                ))
-
-        # print("{} faces detected and saved.".format(len(filenames)))
-        return filenames
-
-    # Compare with local file
-    @staticmethod
-    def compareImages(imgPath1: str, imgPath2: str) -> tuple | str:
-        """
-        Compares two face images and checks if they belong to the same person.
-
-        Args:
-            img_path1 (str): Path to the first image.
-            img_path2 (str): Path to the second image.
-
-        Returns:
-            bool | str: True if faces match, False if not, or an error string.
-        """
-        try:
-            # Detect face tensors from both images
-            face1 = Image.open(imgPath1).convert("RGB")
-            face1 = transforms.Compose([transforms.Resize((160, 160)), transforms.ToTensor()])(face1)
-
-            face2 = Image.open(imgPath2).convert("RGB")
-            face2 = transforms.Compose([transforms.Resize((160, 160)), transforms.ToTensor()])(face2)
-
-            # Get the first face embedding from each image
-            emb1 = FaceRecognition.get_face_embedding(face1)
-            emb2 = FaceRecognition.get_face_embedding(face2)
-
-            sim = FaceEmbedding.similarity(FaceEmbedding(emb1), FaceEmbedding(emb2))
-            result = sim > 0.7
-
-            return result, sim
-
-        except Exception as e:
-            return "ERROR: Exception occurred while comparing images; error: {}".format(e)
-
-    # Compare with firebase file
-    @staticmethod
-    def compareImagesFirebase(file1: str, file2: str, store: str = "people"):
-
-        f1 = FileManager.prepFile(store, file1)
-        f2 = FileManager.prepFile(store, file2)
-
-        if isinstance(f1, str):
-            return f1
-
-        if isinstance(f2, str):
-            return f2
-
-        return FaceRecognition.compareImages(f1.path(), f2.path())
 
 class HFProcessor:
     @staticmethod
@@ -265,7 +153,8 @@ class HFProcessor:
         if not FaceRecognition.initialised:
             HFProcessor.setup()
         
-        filenames = FaceRecognition.processImage(imagePath, tracer)
+        # TODO: Redo face recognition part.
+        # filenames = FaceRecognition.processImage(imagePath, tracer)
         
         caption = HFProcessor.captioningProcess(imagePath, tracer, useLLMCaptionImprovement)
         if caption.startswith("ERROR"):
@@ -301,42 +190,3 @@ class HFProcessor:
         
         result, similarity = output
         return result, similarity
-
-if __name__ == "__main__":
-    FireConn.connect()
-    FileManager.setup()
-    LLMInterface.initDefaultClients()
-
-    ModelStore.setup(
-        imageCaptioner=ImageCaptioning.loadModel
-    )
-
-    HFProcessor.setup()
-    
-    input("breakpoint")
-    print()
-    tracer = ArchSmith.newTracer("HF Processor testing")
-    output = HFProcessor.process("Companydata/44 19930428 Wang Daohan (4).jpg", tracer, useLLMCaptionImprovement=False)
-    tracer.end()
-    ArchSmith.persist()
-    
-    print("Output:", output)
-    
-    input("breakpoint")
-    
-    print()
-    compare = input("Make a comparison? (y/n): ").lower() == "y"
-    while compare:
-        img1 = input("Enter image 1 for comparison: ")
-        img2 = input("Enter image 2 for comparison: ")
-        output = HFProcessor.compare(img1, img2)
-        print("Comparison Result:", output)
-        
-        print()
-        compare = input("Make another comparison? (y/n): ").lower() == "y"
-    
-    while True:
-        try:
-            exec(input(">>> "))
-        except Exception as e:
-            print(f"Error: {e}")
