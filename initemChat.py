@@ -2,34 +2,35 @@ from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVari
 from models import Artefact
 import sys
 
-class ArtefactChatbot:
+class InItemChatbot:
     """
     A chatbot for generating conversational responses about museum artefacts.
     Provides friendly, factual answers based on artefact metadata and type.
-    
-    Example usage:
-    bot = ArtefactChatbot()
-    response = bot.chat("A123", "What can we learn from this artefact?")
-    print(response)
     """
-    def chat(self, artefactID: str, userQuestion: str):
+    @staticmethod
+    def chat(artefact: Artefact, userQuestion: str, history: list = None):
         """
         Generates a conversational response to a user question about a specific artefact.
 
-        This function loads an artefact by its ID, prepares a tailored prompt using its metadata and type, 
-        and queries a language model to answer the question in a museum guide style. 
-        Responses avoid speculation, stereotypes, or mention of metadata fields explicitly.
+        The function constructs a prompt using artefact metadata and type, sends it to a language model, 
+        and returns a natural-language response. It also maintains a history of the conversation.
 
         Args:
-            artefactID (str): The unique identifier of the artefact in the database.
-            userQuestion (str): The user's question about the artefact.
+            artefact (Artefact): The artefact object containing metadata and details.
+            userQuestion (str): The question posed by the user about the artefact.
+            history (list, optional): List of previous conversation messages (each with "role" and "content").
 
         Returns:
-            str: A response based on artefact data, or an error message if the artefact is not found or the model fails.
+            A dictionary containing:
+                - 'artefact': The ID of the artefact.
+                - 'response': The generated chatbot response.
+                - 'history': Updated conversation history including the latest exchange.
+
+        Raises:
+            Exception: If the artefact is None.
         """
-        artefact = Artefact.load(id=artefactID)
         if artefact is None:
-            return "Artefact with ID {} not found.".format(artefactID)
+            raise Exception("INITEMCHATBOT CHAT ERROR: Artefact is None.")
 
         if artefact.metadata.isHF():
             role = ("""You are a cheerful museum guide helping a visitor learn about an event photo.\n
@@ -54,7 +55,7 @@ class ArtefactChatbot:
         else:
             prompt += "\nThis artefact has the following metadata:\n"
             metadata_repr = artefact.metadata.represent()
-            filtered_metadata = self.filterMetadata(metadata_repr)
+            filtered_metadata = InItemChatbot.filterMetadata(metadata_repr)
             if filtered_metadata:
                 for key, value in filtered_metadata.items():
                     if value:
@@ -78,22 +79,45 @@ class ArtefactChatbot:
 
         Keep your tone clear, engaging, and respectful.
         """
+        contextHistory = [
+            Interaction(role=Interaction.Role.SYSTEM, content=prompt)
+        ]
+
+        # Replay past conversation if exists
+        if history:
+            for entry in history:
+                role = Interaction.Role.USER if entry["role"] == "user" else Interaction.Role.ASSISTANT
+                contextHistory.append(Interaction(role=role, content=entry["content"]))
+
+        # Add current user message
+        contextHistory.append(Interaction(role=Interaction.Role.USER, content=userQuestion))
 
         context = InteractionContext(
             provider=LMProvider.OPENAI,
             variant=LMVariant.GPT_4O_MINI,
-            history=[
-                Interaction(role=Interaction.Role.SYSTEM, content=prompt),
-                Interaction(role=Interaction.Role.USER, content=userQuestion)
-            ]
+            history=contextHistory
         )
 
         result = LLMInterface.engage(context)
         if isinstance(result, str):
-            return "Error: {}".format(result)
-        return "{}".format(result.content)
+            botResponse = "Error: {}".format(result)
+        else:
+            botResponse = result.content.strip()
 
-    def filterMetadata(self, raw: dict) -> dict:
+        # Update history
+        updatedHistory = (history or []) + [
+            {"role": "user", "content": userQuestion},
+            {"role": "assistant", "content": botResponse}
+        ]
+
+        return {
+            "artefact": artefact.id,
+            "response": botResponse,
+            "history": updatedHistory
+        }
+
+    @staticmethod
+    def filterMetadata(raw: dict) -> dict:
         """
         Extracts and formats relevant metadata from the raw artefact data.
 
