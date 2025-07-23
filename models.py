@@ -2540,6 +2540,7 @@ class Face(DIRepresentable):
     embeddingsFile: 'File | None' = File("embeddings.pth", "people")
     
     def __init__(self, figure: 'Figure | str', embeddings: 'List[FaceEmbedding] | Dict[str, FaceEmbedding]'):
+        # Extract figureID and validate embeddings
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
             raise Exception("FACE INIT ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
@@ -2556,6 +2557,7 @@ class Face(DIRepresentable):
         else:
             raise Exception("FACE INIT ERROR: 'embeddings' must be a list or dictionary of FaceEmbedding objects.")
         
+        # Instantiate Face object
         self.embeddings = embeddings
         self.figureID = figureID
         self.originRef = Face.ref(figureID)
@@ -2565,17 +2567,20 @@ class Face(DIRepresentable):
             "embeddings": {embeddingID: embedding.representForDB() for embeddingID, embedding in self.embeddings.items()}
         }
     
-    def save(self, autoOffload: bool=False):
+    def save(self, embeds=True):
         DI.save(self.represent(), self.originRef)
         
+        if embeds:
+            self.saveEmbeds()
+        
+        return True
+    
+    def saveEmbeds(self):
         if Face.embeddingsData is None:
             Face.loadEmbeddings()
         
         Face.setEmbeddings(self.figureID, {id: embed.value for id, embed in self.embeddings.items()})
         Face.saveEmbeddings()
-        
-        if autoOffload:
-            Face.offloadEmbeddings()
         
         return True
     
@@ -2784,11 +2789,11 @@ class Figure(DIRepresentable):
         if id is None:
             id = Universal.generateUniqueID()
         
+        self.id = id
         self.label = label
         self.headshot = headshot
         self.face = face
         self.profile = profile
-        self.id = id
         self.originRef = Figure.ref(id)
     
     def represent(self) -> dict:
@@ -2800,7 +2805,7 @@ class Figure(DIRepresentable):
         }
     
     @staticmethod
-    def rawLoad(figureID: str, data: dict) -> 'Figure':
+    def rawLoad(figureID: str, data: dict, withFace: bool=False, matchDBEmbeddings: bool=True) -> 'Figure':
         reqParams = ['label', 'headshot', 'face', 'profile']
         for reqParam in reqParams:
             if reqParam not in data:
@@ -2810,9 +2815,8 @@ class Figure(DIRepresentable):
                     data[reqParam] = None
         
         face = None
-        if isinstance(data['face'], dict):
-            # TODO
-            face = Face()
+        if isinstance(data['face'], dict) and withFace:
+            face = Face.rawLoad(figureID, data['face'], matchDBEmbeddings)
         
         return Figure(
             label=data['label'],
