@@ -2591,21 +2591,25 @@ class Face(DIRepresentable):
         )
     
     @staticmethod
-    def rawLoad(figureID: str, data: dict, matchDBEmbeddings: bool=True) -> 'Face':
+    def rawLoad(figureID: str, data: dict, withEmbeddings: bool=True, matchDBEmbeddings: bool=True) -> 'Face':
         dbEmbeds: Dict[str, Dict[str, str]] = data.get('embeddings', {})
         
-        faceEmbeds = Face.extractEmbeddings(figureID)
-        if faceEmbeds is None:
-            faceEmbeds = {}
+        faceEmbeds: Dict[str, torch.Tensor] = {}
         
-        if matchDBEmbeddings:
-            # Remove embeddings that are not in the database
-            for embeddingID in list(faceEmbeds.keys()):
-                if embeddingID not in dbEmbeds:
-                    del faceEmbeds[embeddingID]
-            
-            Face.setEmbeddings(figureID, faceEmbeds)
-            Face.saveEmbeddings()
+        # Load embeddings from Face.embeddingsFile if possible
+        if withEmbeddings: # warning: Face.loadEmbeddings() must be called before this
+            faceEmbeds = Face.extractEmbeddings(figureID)
+            if faceEmbeds is None:
+                faceEmbeds = {}
+        
+            if matchDBEmbeddings:
+                # Remove embeddings that are not in the database
+                for embeddingID in list(faceEmbeds.keys()):
+                    if embeddingID not in dbEmbeds:
+                        del faceEmbeds[embeddingID]
+                
+                Face.setEmbeddings(figureID, faceEmbeds)
+                Face.saveEmbeddings()
         
         objectEmbeddings: Dict[str, FaceEmbedding] = {}
         for embeddingID, data in dbEmbeds.items():
