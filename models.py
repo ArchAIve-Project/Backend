@@ -6,7 +6,7 @@ from services import Universal
 from typing import List, Dict, Any, Literal
 
 class Artefact(DIRepresentable):
-    def __init__(self, name: str, image: str, description: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
+    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', description: str=None, public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
         if id is None:
             id = Universal.generateUniqueID()
         if created is None:
@@ -18,16 +18,20 @@ class Artefact(DIRepresentable):
                 metadata = Metadata(artefactID=id)
         else:
             metadata = None
+            
+        if description is None:
+            if metadata.isMM():
+                summary = metadata.raw.summary
+                artDescription = summary[:30] + "..." if len(summary) > 30 else summary
+            else:
+                artDescription = None
+        else:
+            artDescription = description
 
         self.id = id
         self.name = name
         self.image = image
-        
-        if metadata and hasattr(metadata, 'summary') and isinstance(metadata.summary, str):
-            self.description = metadata.summary[:30]
-        else:
-            self.description = description or ""
-        
+        self.description = artDescription
         self.public = public
         self.created = created
         self.metadata: Metadata | None = metadata
@@ -74,7 +78,7 @@ class Artefact(DIRepresentable):
         }
     
     def __str__(self):
-        return "Artefact(id='{}', name='{}', image='{}', public={}, created='{}', metadataLoaded={}, metadata={})".format(
+        return "Artefact(id='{}', name='{}', image='{}', description='{}', public={}, created='{}', metadataLoaded={}, metadata={})".format(
             self.id,
             self.name,
             self.image,
@@ -99,14 +103,10 @@ class Artefact(DIRepresentable):
         if includeMetadata and isinstance(data['metadata'], dict) and isinstance(artefactID, str):
             metadata = Metadata.rawLoad(artefactID, data['metadata'])
 
-        description = data['description']
-        if metadata and hasattr(metadata, 'summary') and isinstance(metadata.summary, str):
-            description = metadata.summary[:30]
-
         output = Artefact(
             name=data['name'], 
             image=data['image'],
-            description=description,
+            description=data['description'],
             metadata=metadata,
             public=data['public'],
             created=data['created'],

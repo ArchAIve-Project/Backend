@@ -61,11 +61,9 @@ def requireLLM():
 # 7. Wipe DB
 # 8. Wipe FM
 # 9. Reset local data files
-# 10. Remove hardcoded categories
-# 11. Add hardcoded categories (after 13)
-# 12. Populate DB books (after 13)
-# 13. Populate more data
-# 0. Exit
+# 10. Remove categories
+# 11. Populate more data (after 1)
+# 0: Exit
 
 def populateDB():
     requireDI()
@@ -367,41 +365,6 @@ def resetLocalDataFiles():
     print()
     
     sys.exit(0)
-    
-def addCategories():
-    requireDI()
-
-    all_artefacts = Artefact.load()
-    image_to_id = {art.image: art.id for art in all_artefacts}
-
-    hf_files = [f"hf{i}.png" for i in range(1, 51)]
-
-    categories = [
-        ("Human Group 1", hf_files[:30]),
-        ("Human Group 2", hf_files[30:45]),
-        ("Human Group 3", hf_files[45:]),
-    ]
-
-    for cat_name, artefact_filenames in categories:
-        cat = Category.load(name=cat_name)
-        if not cat:
-            cat = Category(name=cat_name, description=f"Category for {cat_name.lower()}")
-
-        added = 0
-        for filename in artefact_filenames:
-            artefact_id = image_to_id.get(filename)
-            if not artefact_id:
-                print(f"Artefact with image '{filename}' not found in DB. Skipping.")
-                continue
-
-            try:
-                cat.add(artefact_id, reason=f"Auto-assigned to {cat_name}")
-                added += 1
-            except Exception as e:
-                print(f"Failed to add '{filename}' to '{cat_name}': {e}")
-
-        cat.save()
-        print(f"Category '{cat.name}' saved with {added}/{len(artefact_filenames)} artefacts.")
 
 def removeCategories():
     requireDI()
@@ -419,60 +382,56 @@ def removeCategories():
         else:
             print(f"Category '{cat_name}' not found.")
             
-def populateBooks():
-    requireDI()
+def duplicateDummyImages(folder="./dummy", out_folder="./moreDummy"):
+    if not os.path.exists(out_folder):
+        os.makedirs(out_folder)
 
-    print("\nPopulating database with 10 books using mm1.jpg to mm50.jpg...\n")
+    # HF duplication
+    hf_sources = [os.path.join(folder, "hf{}.png".format(i)) for i in range(1, 3)]
+    for i in range(3, 51):
+        src = hf_sources[(i - 3) % 2]
+        dst = os.path.join(out_folder, "hf{}.png".format(i))
+        shutil.copyfile(src, dst)
+        print("Created {} from {}".format(dst, os.path.basename(src)))
 
-    mm_files = [f"mm{i}.jpg" for i in range(1, 54)]
+    # MM duplication
+    mm_sources = [os.path.join(folder, "mm{}.jpg".format(i)) for i in range(1, 4)]
+    for i in range(4, 51):
+        src = mm_sources[(i - 4) % 3]
+        dst = os.path.join(out_folder, "mm{}.jpg".format(i))
+        shutil.copyfile(src, dst)
+        print("Created {} from {}".format(dst, os.path.basename(src)))
 
-    mm_counts = [15, 10, 5, 5, 5, 5, 4, 3, 1, 0]
-
-    created: list[Book] = []
-    offset = 0
-
-    for i, count in enumerate(mm_counts):
-        title = f"SCCCI Minutes Volume {i+1}"
-        subtitle = f"Auto-generated Volume {i+1}"
-        mmIDs = mm_files[offset: offset + count]
-        offset += count
-
-        existing_book = Book.load(title=title)
-        if not existing_book:
-            book = Book(
-                title=title,
-                subtitle=subtitle,
-                mmIDs=mmIDs
-            )
-            book.save()
-            created.append(book)
-            print(f"Created Book: '{book.title}' with {len(mmIDs)} MMIDs")
-        else:
-            print(f"Book already exists: '{existing_book.title}'")
-
-    print(f"\n{len(created)} book(s) created.\n")
-    return True
-
-def populateMore():
+def populateMoreArtefacts():
     requireDI()
     requireFM()
 
-    print()
-    print("Populating database with additional dummy artefacts from /moreDummy (50 mm, 50 hf)...")
-    print()
-
+    print("\nPreparing moreDummy folder...\n")
     moreDummyPath = os.path.join(os.getcwd(), "moreDummy")
-    if not os.path.isdir(moreDummyPath):
-        raise Exception("Directory 'moreDummy' not found. Please create it with the required files.")
+    if not os.path.exists(moreDummyPath):
+        os.makedirs(moreDummyPath)
 
-    currentArtefacts: list[Artefact] = Artefact.load()
+    # Check if 50 hf and 50 mm images are present
+    hf_files = ["hf{}.png".format(i) for i in range(1, 51)]
+    mm_files = ["mm{}.jpg".format(i) for i in range(1, 51)]
+    existing_files = set(os.listdir(moreDummyPath))
+
+    hf_count = sum(1 for f in hf_files if f in existing_files)
+    mm_count = sum(1 for f in mm_files if f in existing_files)
+
+    if hf_count < 50 or mm_count < 50:
+        print("Not enough HF/MM images found in 'moreDummy'. Generating from './dummy'...")
+        duplicateDummyImages(folder="./dummy", out_folder=moreDummyPath)
+    else:
+        print("Found 50 HF and 50 MM images in moreDummy.")
+
+    currentArtefacts = Artefact.load()
     currentArtefactImages = {art.image for art in currentArtefacts}
 
-    # Create list of filenames
-    more_mm = [f"mm{i}.jpg" for i in range(4, 51)]
-    more_hf = [f"hf{i}.png" for i in range(3, 51)]
+    # Create artefacts
+    more_mm = ["mm{}.jpg".format(i) for i in range(4, 51)]
+    more_hf = ["hf{}.png".format(i) for i in range(3, 51)]
     allFiles = more_mm + more_hf
-
     newlyAdded = []
 
     for filename in allFiles:
@@ -482,19 +441,83 @@ def populateMore():
 
         if not os.path.isfile(target_path):
             shutil.copy(source_path, target_path)
-            print(f"Copied '{filename}' to artefacts. Save result: {FileManager.save(file.store, file.filename)}")
+            FileManager.save(file.store, file.filename)
+            print("Copied '{}' to artefacts.".format(filename))
 
         if filename not in currentArtefactImages:
             description = "Description for artefact {}".format(filename)
             art = Artefact(filename, filename, description=description, metadata=None)
             art.save()
             newlyAdded.append(filename)
-            print(f"Saved artefact to DB: {filename}")
+            print("Saved artefact to DB: {}".format(filename))
 
-    print()
-    print(f"{len(newlyAdded)} artefacts populated:", ", ".join(newlyAdded))
-    print()
+    print("\n{} artefacts populated: {}\n".format(len(newlyAdded), ", ".join(newlyAdded)))
 
+    # Create categories for human figures
+    print("Adding categories for human figures...")
+    all_artefacts = Artefact.load()
+    image_to_id = {art.image: art.id for art in all_artefacts}
+    hf_all = ["hf{}.png".format(i) for i in range(1, 51)]
+
+    categories = [
+        ("Human Group 1", hf_all[:30]),
+        ("Human Group 2", hf_all[30:45]),
+        ("Human Group 3", hf_all[45:])
+    ]
+
+    for cat_name, artefact_filenames in categories:
+        cat = Category.load(name=cat_name)
+        if not cat:
+            cat = Category(name=cat_name, description="Category for {}".format(cat_name.lower()))
+
+        added = 0
+        for filename in artefact_filenames:
+            artefact_id = image_to_id.get(filename)
+            if not artefact_id:
+                print("Artefact with image '{}' not found in DB. Skipping.".format(filename))
+                continue
+
+            try:
+                cat.add(artefact_id, reason="Auto-assigned to {}".format(cat_name))
+                added += 1
+            except Exception as e:
+                print("Failed to add '{}' to '{}': {}".format(filename, cat_name, e))
+
+        cat.save()
+        print("Category '{}' saved with {}/{} artefacts.".format(cat.name, added, len(artefact_filenames)))
+
+    # Create 10 books using mm1.jpg to mm50.jpg, but store artefact IDs, not filenames
+    print("\nPopulating database with 10 books using mm1.jpg to mm50.jpg...\n")
+    mm_all = ["mm{}.jpg".format(i) for i in range(1, 51)]
+    mm_counts = [15, 10, 5, 5, 5, 5, 4, 3, 1, 0]
+    created = []
+    offset = 0
+
+    for i, count in enumerate(mm_counts):
+        title = "SCCCI Minutes Volume {}".format(i + 1)
+        subtitle = "Auto-generated Volume {}".format(i + 1)
+        mm_filenames = mm_all[offset: offset + count]
+        offset += count
+
+        # Convert mm filenames to artefact IDs
+        mmIDs = []
+        for mm_file in mm_filenames:
+            artefact_id = image_to_id.get(mm_file)
+            if artefact_id:
+                mmIDs.append(artefact_id)
+            else:
+                print("Warning: Artefact ID for '{}' not found, skipping in book '{}'.".format(mm_file, title))
+
+        existing_book = Book.load(title=title)
+        if not existing_book:
+            book = Book(title=title, subtitle=subtitle, mmIDs=mmIDs)
+            book.save()
+            created.append(book)
+            print("Created Book: '{}' with {} MMIDs".format(book.title, len(mmIDs)))
+        else:
+            print("Book already exists: '{}'".format(existing_book.title))
+
+    print("\n{} book(s) created.\n".format(len(created)))
     return True
 
 def main(choices: list[int] | None=None):
@@ -519,16 +542,13 @@ def main(choices: list[int] | None=None):
             print("7. Wipe DB")
             print("8. Wipe FM")
             print("9. Reset local data files")
-            print("10. Remove hardcoded categories")
-            print("11. Add hardcoded categories (after 13)")
-            print("12. Populate DB books (after 13)")
-            print("13. Populate more data")
-            print("0. Exit")
-            print()
+            print("10. Remove categories")
+            print("11. Populate more data (after 1)")
+            print("0: Exit")
         
         try:
             choice = int(input("Enter choice: ")) if choice is None else choice
-            if choice not in range(14):
+            if choice not in range(12):
                 raise Exception()
         except KeyboardInterrupt:
             print("\nExiting...")
@@ -562,11 +582,7 @@ def main(choices: list[int] | None=None):
         elif choice == 10:
             removeCategories()
         elif choice == 11:
-            addCategories()
-        elif choice == 12:
-            populateBooks()
-        elif choice == 13:
-            populateMore()
+            populateMoreArtefacts()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)

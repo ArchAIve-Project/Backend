@@ -3,46 +3,57 @@ from fm import FileManager, File
 from utils import JSONRes, ResType
 import mimetypes, datetime
 from services import Logger
-from models import Category, Book
-from decorators import checkSession
+from models import Category, Book, Artefact
+from decorators import checkSession, cache
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
-@cdnBP.route('/artefacts/<filename>')
+@cdnBP.route('/artefacts/<artefactId>')
 @checkSession(strict=True)
-def getArtefactImage(filename):
+def getArtefactImage(artefactId):
     """
-    Serve an artefact image from the 'artefacts' store.
+    Serve an artefact image from the 'artefacts' store using the artefact ID.
     """
-    file = File(filename, "artefacts")
-
-    fileExists = file.exists()
-    if isinstance(fileExists, str):
-        Logger.log(f"CDN GETARTEFACT ERROR: Failed to check file existence; response: {fileExists}")
-        return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
-
-    if not fileExists[0]:
-        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
-
     try:
+        # Load artefact by ID
+        art = Artefact.load(id=artefactId, includeMetadata=False)
+        if not art:
+            return JSONRes.new(404, ResType.ERROR, "Artefact not found.")
+
+        # Retrieve the filename from the artefact
+        filename = art.image
+        if not filename:
+            return JSONRes.new(404, ResType.ERROR, "Artefact has no associated image.")
+
+        # Create File object using the filename and store
+        file = File(filename, "artefacts")
+
+        # Check if file exists in cloud
+        fileExists = file.exists()
+        if isinstance(fileExists, str):
+            Logger.log("CDN GETARTEFACT ERROR: Failed to check file existence; response: {}".format(fileExists))
+            return JSONRes.ambiguousError()
+
+        if not fileExists[0]:
+            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+
+        # Generate signed URL and redirect
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
-        
         if url.startswith("ERROR"):
-            return 404
-        
+            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+
         res = make_response(redirect(url))
 
-        # Set headers to force revalidation and prevent caching
+        # Set headers to prevent caching
         res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
         res.headers["Pragma"] = "no-cache"
         res.headers["Expires"] = "0"
-        
+
         return res
+
     except Exception as e:
-        Logger.log(f"CDN GETARTEFACT ERROR: {e}")
+        Logger.log("CDN GETARTEFACT ERROR: {}".format(e))
         return JSONRes.new(500, ResType.ERROR, "Error sending file.")
-
-
 
 @cdnBP.route('/people/<filename>')
 @checkSession(strict=True)
@@ -54,8 +65,8 @@ def getFaceImage(filename):
 
     fileExists = file.exists()
     if isinstance(fileExists, str):
-        Logger.log(f"CDN GETFACE ERROR: Failed to check file existence; response: {fileExists}")
-        return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
+        Logger.log("CDN GETFACE ERROR: Failed to check file existence; response: {}".format(fileExists))
+        return JSONRes.ambiguousError()
 
     if not fileExists[0]:
         return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
@@ -64,7 +75,7 @@ def getFaceImage(filename):
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
         if url.startswith("ERROR"):
-            return 404
+            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
         
         res = make_response(redirect(url))
 
@@ -75,7 +86,7 @@ def getFaceImage(filename):
         
         return res
     except Exception as e:
-        Logger.log(f"CDN GETFACE ERROR: {e}")
+        Logger.log("CDN GETFACE ERROR: {}".format(e))
         return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
 @cdnBP.route('/asset/<filename>')
@@ -88,8 +99,8 @@ def getAsset(filename):
 
     fileExists = file.exists()
     if isinstance(fileExists, str):
-        Logger.log(f"CDN GETASSET ERROR: Failed to check file existence; response: {fileExists}")
-        return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
+        Logger.log("CDN GETASSET ERROR: Failed to check file existence; response: {}".format(fileExists))
+        return JSONRes.ambiguousError()
 
     if not fileExists[0]:
         return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
@@ -98,7 +109,7 @@ def getAsset(filename):
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
         if url.startswith("ERROR"):
-            return 404
+            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
         
         res = make_response(redirect(url))
 
@@ -109,57 +120,59 @@ def getAsset(filename):
         
         return res
     except Exception as e:
-        Logger.log(f"CDN GETASSET ERROR: {e}")
+        Logger.log("CDN GETASSET ERROR: {}".format(e))
         return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
-@cdnBP.route('/getCatalogue')
+@cdnBP.route('/catalogue')
 @checkSession(strict=True)
+@cache
 def getAllCategoriesWithArtefacts():
     try:
-        categories = Category.load()
-        if not categories:
-            return JSONRes.new(404, ResType.ERROR, "No categories available.")
+        # Load ALL artefacts
+        all_artefacts = Artefact.load() or []
+        artefactMap = {art.id: art for art in all_artefacts}  # Map all artefacts by ID
 
+        # Load categories (no need for withArtefacts=True since we have the map)
+        categories: list[Category] = Category.load() or []
         result = {}
-
         for cat in categories:
             if not cat.members:
                 continue
 
             artefactsList = []
-            for catArt in cat.members.values():
-                if not catArt.getArtefact() or not catArt.artefact:
-                    continue
-
-                artefact = catArt.artefact
-                file_check = FileManager.prepFile("artefacts", artefact.image)
-                if isinstance(file_check, str):
-                    Logger.log(f"CDN GETCATALOGUE ERROR: Failed to prepare file '{artefact.image}'; response: {file_check}")
-                    continue
-
-                artefactsList.append({
-                    "id": artefact.id,
-                    "name": artefact.name,
-                    "image": artefact.image,
-                    "description": artefact.description
-                })
+            for artefact_id, catArt in cat.members.items():  # Iterate through member IDs
+                art = artefactMap.get(artefact_id)
+                if art:
+                    artefactsList.append({
+                        "id": art.id,
+                        "name": art.name,
+                        "image": art.image,
+                        "description": art.description
+                    })
 
             if artefactsList:
                 result[cat.name] = artefactsList
 
-        if not result:
-            return JSONRes.new(404, ResType.ERROR, "No artefacts found in any category.")
+        # Load books and resolve mmIDs
+        books: list[Book] = Book.load() or []
+        bookList = []
+        for book in books:
+            mmDetails = []
+            for mmID in book.mmIDs:
+                art = artefactMap.get(mmID)
+                
+                mmDetails.append({
+                    "id": art.id,
+                    "name": art.name,
+                    "description": art.description
+                })
 
-        books = Book.load() or []
-        bookList = [
-            {
+            bookList.append({
                 "id": book.id,
                 "title": book.title,
                 "subtitle": book.subtitle,
-                "mmIDs": book.mmIDs
-            }
-            for book in books
-        ]
+                "mmArtefacts": mmDetails
+            })
 
         return JSONRes.new(200, ResType.SUCCESS, data={
             "categories": result,
@@ -167,5 +180,6 @@ def getAllCategoriesWithArtefacts():
         })
 
     except Exception as e:
-        Logger.log(f"CDN GETALL EXCEPTION: {e}")
+        Logger.log("CDN GETCATALOGUE ERROR: {}".format(e))
         return JSONRes.new(500, ResType.ERROR, "Unexpected ERROR occurred.")
+

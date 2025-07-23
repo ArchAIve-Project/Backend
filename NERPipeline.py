@@ -2,7 +2,7 @@ import nltk
 from nltk import pos_tag, ne_chunk
 from nltk.tree import Tree
 from nltk.tokenize import wordpunct_tokenize
-from addons import ModelStore, ASTracer, ASReport, ArchSmith
+from addons import ASTracer, ASReport
 
 class NERPipeline:
     """
@@ -61,39 +61,9 @@ class NERPipeline:
         entities = NERPipeline.extract_entities(chunked)
 
         tracer.addReport(ASReport(
-            source="NERPipeline (NLTK)",
-            message=f"Extracted {len(entities)} entities",
+            source="NERPIPELINE PREDICT",
+            message="Extracted {} entities".format(len(entities)),
             extraData={"sentence": sentence}
         ))
 
         return entities
-
-
-# ========== Entry Point for Standalone Testing ==========
-if __name__ == "__main__":
-    # Setup and register the NER pipeline into ModelStore
-    ModelStore.setup(ner=NERPipeline.load_model)
-
-    # Create a new tracer to capture logs
-    tracer = ArchSmith.newTracer("NER testing:")
-
-    # Example sentence for testing NER
-    sentence = """
-    On September 14, 2023, at 10:30 AM, President Emmanuel Macron met with Elon Musk and Dr. Angela Zhang 
-    at the United Nations headquarters in New York City to discuss AI regulations. The World Health Organization (WHO), 
-    in collaboration with the U.S. Department of Health and Human Services, announced a $5 billion initiative to combat 
-    future pandemics. Meanwhile, Apple Inc. is planning to acquire Neuralink for approximately $2.5 billion, with a 
-    10% stock option to be distributed to early investors. The meeting was streamed live from the Tesla Gigafactory 
-    in Nevada and translated into 12 languages. Later that day, the group toured the Statue of Liberty, Times Square, 
-    and the Hudson River Bridge. A press conference was scheduled at the Eiffel Tower in Paris the following week. 
-    In a separate development, the European Union granted 25% tax relief to green tech companies operating in 
-    Germany, Denmark, and Sweden.
-    """
-
-    # Run the NER pipeline and print results
-    entities = NERPipeline.predict(sentence=sentence, tracer=tracer)
-    print(entities)
-
-    # Finalize and persist tracer logs
-    tracer.end()
-    ArchSmith.persist()
