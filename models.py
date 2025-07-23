@@ -2628,7 +2628,7 @@ class Face(DIRepresentable):
     def destroy(self, embeds: bool=True):
         DI.save(None, self.originRef)
         
-        if embeds and self.embedsLoaded:
+        if embeds:
             if Face.embeddingsData is None:
                 Face.loadEmbeddings()
             
@@ -2881,6 +2881,30 @@ class Figure(DIRepresentable):
         elif embeds:
             self.face.saveEmbeds()
         
+        return True
+    
+    def destroy(self, embeds: bool=True):
+        DI.save(None, self.originRef)
+        
+        if embeds:
+            if Face.embeddingsData is None:
+                Face.loadEmbeddings()
+            
+            Face.deleteFigure(self.id)
+            Face.saveEmbeddings()
+        
+        return True
+    
+    def reload(self, withEmbeddings: bool=True, matchDBEmbeddings: bool=True):
+        data = DI.load(self.originRef)
+        if isinstance(data, DIError):
+            raise Exception("FIGURE RELOAD ERROR: DIError occurred: {}".format(data))
+        if data == None:
+            raise Exception("FIGURE RELOAD ERROR: No data found at reference '{}'.".format(self.originRef))
+        if not isinstance(data, dict):
+            raise Exception("FIGURE RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        self.__dict__.update(self.rawLoad(self.id, data, withEmbeddings, matchDBEmbeddings).__dict__)
         return True
     
     @staticmethod
