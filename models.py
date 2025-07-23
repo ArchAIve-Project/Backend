@@ -2857,6 +2857,10 @@ class Figure(DIRepresentable):
     def __init__(self, label: str, headshot: str, face: Face, profile: None=None, id: str=None):
         if id is None:
             id = Universal.generateUniqueID()
+        if face is None:
+            face = Face(id, [], embedsLoaded=True)
+        elif not isinstance(face, Face):
+            raise Exception("FIGURE INIT ERROR: 'face' must be a Face object.")
         
         self.id = id
         self.label = label
@@ -2920,8 +2924,6 @@ class Figure(DIRepresentable):
         face = None
         if isinstance(data['face'], dict):
             face = Face.rawLoad(figureID, data['face'], withEmbeddings, matchDBEmbeddings)
-        else:
-            face = Face(figureID, [])
         
         return Figure(
             label=data['label'],
