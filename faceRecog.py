@@ -155,34 +155,40 @@ class FaceDetection:
         NO_MATCH = "no_match"
     
     @staticmethod
-    def match(target: FaceEmbedding, candidates: list[FaceEmbedding], strategy: MatchStrategy | str=MatchStrategy.VOTING, threshold: float=0.7, diversity_diff: float=0.2):
+    def match(target: FaceEmbedding, candidates: list[FaceEmbedding], strategy: MatchStrategy | str=MatchStrategy.VOTING, threshold: float=0.7, diversity_threshold: float=0.8) -> tuple[MatchResult, float] | str:
         try:
             strategy = FaceDetection.MatchStrategy(strategy) if isinstance(strategy, str) else strategy
             if not isinstance(strategy, FaceDetection.MatchStrategy):
-                raise ValueError("Invalid 'strategy' provided.")            
+                raise ValueError("Invalid 'strategy' provided.")
         except Exception as e:
             return "ERROR: Could not resolve match strategy; error: {}".format(e)
         
         result = FaceDetection.MatchResult.NO_MATCH
-        if strategy == FaceDetection.MatchStrategy.VOTING:
-            similarities = [1 if FaceEmbedding.similarity(e, target) > threshold else 0 for e in candidates]
-            if sum(similarities) > (len(candidates) / 2):
-                result = FaceDetection.MatchResult.MATCH
-            
-        elif strategy == FaceDetection.MatchStrategy.ALL and all(FaceEmbedding.similarity(e, target) > threshold for e in candidates):
+        scores = []
+        
+        try:
+            scores = [FaceEmbedding.similarity(e, target) for e in candidates]
+        except Exception as e:
+            return "ERROR: Could not calculate similarity scores; error: {}".format(e)
+        
+        score = sum(scores) / len(scores) if scores else 0
+        
+        if strategy == FaceDetection.MatchStrategy.VOTING and sum(1 if s > threshold else 0 for s in scores) > (len(candidates) / 2):
             result = FaceDetection.MatchResult.MATCH
-            
-        elif strategy == FaceDetection.MatchStrategy.ANY and any(FaceEmbedding.similarity(e, target) > threshold for e in candidates):
+        elif strategy == FaceDetection.MatchStrategy.ALL and all(s > threshold for s in scores):
             result = FaceDetection.MatchResult.MATCH
-
+        elif strategy == FaceDetection.MatchStrategy.ANY and any(s > threshold for s in scores):
+            result = FaceDetection.MatchResult.MATCH
+        
         if result == FaceDetection.MatchResult.MATCH:
             diverse_enough = True
-            for e in candidates:
-                if FaceEmbedding.similarity(e, target) > (1 - diversity_diff):
+            for s in scores:
+                if s > diversity_threshold:
+                    # Considered diverse if threshold < s < diversity_threshold
                     diverse_enough = False
                     break
             
             if diverse_enough:
                 result = FaceDetection.MatchResult.MATCH_DIVERSE
         
-        return result
+        return result, score
