@@ -2575,7 +2575,9 @@ class Face(DIRepresentable):
     def save(self, embeds=True):
         DI.save(self.represent(), self.originRef)
         
-        if embeds:
+        if not self.embedsLoaded and embeds:
+            Logger.log("FACE SAVE WARNING: Embeddings not loaded before saving, saveEmbeds call will be skipped. Figure ID: {}".format(self.figureID))
+        elif embeds:
             self.saveEmbeds()
         
         return True
@@ -2586,27 +2588,28 @@ class Face(DIRepresentable):
         
         faceEmbeds = Face.extractEmbeddings(self.figureID) or {}
         
+        changes = False
         if matchDBEmbeddings:
-            changes = False
             # Remove embeddings that are not in the database
             for embeddingID in list(faceEmbeds.keys()):
                 if embeddingID not in self.embeddings:
                     del faceEmbeds[embeddingID]
                     changes = True
-            
-            if changes:
-                Face.setEmbeddings(self.figureID, faceEmbeds)
-                Face.saveEmbeddings()
         
         for embeddingID, embed in self.embeddings.items():
             if isinstance(embed, FaceEmbedding):
                 embed.value = faceEmbeds.get(embeddingID, None)
         
         self.embedsLoaded = True
+        if changes:
+            self.saveEmbeds()
         
         return True
     
     def saveEmbeds(self):
+        if not self.embedsLoaded:
+            raise Exception("FACE SAVEEMBEDS ERROR: Embeddings are not loaded; call loadEmbeds() first.")
+        
         if Face.embeddingsData is None:
             Face.loadEmbeddings()
         
@@ -2615,14 +2618,22 @@ class Face(DIRepresentable):
         
         return True
     
+    def offloadEmbeds(self):
+        for embed in self.embeddings.values():
+            embed.value = None
+        
+        self.embedsLoaded = False
+        return True
+    
     def destroy(self, embeds: bool=True):
         DI.save(None, self.originRef)
         
-        if embeds:
+        if embeds and self.embedsLoaded:
             if Face.embeddingsData is None:
                 Face.loadEmbeddings()
             
             Face.deleteFigure(self.figureID)
+            Face.saveEmbeddings()
         
         return True
     
@@ -2679,6 +2690,15 @@ class Face(DIRepresentable):
         
         data = DI.load(Face.ref(figureID))
         if data == None:
+            if matchDBEmbeddings:
+                # If the figureID is not found, check if the embeddings file exists and delete the figure from it
+                if Face.embeddingsData is None:
+                    Face.loadEmbeddings()
+                
+                if figureID in Face.embeddingsData:
+                    Face.deleteFigure(figureID)
+                    Face.saveEmbeddings()
+            
             return None
         if isinstance(data, DIError):
             raise Exception("FACE LOAD ERROR: DIError occurred: {}".format(data))
