@@ -2539,7 +2539,11 @@ class Face(DIRepresentable):
     embeddingsData: 'Dict[str, Dict[str, torch.Tensor]] | None' = None
     embeddingsFile: 'File | None' = File("embeddings.pth", "people")
     
-    def __init__(self, figure: 'Figure | str', embeddings: 'List[FaceEmbedding] | Dict[str, FaceEmbedding]'):
+    def __init__(self, figure: 'Figure | str', embeddings: 'List[FaceEmbedding] | Dict[str, FaceEmbedding]', embedsLoaded: bool=False):
+        # Validate embedsLoaded
+        if not isinstance(embedsLoaded, bool):
+            raise Exception("FACE INIT ERROR: 'embedsLoaded' must be a boolean value.")
+        
         # Extract figureID and validate embeddings
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
@@ -2559,6 +2563,7 @@ class Face(DIRepresentable):
         
         # Instantiate Face object
         self.embeddings = embeddings
+        self.embedsLoaded = embedsLoaded
         self.figureID = figureID
         self.originRef = Face.ref(figureID)
     
@@ -2572,6 +2577,29 @@ class Face(DIRepresentable):
         
         if embeds:
             self.saveEmbeds()
+        
+        return True
+    
+    def loadEmbeds(self, matchDBEmbeddings: bool=True) -> bool:
+        faceEmbeds = Face.extractEmbeddings(self.figureID) or {}
+        
+        if matchDBEmbeddings:
+            changes = False
+            # Remove embeddings that are not in the database
+            for embeddingID in list(faceEmbeds.keys()):
+                if embeddingID not in self.embeddings:
+                    del faceEmbeds[embeddingID]
+                    changes = True
+            
+            if changes:
+                Face.setEmbeddings(self.figureID, faceEmbeds)
+                Face.saveEmbeddings()
+        
+        for embeddingID, embed in self.embeddings.items():
+            if isinstance(embed, FaceEmbedding):
+                embed.value = faceEmbeds.get(embeddingID, None)
+        
+        self.embedsLoaded = True
         
         return True
     
@@ -2594,36 +2622,24 @@ class Face(DIRepresentable):
     def rawLoad(figureID: str, data: dict, withEmbeddings: bool=True, matchDBEmbeddings: bool=True) -> 'Face':
         dbEmbeds: Dict[str, Dict[str, str]] = data.get('embeddings', {})
         
-        faceEmbeds: Dict[str, torch.Tensor] = {}
-        
-        # Load embeddings from Face.embeddingsFile if possible
-        if withEmbeddings: # warning: Face.loadEmbeddings() must be called before this
-            faceEmbeds = Face.extractEmbeddings(figureID)
-            if faceEmbeds is None:
-                faceEmbeds = {}
-        
-            if matchDBEmbeddings:
-                # Remove embeddings that are not in the database
-                for embeddingID in list(faceEmbeds.keys()):
-                    if embeddingID not in dbEmbeds:
-                        del faceEmbeds[embeddingID]
-                
-                Face.setEmbeddings(figureID, faceEmbeds)
-                Face.saveEmbeddings()
-        
         objectEmbeddings: Dict[str, FaceEmbedding] = {}
         for embeddingID, data in dbEmbeds.items():
             if isinstance(data, dict):
                 objectEmbeddings[embeddingID] = FaceEmbedding(
-                    value=faceEmbeds.get(embeddingID),
+                    value=None,
                     origin=data.get('origin', 'Unknown'),
                     added=data.get('added')
                 )
         
-        return Face(figureID, objectEmbeddings)
+        f = Face(figureID, objectEmbeddings)
+        
+        if withEmbeddings:
+            f.loadEmbeds(matchDBEmbeddings)
+        
+        return f
 
     @staticmethod
-    def load(figure: 'Figure | str', matchDBEmbeddings: bool=True, autoOffload: bool=False) -> 'Face | None':
+    def load(figure: 'Figure | str', withEmbeddings: bool=True, matchDBEmbeddings: bool=True) -> 'Face | None':
         figureID = figure.id if isinstance(figure, Figure) else figure
         
         data = DI.load(Face.ref(figureID))
@@ -2634,15 +2650,10 @@ class Face(DIRepresentable):
         if not isinstance(data, dict):
             raise Exception("FACE LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
         
-        if Face.embeddingsData is None:
+        if withEmbeddings and Face.embeddingsData is None:
             Face.loadEmbeddings()
         
-        out = Face.rawLoad(figureID, data, matchDBEmbeddings)
-        
-        if autoOffload:
-            Face.offloadEmbeddings()
-        
-        return out
+        return Face.rawLoad(figureID, data, withEmbeddings, matchDBEmbeddings)
     
     @staticmethod
     def ensureEmbeddingsFile():
