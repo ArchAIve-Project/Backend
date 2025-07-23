@@ -2582,6 +2582,25 @@ class Face(DIRepresentable):
         
         return True
     
+    def addEmbedding(self, embedding: FaceEmbedding, autoSave: bool=False, embedID: str=None) -> bool:
+        if not isinstance(embedding, FaceEmbedding):
+            raise Exception("FACE ADDEMBEDDING ERROR: 'embedding' must be a FaceEmbedding object.")
+        if not self.embedsLoaded:
+            raise Exception("FACE ADDEMBEDDING ERROR: Embeddings are not loaded; call loadEmbeds() first.")
+        
+        if embedID is None:
+            embedID = Universal.generateUniqueID(customLength=6, notIn=list(self.embeddings.keys()))
+        
+        if embedID in self.embeddings:
+            raise Exception("FACE ADDEMBEDDING ERROR: Embedding with ID '{}' already exists.".format(embedID))
+        
+        self.embeddings[embedID] = embedding
+        
+        if autoSave:
+            self.saveEmbeds()
+        
+        return True
+    
     def loadEmbeds(self, matchDBEmbeddings: bool=True) -> bool:
         if Face.embeddingsData is None:
             Face.loadEmbeddings()
@@ -2951,7 +2970,7 @@ class Figure(DIRepresentable):
         else:
             data = DI.load(Ref("figures"))
             if data is None:
-                return None
+                return [] if label is None else None
             if isinstance(data, DIError):
                 raise Exception("FIGURE LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
