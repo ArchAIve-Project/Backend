@@ -1,4 +1,5 @@
 import os, torch
+from enum import Enum
 from torch.nn import functional as F
 from torchvision import transforms
 from facenet_pytorch import MTCNN, InceptionResnetV1
@@ -63,7 +64,7 @@ class FaceRecognition:
     @staticmethod
     def setup() -> None:
         FaceRecognition.mtcnn = MTCNN(keep_all=True, device=Universal.device)
-        FaceRecognition.resnet = InceptionResnetV1(pretrained='vggface2').eval().to(Universal.device)
+        FaceRecognition.resnet = InceptionResnetV1(pretrained='vggface2', device=Universal.device).eval()
         FaceRecognition.initialised = True
     
     @staticmethod
@@ -141,3 +142,47 @@ class FaceRecognition:
             embedding = FaceRecognition.resnet(face_tensor).detach().cpu()
         
         return embedding
+
+class FaceDetection:
+    class MatchStrategy(str, Enum):
+        VOTING = "voting"
+        ALL = "all"
+        ANY = "any"
+    
+    class MatchResult(str, Enum):
+        MATCH_DIVERSE = "match_diverse"
+        MATCH = "match"
+        NO_MATCH = "no_match"
+    
+    @staticmethod
+    def match(target: FaceEmbedding, candidates: list[FaceEmbedding], strategy: MatchStrategy | str=MatchStrategy.VOTING, threshold: float=0.7, diversity_diff: float=0.2):
+        try:
+            strategy = FaceDetection.MatchStrategy(strategy) if isinstance(strategy, str) else strategy
+            if not isinstance(strategy, FaceDetection.MatchStrategy):
+                raise ValueError("Invalid 'strategy' provided.")            
+        except Exception as e:
+            return "ERROR: Could not resolve match strategy; error: {}".format(e)
+        
+        result = FaceDetection.MatchResult.NO_MATCH
+        if strategy == FaceDetection.MatchStrategy.VOTING:
+            similarities = [1 if FaceEmbedding.similarity(e, target) > threshold else 0 for e in candidates]
+            if sum(similarities) > (len(candidates) / 2):
+                result = FaceDetection.MatchResult.MATCH
+            
+        elif strategy == FaceDetection.MatchStrategy.ALL and all(FaceEmbedding.similarity(e, target) > threshold for e in candidates):
+            result = FaceDetection.MatchResult.MATCH
+            
+        elif strategy == FaceDetection.MatchStrategy.ANY and any(FaceEmbedding.similarity(e, target) > threshold for e in candidates):
+            result = FaceDetection.MatchResult.MATCH
+
+        if result == FaceDetection.MatchResult.MATCH:
+            diverse_enough = True
+            for e in candidates:
+                if FaceEmbedding.similarity(e, target) > (1 - diversity_diff):
+                    diverse_enough = False
+                    break
+            
+            if diverse_enough:
+                result = FaceDetection.MatchResult.MATCH_DIVERSE
+        
+        return result
