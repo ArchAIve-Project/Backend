@@ -2581,6 +2581,9 @@ class Face(DIRepresentable):
         return True
     
     def loadEmbeds(self, matchDBEmbeddings: bool=True) -> bool:
+        if Face.embeddingsData is None:
+            Face.loadEmbeddings()
+        
         faceEmbeds = Face.extractEmbeddings(self.figureID) or {}
         
         if matchDBEmbeddings:
@@ -2610,6 +2613,38 @@ class Face(DIRepresentable):
         Face.setEmbeddings(self.figureID, {id: embed.value for id, embed in self.embeddings.items()})
         Face.saveEmbeddings()
         
+        return True
+    
+    def destroy(self, embeds: bool=True):
+        DI.save(None, self.originRef)
+        
+        if embeds:
+            if Face.embeddingsData is None:
+                Face.loadEmbeddings()
+            
+            Face.deleteFigure(self.figureID)
+        
+        return True
+    
+    def destroyEmbedding(self, embedID: str, includingValue: bool=True):
+        if embedID in self.embeddings:
+            del self.embeddings[embedID]
+        
+        if includingValue:
+            self.saveEmbeds()
+        
+        return True
+    
+    def reload(self, withEmbeddings: bool=True, matchDBEmbeddings: bool=True):
+        data = DI.load(self.originRef)
+        if isinstance(data, DIError):
+            raise Exception("FACE RELOAD ERROR: DIError occurred: {}".format(data))
+        if data == None:
+            raise Exception("FACE RELOAD ERROR: No data found at reference '{}'.".format(self.originRef))
+        if not isinstance(data, dict):
+            raise Exception("FACE RELOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+        
+        self.__dict__.update(self.rawLoad(self.figureID, data, withEmbeddings, matchDBEmbeddings).__dict__)
         return True
     
     def __str__(self):
@@ -2649,9 +2684,6 @@ class Face(DIRepresentable):
             raise Exception("FACE LOAD ERROR: DIError occurred: {}".format(data))
         if not isinstance(data, dict):
             raise Exception("FACE LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
-        
-        if withEmbeddings and Face.embeddingsData is None:
-            Face.loadEmbeddings()
         
         return Face.rawLoad(figureID, data, withEmbeddings, matchDBEmbeddings)
     
@@ -2713,6 +2745,8 @@ class Face(DIRepresentable):
         if not isinstance(figureID, str):
             raise Exception("FACE EXTRACTEMBEDDINGS ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
         
+        if Face.embeddingsData is None:
+            raise Exception("FACE EXTRACTEMBEDDINGS ERROR: Embeddings data is not loaded; call Face.loadEmbeddings() first.")
         if not isinstance(Face.embeddingsData, dict):
             return None
         
