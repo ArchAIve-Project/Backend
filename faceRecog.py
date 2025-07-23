@@ -1,5 +1,6 @@
 import os, torch
 from torch.nn import functional as F
+from torchvision import transforms
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from matplotlib import pyplot as plt
 from PIL import Image, ImageDraw
@@ -54,6 +55,10 @@ class FaceRecognition:
     mtcnn: MTCNN = None
     resnet: InceptionResnetV1 = None
     initialised = False
+    transform = transforms.Compose([
+        transforms.Resize((160, 160)),
+        transforms.ToTensor()
+    ])
 
     @staticmethod
     def setup() -> None:
@@ -116,6 +121,13 @@ class FaceRecognition:
             img_draw.save(save_path)
         
         return img_draw
+    
+    @staticmethod
+    def img_to_tensor(img_path: str, map_to: str=None) -> torch.Tensor:
+        img = Image.open(img_path).convert("RGB")
+        img: torch.Tensor = FaceRecognition.transform(img).to(map_to or Universal.device)
+        
+        return img
     
     @staticmethod
     def get_face_embedding(face_tensor: torch.Tensor) -> torch.Tensor:
