@@ -1,13 +1,7 @@
-import os, sys, json
+import os
 from services import FileOps
-from firebase import FireConn
-from addons import ArchSmith, ASTracer, ASReport, ModelStore, ModelContext
-from ai import LLMInterface
-from fm import FileManager
-from ccrPipeline import CCRPipeline
+from addons import ArchSmith, ASReport
 from cnnclassifier import ImageClassifier
-from NERPipeline import NERPipeline
-from captioner import ImageCaptioning, Vocabulary
 from MMProcessor import MMProcessor
 from HFProcessor import HFProcessor
 
@@ -83,24 +77,3 @@ class MetadataGenerator:
         tracer.end()
         ArchSmith.persist()
         return output if output else "ERROR: No valid output generated."
-
-if __name__ == "__main__":
-    FireConn.connect()
-    FileManager.setup()
-    ModelStore.setup(
-        ccr=CCRPipeline.loadChineseClassifier,
-        ccrCharFilter=CCRPipeline.loadBinaryClassifier,
-        ner=NERPipeline.load_model,
-        cnn=ImageClassifier.load_model,
-        imageCaptioner=ImageCaptioning.loadModel
-    )
-    LLMInterface.initDefaultClients()
-    
-    output = MetadataGenerator.generate("Companydata/-182.jpg")
-    print(output)
-    
-    while True:
-        try:
-            exec(input(">>> "))
-        except Exception as e:
-            print(f"Error: {e}")
