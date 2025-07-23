@@ -2873,8 +2873,18 @@ class Figure(DIRepresentable):
             "profile": self.profile
         }
     
+    def save(self, embeds: bool=True):
+        DI.save(self.represent(), self.originRef)
+        
+        if not self.face.embedsLoaded and embeds:
+            Logger.log("FIGURE SAVE WARNING: Embeddings not loaded before saving, saveEmbeds call will be skipped. Figure ID: {}".format(self.id))
+        elif embeds:
+            self.face.saveEmbeds()
+        
+        return True
+    
     @staticmethod
-    def rawLoad(figureID: str, data: dict, withFace: bool=False, matchDBEmbeddings: bool=True) -> 'Figure':
+    def rawLoad(figureID: str, data: dict, withEmbeddings: bool=False, matchDBEmbeddings: bool=True) -> 'Figure':
         reqParams = ['label', 'headshot', 'face', 'profile']
         for reqParam in reqParams:
             if reqParam not in data:
@@ -2884,8 +2894,10 @@ class Figure(DIRepresentable):
                     data[reqParam] = None
         
         face = None
-        if isinstance(data['face'], dict) and withFace:
-            face = Face.rawLoad(figureID, data['face'], matchDBEmbeddings)
+        if isinstance(data['face'], dict):
+            face = Face.rawLoad(figureID, data['face'], withEmbeddings, matchDBEmbeddings)
+        else:
+            face = Face(figureID, [])
         
         return Figure(
             label=data['label'],
@@ -2894,6 +2906,51 @@ class Figure(DIRepresentable):
             profile=data['profile'],
             id=figureID
         )
+    
+    @staticmethod
+    def load(id: str=None, label: str=None, withEmbeddings: bool=False, matchDBEmbeddings: bool=True) -> 'Figure | List[Figure] | None':
+        if id != None:
+            data = DI.load(Figure.ref(id))
+            if data is None:
+                if label is not None:
+                    return Figure.load(label=label, withEmbeddings=withEmbeddings, matchDBEmbeddings=matchDBEmbeddings)
+                else:
+                    return None
+            if isinstance(data, DIError):
+                raise Exception("FIGURE LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("FIGURE LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+
+            return Figure.rawLoad(id, data, withEmbeddings, matchDBEmbeddings)
+        else:
+            data = DI.load(Ref("figures"))
+            if data is None:
+                return None
+            if isinstance(data, DIError):
+                raise Exception("FIGURE LOAD ERROR: DIError occurred: {}".format(data))
+            if not isinstance(data, dict):
+                raise Exception("FIGURE LOAD ERROR: Failed to load dictionary figures data; response: {}".format(data))
+
+            figures: Dict[str, Figure] = {}
+            for id in data:
+                if isinstance(data[id], dict):
+                    figures[id] = Figure.rawLoad(id, data[id])
+
+            if label is None:
+                if withEmbeddings:
+                    for figure in figures.values():
+                        figure.face.loadEmbeds(matchDBEmbeddings)
+                
+                return list(figures.values())
+            
+            for figure in figures.values():
+                if label is not None and figure.label == label:
+                    if withEmbeddings:
+                        figure.face.loadEmbeds(matchDBEmbeddings)
+                    
+                    return figure
+            
+            return None
     
     @staticmethod
     def ref(id: str) -> Ref:
