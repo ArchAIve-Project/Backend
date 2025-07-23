@@ -127,21 +127,68 @@ def getAsset(filename):
 @checkSession(strict=True)
 @cache
 def getAllCategoriesWithArtefacts():
+    """
+    Returns all artefacts grouped by category and a list of books with their associated artefacts.
+
+    This endpoint:
+    - Loads all artefacts into a lookup map.
+    - Loads all categories and links each category to its artefacts using the map.
+    - Loads all books and links each book to its listed artefact IDs (mmIDs).
+    - Handles exceptions at a granular level (load calls and lookup failures).
+    - Caches the output and requires session authentication.
+
+    Response Format:
+    ```
+    {
+        "categories": {
+            "CategoryName1": [
+                { "id": ..., "name": ..., "image": ..., "description": ... },
+                ...
+            ],
+            ...
+        },
+        "books": [
+            {
+                "id": ...,
+                "title": ...,
+                "subtitle": ...,
+                "mmArtefacts": [
+                    { "id": ..., "name": ..., "description": ... },
+                    ...
+                ]
+            },
+            ...
+        ]
+    }
+    """
+    artefactMap = {}
+    categories = []
+    books = []
+
+    # Load all artefacts into a dictionary for quick lookup by ID
     try:
-        # Load ALL artefacts
         all_artefacts = Artefact.load() or []
-        artefactMap = {art.id: art for art in all_artefacts}  # Map all artefacts by ID
+        artefactMap = {art.id: art for art in all_artefacts}
+    except Exception as e:
+        Logger.log("CDN: Failed to load artefacts - {}".format(e))
 
-        # Load categories (no need for withArtefacts=True since we have the map)
-        categories: list[Category] = Category.load() or []
-        result = {}
-        for cat in categories:
-            if not cat.members:
-                continue
+    # Load all categories (with artefact references inside each category)
+    try:
+        categories = Category.load(withArtefacts=True) or []
+    except Exception as e:
+        Logger.log("CDN: Failed to load categories - {}".format(e))
 
-            artefactsList = []
-            for artefact_id, catArt in cat.members.items():  # Iterate through member IDs
-                art = artefactMap.get(artefact_id)
+    result = {}
+
+    # Loop through each category and compile its artefact list
+    for cat in categories:
+        if not cat.members:
+            continue  # Skip empty categories
+
+        artefactsList = []
+        for artefact_id, catArt in cat.members.items():
+            try:
+                art = artefactMap.get(artefact_id)  # Look up the artefact from preloaded map
                 if art:
                     artefactsList.append({
                         "id": art.id,
@@ -149,37 +196,53 @@ def getAllCategoriesWithArtefacts():
                         "image": art.image,
                         "description": art.description
                     })
+            except Exception as e:
+                Logger.log("CDN: Failed to resolve artefact in category {} - {}".format(cat.name, e))
 
-            if artefactsList:
-                result[cat.name] = artefactsList
+        if artefactsList:
+            result[cat.name] = artefactsList  # Add category to result if it has artefacts
 
-        # Load books and resolve mmIDs
-        books: list[Book] = Book.load() or []
-        bookList = []
-        for book in books:
-            mmDetails = []
-            for mmID in book.mmIDs:
+    # Load all books (which reference artefact IDs)
+    try:
+        books = Book.load() or []
+    except Exception as e:
+        Logger.log("CDN: Failed to load books - {}".format(e))
+
+    bookList = []
+
+    # Loop through each book to build its associated artefacts
+    for book in books:
+        mmDetails = []
+
+        for mmID in book.mmIDs:
+            try:
                 art = artefactMap.get(mmID)
-                
-                mmDetails.append({
-                    "id": art.id,
-                    "name": art.name,
-                    "description": art.description
-                })
+                if art:
+                    mmDetails.append({
+                        "id": art.id,
+                        "name": art.name,
+                        "description": art.description
+                    })
+                else:
+                    # Artefact not found — fallback to just ID
+                    mmDetails.append({
+                        "id": mmID,
+                        "name": mmID,
+                        "description": ""
+                    })
+            except Exception as e:
+                Logger.log("CDN: Failed to resolve mmID {} in book {} - {}".format(mmID, book.id, e))
 
-            bookList.append({
-                "id": book.id,
-                "title": book.title,
-                "subtitle": book.subtitle,
-                "mmArtefacts": mmDetails
-            })
-
-        return JSONRes.new(200, ResType.SUCCESS, data={
-            "categories": result,
-            "books": bookList
+        bookList.append({
+            "id": book.id,
+            "title": book.title,
+            "subtitle": book.subtitle,
+            "mmArtefacts": mmDetails  # Each book now includes resolved artefacts
         })
 
-    except Exception as e:
-        Logger.log("CDN GETCATALOGUE ERROR: {}".format(e))
-        return JSONRes.new(500, ResType.ERROR, "Unexpected ERROR occurred.")
+    # Return structured catalogue of categories and books
+    return JSONRes.new(200, ResType.SUCCESS, data={
+        "categories": result,
+        "books": bookList
+    })
 
