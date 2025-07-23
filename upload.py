@@ -3,16 +3,16 @@ from werkzeug.utils import secure_filename
 from flask import Blueprint, request, redirect, url_for, session
 from utils import JSONRes, ResType
 from services import Logger, Encryption, Universal, FileOps
-from decorators import jsonOnly, enforceSchema, checkSession
-from models import Metadata, Batch, Artefact, User
+from sessionManagement import checkSession
+from models import Metadata, Artefact, User, Batch, BatchArtefact, BatchProcessingJob
 from fm import FileManager
 from services import ThreadManager
 from metagen import MetadataGenerator
 from ingestion import DataImportProcessor
 
-uploadBP = Blueprint('upload', __name__, url_prefix="/upload")
+dataimportBP = Blueprint('dataimport', __name__, url_prefix="/dataimport")
 
-@uploadBP.route('/', methods=['POST'])
+@dataimportBP.route('/upload', methods=['POST'])
 @checkSession(strict=True, provideUser=True)
 def upload(user: User):
     accID = session.get('accID')
@@ -20,7 +20,7 @@ def upload(user: User):
         return JSONRes.unauthorised()
 
     if 'file' not in request.files:
-        return JSONRes.new(400, "No file part in the request.")
+        return JSONRes.new(400, "No file part in request.")
 
     files = request.files.getlist('file')
     if not files or all(file.filename == '' for file in files):
@@ -29,77 +29,102 @@ def upload(user: User):
     savedArtefacts = []
 
     for file in files:
-        if file and file.filename != '':
+        if file and file.filename:
             filename = Universal.generateUniqueID()
             ext = FileOps.getFileExtension(file.filename)
-            fullFilename = f"{filename}.{ext}"
+            fullFilename = "{}.{}".format(filename, ext)
             imagePath = os.path.join("artefacts", fullFilename)
             file.save(imagePath)
 
-            artefact = Artefact("testing", imagePath, metadata=None)
+            artefact = Artefact(filename, imagePath, metadata=None)
             artefact.save()
             savedArtefacts.append(artefact)
 
     FileManager.save()
 
-    batch = Batch(user.id, unprocessed=savedArtefacts, processed=None, confirmed=None)
+    batch = Batch(user.id, batchArtefacts=savedArtefacts)
     batch.save()
 
-    # Logger
+    job = BatchProcessingJob(batch=batch, jobID=None, status=BatchProcessingJob.Status.PENDING)
+    job.save()
 
+    batch.job = job
+    batch.save()
+
+    # Start async batch processing
     ThreadManager.defaultProcessor.addJob(DataImportProcessor.processBatch, batch)
 
-    return JSONRes.new(200, "Batch is processing.")
 
-@uploadBP.route('/batches', methods=['GET'])
+    return JSONRes.new(200, "Batch is processing.", raw={"batchID": batch.id})
+
+@dataimportBP.route('/batches', methods=['GET'])
 @checkSession(strict=True)
-def allBatches():
+def getAllBatches():
     try:
-        batches = Batch.load()
+        batches = Batch.load()  # Assuming returns list of all batches
         if not batches:
             return JSONRes.new(200, "No batches found.", raw={})
-        
+
         formatted = {b.id: b.represent() for b in batches}
         return JSONRes.new(200, "All batches retrieved.", raw=formatted)
-    
-    except Exception as e: 
-        Logger.log(f"BATCH LIST ERROR: {e}")
+
+    except Exception as e:
         return JSONRes.ambiguousError(str(e))
 
-
-@uploadBP.route('/userbatches', methods=['GET'])
+@dataimportBP.route('/userbatches', methods=['GET'])
 @checkSession(strict=True, provideUser=True)
-def userBatches(user: User):
-    Logger.log(f"userBatches called for user id: {user.id}")
+def getUserBatches(user: User):
     try:
         batches = Batch.load(userID=user.id, withArtefacts=False)
-        Logger.log(f"Loaded batches count: {len(batches) if batches else 0}")
         if not batches:
             return JSONRes.new(200, "No batches found.", raw={})
-        
+
         formatted = {b.id: b.represent() for b in batches}
-        return JSONRes.new(200, "Batches retrieved.", raw=formatted)
-    
+        return JSONRes.new(200, "User batches retrieved.", raw=formatted)
+
     except Exception as e:
-        Logger.log(f"userBatches error: {e}")
         return JSONRes.ambiguousError(str(e))
-    
-@uploadBP.route('/batches/<batchID>', methods=['DELETE'])
+
+@dataimportBP.route('/batches/<batchID>/cancel', methods=['POST'])
+@checkSession(strict=True, provideUser=True)
+def cancelBatch(user: User, batchID: str):
+    try:
+        batch = Batch.load(id=batchID)
+        if not batch:
+            return JSONRes.new(404, "Batch not found.")
+
+        # Ensure batch belongs to user or has permission
+        if batch.userID != user.id:
+            return JSONRes.unauthorised()
+
+        job = batch.job
+        if job.status in [BatchProcessingJob.Status.COMPLETED]:
+            return JSONRes.new(200, "Batch job already completed")
+        elif job.status in [BatchProcessingJob.Status.CANCELLED]:
+            return JSONRes.new(200, "Batch job already cancelled.")
+
+        job.cancel()
+        job.save()
+
+        return JSONRes.new(200, "Batch {} processing cancelled.".format(batchID))
+
+    except Exception as e:
+        return JSONRes.ambiguousError(str(e))
+
+@dataimportBP.route('/batches/<batchID>/delete', methods=['DELETE'])
 @checkSession(strict=True, provideUser=True)
 def deleteBatch(user: User, batchID: str):
     try:
         batch = Batch.load(id=batchID)
         if not batch:
-            return JSONRes.new("Batch not found.")
+            return JSONRes.new(404, "Batch not found.")
 
         if batch.userID != user.id:
             return JSONRes.unauthorised()
 
-        batch.getArtefacts(unprocessed=True, processed=True, confirmed=True)
         batch.destroy()
 
-        return JSONRes.new(200, f"Batch {batchID} and artefacts deleted.")
+        return JSONRes.new(200, "Batch {} and artefacts deleted.".format(batchID))
 
     except Exception as e:
-        Logger.log("DELETE BATCH ERROR: {}".format(e))
-        return JSONRes.ambiguousError()
+        return JSONRes.ambiguousError(str(e))
