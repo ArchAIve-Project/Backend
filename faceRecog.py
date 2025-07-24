@@ -44,7 +44,10 @@ class FaceEmbedding:
         if not isinstance(embedding1, FaceEmbedding) or not isinstance(embedding2, FaceEmbedding):
             raise Exception("FACEEMBEDDING SIMILARITY ERROR: Both inputs must be FaceEmbedding instances.")
         
-        e1, e2 = F.normalize(embedding1.value), F.normalize(embedding2.value)
+        e1, e2 = embedding1.value.to(Universal.getBestDevice(supported=['cuda', 'cpu'])), embedding2.value.to(Universal.getBestDevice(supported=['cuda', 'cpu']))
+        
+        e1, e2 = F.normalize(e1), F.normalize(e2)
+        
         return F.cosine_similarity(e1, e2).item()
     
     @staticmethod
@@ -60,11 +63,12 @@ class FaceRecognition:
         transforms.Resize((160, 160)),
         transforms.ToTensor()
     ])
+    device = Universal.getBestDevice(supported=['cuda', 'cpu'])
 
     @staticmethod
     def setup() -> None:
-        FaceRecognition.mtcnn = MTCNN(keep_all=True, device=Universal.device)
-        FaceRecognition.resnet = InceptionResnetV1(pretrained='vggface2', device=Universal.device).eval()
+        FaceRecognition.mtcnn = MTCNN(keep_all=True, device=FaceRecognition.device)
+        FaceRecognition.resnet = InceptionResnetV1(pretrained='vggface2', device=FaceRecognition.device).eval()
         FaceRecognition.initialised = True
     
     @staticmethod
@@ -146,7 +150,7 @@ class FaceRecognition:
         else:
             return "ERROR: Invalid image type. Must be PIL Image or file path."
         
-        img: torch.Tensor = FaceRecognition.transform(img).to(map_to or Universal.device)
+        img: torch.Tensor = FaceRecognition.transform(img).to(map_to or FaceRecognition.device)
         
         return img
     
@@ -156,7 +160,7 @@ class FaceRecognition:
             if face_tensor.ndim == 3:
                 face_tensor = face_tensor.unsqueeze(0)
             
-            face_tensor = face_tensor.to(torch.float32).to(Universal.device)
+            face_tensor = face_tensor.to(torch.float32).to(FaceRecognition.device)
             
             embedding = None
             with torch.no_grad():

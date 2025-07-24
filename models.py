@@ -294,7 +294,7 @@ class Metadata(DIRepresentable):
         """
         if 'tradCN' in data:
             return Metadata(artefactID, MMData.rawLoad(data, artefactID))
-        elif 'faceFiles' in data:
+        elif 'figureIDs' in data:
             return Metadata(artefactID, HFData.rawLoad(data, artefactID))
         else:
             raise Exception("METADATA RAWLOAD ERROR: Unable to determine metadata type from raw dictionary data.")
@@ -339,10 +339,10 @@ class Metadata(DIRepresentable):
                 corrected=metagenDict.get('correction_applied', False)
             )
             return Metadata(artefactID, mm)
-        elif 'faceFiles' in metagenDict:
+        elif 'figureIDs' in metagenDict:
             hf = HFData(
                 artefactID=artefactID,
-                faceFiles=metagenDict.get('faceFiles'),
+                figureIDs=metagenDict.get('figureIDs'),
                 caption=metagenDict.get('caption')
             )
             return Metadata(artefactID, hf)
@@ -445,22 +445,22 @@ class MMData(DIRepresentable):
         return Ref("artefacts", artefactID, "metadata")
 
 class HFData(DIRepresentable):
-    def __init__(self, artefactID: str, faceFiles: list[str], caption: str, addInfo: str=None):
+    def __init__(self, artefactID: str, figureIDs: list[str], caption: str, addInfo: str=None):
         """
         Metadata for human figure(s) in artefacts.
     
         Contains information about human figures detected in images, including references
-        to face image files, captions describing the scene (e.g., "people in a meeting"), and optional additional
+        to Figure objects, captions describing the scene (e.g., "people in a meeting"), and optional additional
         information. Used for artefacts containing human imagery that requires annotation.
 
         Args:
             artefactID (str): Associated artefact identifier.
-            faceFiles (list[str]): List of image files containing detected faces.
+            figureIDs (list[str]): List of IDs referring to Figure objects detected in the artefact.
             caption (str): Descriptive caption for the human figures.
             addInfo (str | None): Additional context about the figures if available.
         """
         self.artefactID = artefactID
-        self.faceFiles = faceFiles
+        self.figureIDs = figureIDs
         self.caption = caption
         self.addInfo = addInfo
         self.originRef = HFData.ref(artefactID)
@@ -470,24 +470,24 @@ class HFData(DIRepresentable):
 
     def represent(self) -> Dict[str, Any]:
         return {
-            "faceFiles": self.faceFiles,
+            "figureIDs": self.figureIDs,
             "caption": self.caption,
             "addInfo": self.addInfo
         }
 
     @staticmethod
     def rawLoad(data: Dict[str, Any], artefactID: str) -> 'HFData':
-        requiredParams = ['faceFiles', 'caption', 'addInfo']
+        requiredParams = ['figureIDs', 'caption', 'addInfo']
         for reqParam in requiredParams:
             if reqParam not in data:
-                if reqParam == 'faceFiles':
-                    data['faceFiles'] = []
+                if reqParam == 'figureIDs':
+                    data['figureIDs'] = []
                 else:
                     data[reqParam] = None
 
         return HFData(
             artefactID=artefactID,
-            faceFiles=data.get('faceFiles', []),
+            figureIDs=data.get('figureIDs', []),
             caption=data.get('caption'),
             addInfo=data.get('addInfo', None)
         )

@@ -1,3 +1,4 @@
+import os
 from services import Universal, FileOps
 from addons import ASReport, ASTracer
 from captioner import ImageCaptioning
@@ -94,7 +95,7 @@ class HFProcessor:
         
         index = 0
         for embed in embed_values:
-            embed = FaceEmbedding(value=embed, origin=imagePath)
+            embed = FaceEmbedding(value=embed, origin=os.path.basename(imagePath))
             matched = False
             for figure in figures:
                 # See if the embedding matches with this figure

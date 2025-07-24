@@ -338,6 +338,21 @@ class Universal:
             return out
     
     @staticmethod
+    def getBestDevice(supported: list[str]=None):
+        if supported == None:
+            supported = ["cuda", "mps", "cpu"]
+        
+        if Universal.device not in supported:
+            if 'cuda' in supported and torch.cuda.is_available():
+                return 'cuda'
+            elif 'mps' in supported and torch.backends.mps.is_available():
+                return 'mps'
+            
+            return 'cpu'
+        else:
+            return Universal.device
+    
+    @staticmethod
     def utcNow():
         return datetime.datetime.now(datetime.timezone.utc)
     
