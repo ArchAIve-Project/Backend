@@ -5,20 +5,36 @@ from utils import JSONRes, ResType
 from services import Logger, Encryption, Universal, FileOps
 from sessionManagement import checkSession
 from models import Metadata, Artefact, User, Batch, BatchArtefact, BatchProcessingJob
-from fm import FileManager
+from fm import FileManager, File
 from services import ThreadManager
 from metagen import MetadataGenerator
 from ingestion import DataImportProcessor
+from services import Logger
 
 dataimportBP = Blueprint('dataimport', __name__, url_prefix="/dataimport")
 
-@dataimportBP.route('/upload', methods=['POST'])
-@checkSession(strict=True, provideUser=True)
-def upload(user: User):
-    accID = session.get('accID')
-    if not accID:
-        return JSONRes.unauthorised()
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}  
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
+def allowed_file(filename: str) -> bool:
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@dataimportBP.route('/upload', methods=['POST'])
+@checkSession(strict=True)
+def upload():
+    """
+    Handles artefact file uploads.
+
+    For each file:
+    - Validates type and size
+    - Saves locally
+    - Uploads to Firebase
+    - Creates DB record
+
+    On failure at any step, the file is skipped and the error is logged and returned.
+
+    Returns a summary of upload results per file.
+    """
     if 'file' not in request.files:
         return JSONRes.new(400, "No file part in request.")
 
@@ -26,36 +42,79 @@ def upload(user: User):
     if not files or all(file.filename == '' for file in files):
         return JSONRes.new(400, "No files selected.")
 
-    savedArtefacts = []
+    fileSaveUpdates = {}
 
     for file in files:
-        if file and file.filename:
+        if file and file.filename: 
+            # check file type
+            if not allowed_file(file.filename):
+                fileSaveUpdates[file.filename] = "ERROR: File type not allowed."
+                continue
+
+            # check file size
+            file.seek(0, os.SEEK_END)
+            file_length = file.tell()
+            file.seek(0)  # reset pointer for reading later
+
+            if file_length > MAX_FILE_SIZE:
+                fileSaveUpdates[file.filename] = "ERROR: File too large. Max allowed is 5MB."
+                continue
+           
+            # save file locally
             filename = Universal.generateUniqueID()
-            ext = FileOps.getFileExtension(file.filename)
-            fullFilename = "{}.{}".format(filename, ext)
-            imagePath = os.path.join("artefacts", fullFilename)
-            file.save(imagePath)
+            filename = "{}.{}".format(filename, FileOps.getFileExtension(file.filename))
+            fileObj = File(filename, 'artefacts')
+    
+            try:
+                file.save(fileObj.path())
+            except Exception as e:
+                fileSaveUpdates[file.filename] = "ERROR: Failed to save locally. ({})".format(str(e))
+                continue
 
-            artefact = Artefact(filename, imagePath, metadata=None)
-            artefact.save()
-            savedArtefacts.append(artefact)
+            # sync local to firebase 
+            res = FileManager.save(file=fileObj)
+            if isinstance(res, str): # if fail
+                Logger.log("DATAIMPORT UPLOAD FILEMANAGER ERROR: Failed to save file to FileManager: {}. ".format(res))
+                
+                remove = FileManager.removeLocally(fileObj) 
+                if remove != True:
+                    Logger.log("DATAIMPORT UPLOAD FILEMANAGER ERROR: Failed to   file locally: {}".format(remove))
+                
+                fileSaveUpdates[file.filename] = "ERROR: Failed to upload to FileManager: {}".format(res)
+                continue
 
-    FileManager.save()
+            # create artefact
+            artefact = Artefact.fromFMFile(fileObj)
+            
+            try:
+                artefact.save()
+                fileSaveUpdates[file.filename] = "Uploaded successfully to database."
 
-    batch = Batch(user.id, batchArtefacts=savedArtefacts)
-    batch.save()
+            except Exception as e:
+                Logger.log("DATAIMPORT UPLOAD ARTEFACT ERROR: Failed to save artefact for {}: {}".format(file.filename, str(e)))
 
-    job = BatchProcessingJob(batch=batch, jobID=None, status=BatchProcessingJob.Status.PENDING)
-    job.save()
+                FileManager.delete(file=fileObj)
 
-    batch.job = job
-    batch.save()
+                fileSaveUpdates[file.filename] = "ERROR: Failed to save artefact: {}".format(str(e))
+                continue
 
-    # Start async batch processing
-    ThreadManager.defaultProcessor.addJob(DataImportProcessor.processBatch, batch)
+    return JSONRes.new(200, "Upload results.", ResType.SUCCESS, updates=fileSaveUpdates)
 
+    # @checkSession(strict=True, provideUser=True)
+    # accID = session.get('accID') 
+    # if not accID: 
+    #     return JSONRes.unauthorised()
+    
+    # batch = Batch(user.id, batchArtefacts=savedArtefacts)
+    # batch.initJob()
+    # batch.save()
 
-    return JSONRes.new(200, "Batch is processing.", raw={"batchID": batch.id})
+    # # Start async batch processing
+    # batch.job.jobID = ThreadManager.defaultProcessor.addJob(DataImportProcessor.processBatch, batch)
+    # batch.job.save()
+    
+    # return JSONRes.new(200, "Files have sucessfully saved into database.")
+    # raw={"batchID": batch.id}
 
 @dataimportBP.route('/batches', methods=['GET'])
 @checkSession(strict=True)
