@@ -124,9 +124,35 @@ class HFProcessor:
                 newFigure.face.addEmbedding(embed, autoSave=True)
                 newFigure.save()
                 matchedFigureIDs.add(newFigure.id)
+                
+                tracer.addReport(
+                    ASReport(
+                        source="HFPROCESSOR PROCESSIMAGE",
+                        message="Created new figure '{}' for unmatched face crop at index {}.".format(newFigure.id, index),
+                        extraData={"imagePath": imagePath, "faceCropIndex": index}
+                    )
+                )
             
             index += 1
-                
+        
+        matchedFigureIDs = list(matchedFigureIDs)
+        if len(matchedFigureIDs) == 0:
+            tracer.addReport(
+                ASReport(
+                    source="HFPROCESSOR PROCESSIMAGE WARNING",
+                    message="No figures matched or created for image '{}'.".format(imagePath)
+                )
+            )
+        else:
+            tracer.addReport(
+                ASReport(
+                    source="HFPROCESSOR PROCESSIMAGE",
+                    message="Processed image '{}' with {} matched figures.".format(imagePath, len(matchedFigureIDs)),
+                    extraData={"matchedFigures": matchedFigureIDs}
+                )
+            )
+        
+        return matchedFigureIDs
     
     @staticmethod
     def process(imagePath: str, tracer: ASTracer, useLLMCaptionImprovement: bool=True) -> dict | str:
@@ -162,11 +188,11 @@ class HFProcessor:
         #     "caption": caption
         # }
     
-    @staticmethod
-    def compare(img1: str, img2: str) -> bool | str:
-        output = FaceRecognition.compareImagesFirebase(img1, img2)
-        if isinstance(output, str):
-            return output
+    # @staticmethod
+    # def compare(img1: str, img2: str) -> bool | str:
+    #     output = FaceRecognition.compareImagesFirebase(img1, img2)
+    #     if isinstance(output, str):
+    #         return output
         
-        result, similarity = output
-        return result, similarity
+    #     result, similarity = output
+    #     return result, similarity
