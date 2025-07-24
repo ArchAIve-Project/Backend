@@ -36,17 +36,24 @@ class HFProcessor:
     
     # Face Recognition + Detection and Matching
     @staticmethod
-    def processImage(imagePath: str, tracer: ASTracer) -> list[str]:
+    def identifyFaces(imagePath: str, tracer: ASTracer) -> list[str]:
         face_crops = FaceRecognition.detect_face_crops(imagePath)
         if isinstance(face_crops, str):
             tracer.addReport(
                 ASReport(
-                    source="HFPROCESSOR PROCESSIMAGE ERROR",
+                    source="HFPROCESSOR IDENTIFYFACES ERROR",
                     message="Failed to extract face crops from image (fallback to empty list); response: {}".format(face_crops),
                     extraData={"imagePath": imagePath}
                 )
             )
             return []
+        else:
+            tracer.addReport(
+                ASReport(
+                    source="HFPROCESSOR IDENTIFYFACES",
+                    message="Extracted {} face crops from image '{}'.".format(len(face_crops), imagePath)
+                )
+            )
         
         embed_values = None
         try:
@@ -54,12 +61,20 @@ class HFProcessor:
         except Exception as e:
             tracer.addReport(
                 ASReport(
-                    source="HFPROCESSOR PROCESSIMAGE ERROR",
+                    source="HFPROCESSOR IDENTIFYFACES ERROR",
                     message="Failed to get face embeddings (fallback to empty list); response: {}".format(e),
                     extraData={"imagePath": imagePath, "faceCropsLength": len(face_crops)}
                 )
             )
             return []
+
+        tracer.addReport(
+            ASReport(
+                source="HFPROCESSOR IDENTIFYFACES",
+                message="Generated {} face embeddings for image '{}'.".format(len(embed_values), imagePath),
+                extraData={"faceCropsLength": len(face_crops)}
+            )
+        )
         
         # Carry out face matching
         figures: list[Figure] = []
@@ -68,7 +83,7 @@ class HFProcessor:
         except Exception as e:
             tracer.addReport(
                 ASReport(
-                    source="HFPROCESSOR PROCESSIMAGE ERROR",
+                    source="HFPROCESSOR IDENTIFYFACES ERROR",
                     message="Failed to load figures for face matching (fallback to empty list); response: {}".format(e),
                     extraData={"imagePath": imagePath}
                 )
@@ -82,71 +97,124 @@ class HFProcessor:
             embed = FaceEmbedding(value=embed, origin=imagePath)
             matched = False
             for figure in figures:
-                matchResult, _ = FaceDetection.match(
-                    target=embed,
-                    candidates=list(figure.face.embeddings.values()),
-                    strategy=FaceDetection.MatchStrategy.VOTING,
-                    threshold=0.7,
-                    diversity_threshold=0.8
-                )
-                
-                if matchResult != FaceDetection.MatchResult.NO_MATCH:
-                    matchedFigureIDs.add(figure.id)
+                # See if the embedding matches with this figure
+                try:
+                    out = FaceDetection.match(
+                        target=embed,
+                        candidates=list(figure.face.embeddings.values()),
+                        strategy=FaceDetection.MatchStrategy.VOTING,
+                        threshold=0.7,
+                        diversity_threshold=0.8
+                    )
                     
-                    if matchResult == FaceDetection.MatchResult.MATCH_DIVERSE:
-                        figure.face.addEmbedding(embed, autoSave=True)
-                    matched = True
-            
-            if not matched:
-                # If no match found, create a new Figure and Face
-                label = Universal.generateUniqueID()
-                file = File('{}.jpg'.format(label), 'people')
-                
-                face_crops[index].save(file.path())
-                
-                res = FileManager.save(file=file)
-                if isinstance(res, str):
+                    if isinstance(out, str):
+                        raise Exception(out)
+                    
+                    ## Extract the match result
+                    matchResult, _ = out
+                    if not isinstance(matchResult, FaceDetection.MatchResult):
+                        raise ValueError("Invalid match result type: {}".format(type(matchResult)))
+                except Exception as e:
                     tracer.addReport(
                         ASReport(
-                            source="HFPROCESSOR PROCESSIMAGE ERROR",
-                            message="Failed to save face crop image (fallback to empty list); response: {}".format(res),
+                            source="HFPROCESSOR IDENTIFYFACES ERROR",
+                            message="Failed to obtain embedding match result for figure '{}'; error: {}".format(figure.id, e),
                             extraData={"imagePath": imagePath, "faceCropIndex": index}
                         )
                     )
                     continue
                 
-                newFigure = Figure(
-                    label=label,
-                    headshot=file.filename,
-                    face=None,
-                    id=label
-                )
-                newFigure.face.addEmbedding(embed, autoSave=True)
-                newFigure.save()
-                matchedFigureIDs.add(newFigure.id)
-                
-                tracer.addReport(
-                    ASReport(
-                        source="HFPROCESSOR PROCESSIMAGE",
-                        message="Created new figure '{}' for unmatched face crop at index {}.".format(newFigure.id, index),
-                        extraData={"imagePath": imagePath, "faceCropIndex": index}
+                if matchResult != FaceDetection.MatchResult.NO_MATCH:
+                    # If a match is found, we add the figure ID to the matched set
+                    matchedFigureIDs.add(figure.id)
+                    
+                    if matchResult == FaceDetection.MatchResult.MATCH_DIVERSE:
+                        # If the match is diverse, we add the embedding to the figure
+                        try:
+                            embedID = figure.face.addEmbedding(embed, autoSave=True)
+                            
+                            tracer.addReport(
+                                ASReport(
+                                    source="HFPROCESSOR IDENTIFYFACES",
+                                    message="Added new embedding to figure '{}' for face crop at index {}.".format(figure.id, index),
+                                    extraData={"imagePath": imagePath, "faceCropIndex": index, 'embedID': embedID}
+                                )
+                            )
+                        except Exception as e:
+                            tracer.addReport(
+                                ASReport(
+                                    source="HFPROCESSOR IDENTIFYFACES ERROR",
+                                    message="Failed to add diverse embedding to figure '{}'; error: {}".format(figure.id, e),
+                                    extraData={"imagePath": imagePath, "faceCropIndex": index}
+                                )
+                            )
+                    
+                    # If a match is found, we can stop checking further figures
+                    matched = True
+                    break
+            
+            if not matched:
+                # If no match found, create a new Figure and Face
+                try:
+                    # Save to filesystem and then to FileManager context
+                    label = Universal.generateUniqueID()
+                    file = File('{}.jpg'.format(label), 'people')
+                    
+                    face_crops[index].save(file.path())
+                    
+                    res = FileManager.save(file=file)
+                    if isinstance(res, str):
+                        tracer.addReport(
+                            ASReport(
+                                source="HFPROCESSOR IDENTIFYFACES ERROR",
+                                message="Failed to save face crop image (fallback to empty list); response: {}".format(res),
+                                extraData={"imagePath": imagePath, "faceCropIndex": index}
+                            )
+                        )
+                        continue
+                    
+                    # Construct a new Figure and add the embedding and save to database
+                    newFigure = Figure(
+                        label=label,
+                        headshot=file.filename,
+                        face=None,
+                        id=label
                     )
-                )
+                    newFigure.face.addEmbedding(embed, autoSave=True)
+                    newFigure.save()
+                    matchedFigureIDs.add(newFigure.id)
+                    
+                    tracer.addReport(
+                        ASReport(
+                            source="HFPROCESSOR IDENTIFYFACES",
+                            message="Created new figure '{}' for unmatched face crop at index {}.".format(newFigure.id, index),
+                            extraData={"imagePath": imagePath, "faceCropIndex": index}
+                        )
+                    )
+                except Exception as e:
+                    tracer.addReport(
+                        ASReport(
+                            source="HFPROCESSOR IDENTIFYFACES ERROR",
+                            message="Failed to create new figure for unmatched face crop at index {}; error: {}".format(index, e),
+                            extraData={"imagePath": imagePath, "faceCropIndex": index}
+                        )
+                    )
             
             index += 1
         
+        # Process the matchedFigureIDs result
         matchedFigureIDs = list(matchedFigureIDs)
         if len(matchedFigureIDs) == 0:
             tracer.addReport(
                 ASReport(
-                    source="HFPROCESSOR PROCESSIMAGE WARNING",
+                    source="HFPROCESSOR IDENTIFYFACES WARNING",
                     message="No figures matched or created for image '{}'.".format(imagePath)
                 )
             )
         else:
             tracer.addReport(
                 ASReport(
-                    source="HFPROCESSOR PROCESSIMAGE",
+                    source="HFPROCESSOR IDENTIFYFACES",
                     message="Processed image '{}' with {} matched figures.".format(imagePath, len(matchedFigureIDs)),
                     extraData={"matchedFigures": matchedFigureIDs}
                 )
@@ -159,8 +227,7 @@ class HFProcessor:
         if not FaceRecognition.initialised:
             HFProcessor.setup()
         
-        # TODO: Redo face recognition part.
-        # filenames = FaceRecognition.processImage(imagePath, tracer)
+        figureIDs = HFProcessor.identifyFaces(imagePath, tracer)
         
         caption = HFProcessor.captioningProcess(imagePath, tracer, useLLMCaptionImprovement)
         if caption.startswith("ERROR"):
@@ -172,27 +239,17 @@ class HFProcessor:
             )
             caption = None
         
-        # tracer.addReport(
-        #     ASReport(
-        #         source="HFPROCESSOR PROCESS",
-        #         message=f"Processed image '{imagePath}'.",
-        #         extraData={
-        #             "faces": len(filenames),
-        #             "caption": caption if caption else "No caption generated."
-        #         }
-        #     )
-        # )
+        output = {
+            "figureIDs": figureIDs,
+            "caption": caption
+        }
         
-        # return {
-        #     "faceFiles": filenames,
-        #     "caption": caption
-        # }
-    
-    # @staticmethod
-    # def compare(img1: str, img2: str) -> bool | str:
-    #     output = FaceRecognition.compareImagesFirebase(img1, img2)
-    #     if isinstance(output, str):
-    #         return output
+        tracer.addReport(
+            ASReport(
+                source="HFPROCESSOR PROCESS",
+                message="Processed image '{}'.".format(imagePath),
+                extraData=output
+            )
+        )
         
-    #     result, similarity = output
-    #     return result, similarity
+        return output

@@ -2582,7 +2582,7 @@ class Face(DIRepresentable):
         
         return True
     
-    def addEmbedding(self, embedding: FaceEmbedding, autoSave: bool=False, embedID: str=None) -> bool:
+    def addEmbedding(self, embedding: FaceEmbedding, autoSave: bool=False, embedID: str=None) -> str:
         if not isinstance(embedding, FaceEmbedding):
             raise Exception("FACE ADDEMBEDDING ERROR: 'embedding' must be a FaceEmbedding object.")
         if not self.embedsLoaded:
@@ -2599,7 +2599,7 @@ class Face(DIRepresentable):
         if autoSave:
             self.saveEmbeds()
         
-        return True
+        return embedID
     
     def loadEmbeds(self, matchDBEmbeddings: bool=True) -> bool:
         if Face.embeddingsData is None:
