@@ -15,15 +15,15 @@ def getArtefactImage(filename):
     fileExists = file.exists()
     if isinstance(fileExists, str):
         Logger.log(f"CDN GETARTEFACT ERROR: Failed to check file existence; response: {fileExists}")
-        return JSONRes.new(500, ResType.error, "Something went wrong.")
+        return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
 
     if not fileExists[0]:
-        return JSONRes.new(404, ResType.error, "Requested file not found.")
+        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
 
     fileBytes = file.getBytes()
     if isinstance(fileBytes, str):
         Logger.log(f"CDN GETARTEFACT ERROR: Failed to retrieve file bytes; response: {fileBytes}")
-        return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
+        return JSONRes.new(500, ResType.ERROR, "Failed to retrieve file.")
 
     mime_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
@@ -34,7 +34,7 @@ def getArtefactImage(filename):
         return response
     except Exception as e:
         Logger.log(f"CDN GETARTEFACT ERROR: {e}")
-        return JSONRes.new(500, ResType.error, "Error sending file.")
+        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
 
 @cdnBP.route('/people/<filename>')
@@ -46,15 +46,15 @@ def getFaceImage(filename):
     fileExists = file.exists()
     if isinstance(fileExists, str):
         Logger.log(f"CDN GETFACE ERROR: Failed to check file existence; response: {fileExists}")
-        return JSONRes.new(500, ResType.error, "Something went wrong.")
+        return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
 
     if not fileExists[0]:
-        return JSONRes.new(404, ResType.error, "Requested file not found.")
+        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
 
     fileBytes = file.getBytes()
     if isinstance(fileBytes, str):
         Logger.log(f"CDN GETFACE ERROR: Failed to retrieve file bytes; response: {fileBytes}")
-        return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
+        return JSONRes.new(500, ResType.ERROR, "Failed to retrieve file.")
 
     mime_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
@@ -65,7 +65,7 @@ def getFaceImage(filename):
         return response
     except Exception as e:
         Logger.log(f"CDN GETFACE ERROR: {e}")
-        return JSONRes.new(500, ResType.error, "Error sending file.")
+        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
 @cdnBP.route('/asset/<filename>')
 def getAsset(filename):
@@ -76,15 +76,15 @@ def getAsset(filename):
     fileExists = file.exists()
     if isinstance(fileExists, str):
         Logger.log("CDN GETASSET ERROR: Failed to check file existence; response: {}".format(fileExists))
-        return JSONRes.new(500, ResType.error, "Something went wrong.")
+        return JSONRes.new(500, ResType.ERROR, "Something went wrong.")
     
     if not fileExists[0]:
-        return JSONRes.new(404, ResType.error, "Requested file not found.")
+        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
     
     fileBytes = file.getBytes()
     if isinstance(fileBytes, str):
         Logger.log("CDN GETASSET ERROR: Failed to retrieve file bytes; response: {}".format(fileBytes))
-        return JSONRes.new(500, ResType.error, "Failed to retrieve file.")
+        return JSONRes.new(500, ResType.ERROR, "Failed to retrieve file.")
     
     mime_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
@@ -95,5 +95,5 @@ def getAsset(filename):
         return response
     except Exception as e:
         Logger.log(f"CDN GETASSET ERROR: {e}")
-        return JSONRes.new(500, ResType.error, "Error sending file.")
+        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
