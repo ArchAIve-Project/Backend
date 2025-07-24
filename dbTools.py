@@ -366,21 +366,28 @@ def resetLocalDataFiles():
     
     sys.exit(0)
 
-def removeCategories():
+def removeCategories(cat_name):
     requireDI()
+    print()
+    print("Attempting to remove category: {}".format(cat_name))
 
-    categories = [
-        "Meeting Minutes Grp1",
-        "Meeting Minutes Grp2",
-    ]
-
-    for cat_name in categories:
+    try:
         cat = Category.load(name=cat_name)
-        if cat:
+    except Exception as e:
+        print("Error loading category '{}': {}".format(cat_name, str(e)))
+        return False
+
+    if cat:
+        try:
             cat.destroy()
-            print(f"Category '{cat.name}' removed from the database.")
-        else:
-            print(f"Category '{cat_name}' not found.")
+            print("Category '{}' removed from the database.".format(cat.name))
+            return True
+        except Exception as e:
+            print("Error deleting category '{}': {}".format(cat.name, str(e)))
+            return False
+    else:
+        print("Category '{}' not found.".format(cat_name))
+        return False
             
 def duplicateDummyImages(folder="./dummy", out_folder="./moreDummy"):
     if not os.path.exists(out_folder):
@@ -485,6 +492,17 @@ def populateMoreArtefacts():
 
         cat.save()
         print("Category '{}' saved with {}/{} artefacts.".format(cat.name, added, len(artefact_filenames)))
+        
+    # Create an empty category
+    print("\nCreating an empty category...\n")
+    empty_cat_name = "Empty Category"
+    empty_category = Category.load(name=empty_cat_name)
+    if not empty_category:
+        empty_category = Category(name=empty_cat_name, description="This is an empty category with no artefacts.")
+        empty_category.save()
+        print("Empty category '{}' created.".format(empty_cat_name))
+    else:
+        print("Empty category '{}' already exists.".format(empty_cat_name))
 
     # Create 10 books using mm1.jpg to mm50.jpg, but store artefact IDs, not filenames
     print("\nPopulating database with 10 books using mm1.jpg to mm50.jpg...\n")
@@ -580,7 +598,13 @@ def main(choices: list[int] | None=None):
         elif choice == 9:
             resetLocalDataFiles()
         elif choice == 10:
-            removeCategories()
+            print()
+            print("Enter category names to remove. Type 'done' to finish.")
+            while True:
+                name = input("Category name: ").strip()
+                if name.lower() == "done":
+                    break
+            removeCategories(name)
         elif choice == 11:
             populateMoreArtefacts()
         

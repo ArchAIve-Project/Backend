@@ -4,7 +4,7 @@ from utils import JSONRes, ResType
 import mimetypes, datetime
 from services import Logger
 from models import Category, Book, Artefact
-from decorators import checkSession, cache
+from decorators import checkSession, cache, timeit
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
@@ -14,45 +14,55 @@ def getArtefactImage(artefactId):
     """
     Serve an artefact image from the 'artefacts' store using the artefact ID.
     """
+    # Attempt to load the artefact
     try:
-        # Load artefact by ID
         art = Artefact.load(id=artefactId, includeMetadata=False)
-        if not art:
-            return JSONRes.new(404, ResType.ERROR, "Artefact not found.")
+    except Exception as e:
+        Logger.log("CDN GETARTEFACT ERROR: Failed to load artefact '{}': {}".format(artefactId, e))
+        return JSONRes.new(500, ResType.ERROR, "Error loading artefact.")
 
-        # Retrieve the filename from the artefact
-        filename = art.image
-        if not filename:
-            return JSONRes.new(404, ResType.ERROR, "Artefact has no associated image.")
+    if not art:
+        return JSONRes.new(404, ResType.ERROR, "Artefact not found.")
 
-        # Create File object using the filename and store
+    # Attempt to get image filename
+    filename = art.image
+    if not filename:
+        return JSONRes.new(404, ResType.ERROR, "Artefact has no associated image.")
+
+    # Attempt to create file object
+    try:
         file = File(filename, "artefacts")
+    except Exception as e:
+        Logger.log("CDN GETARTEFACT ERROR: Failed to construct File object '{}': {}".format(filename, e))
+        return JSONRes.ambiguousError()
 
-        # Check if file exists in cloud
-        fileExists = file.exists()
-        if isinstance(fileExists, str):
-            Logger.log("CDN GETARTEFACT ERROR: Failed to check file existence; response: {}".format(fileExists))
-            return JSONRes.ambiguousError()
+    # Attempt to check if file exists in the cloud
+    fileExists = file.exists()
+    if isinstance(fileExists, str):
+        Logger.log("CDN GETARTEFACT ERROR: File existence check returned error string: {}".format(fileExists))
+        return JSONRes.ambiguousError()
+    if not fileExists[0]:
+        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
 
-        if not fileExists[0]:
-            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
-
-        # Generate signed URL and redirect
+    # Attempt to generate signed URL
+    try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
-        if url.startswith("ERROR"):
-            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+    except Exception as e:
+        Logger.log("CDN GETARTEFACT ERROR: Failed to generate signed URL for '{}': {}".format(filename, e))
+        return JSONRes.new(500, ResType.ERROR, "Error generating signed URL.")
 
+    if url.startswith("ERROR"):
+        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+
+    # Attempt to redirect with no-cache headers
+    try:
         res = make_response(redirect(url))
-
-        # Set headers to prevent caching
         res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
         res.headers["Pragma"] = "no-cache"
         res.headers["Expires"] = "0"
-
         return res
-
     except Exception as e:
-        Logger.log("CDN GETARTEFACT ERROR: {}".format(e))
+        Logger.log("CDN GETARTEFACT ERROR: Failed to construct response for artefact '{}': {}".format(artefactId, e))
         return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
 @cdnBP.route('/people/<filename>')
@@ -125,6 +135,7 @@ def getAsset(filename):
 
 @cdnBP.route('/catalogue')
 @checkSession(strict=True)
+@timeit
 @cache
 def getAllCategoriesWithArtefacts():
     """
@@ -136,7 +147,7 @@ def getAllCategoriesWithArtefacts():
     - Loads all books and links each book to its listed artefact IDs (mmIDs).
     - Handles exceptions at a granular level (load calls and lookup failures).
     - Caches the output and requires session authentication.
-
+    
     Response Format:
     ```
     {
@@ -161,6 +172,7 @@ def getAllCategoriesWithArtefacts():
         ]
     }
     """
+
     artefactMap = {}
     categories = []
     books = []
@@ -170,50 +182,47 @@ def getAllCategoriesWithArtefacts():
         all_artefacts = Artefact.load() or []
         artefactMap = {art.id: art for art in all_artefacts}
     except Exception as e:
-        Logger.log("CDN: Failed to load artefacts - {}".format(e))
+        Logger.log(f"CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load artefacts - {e}")
+        return JSONRes.new(500, ResType.ERROR, "Failed to load artefacts.")
 
-    # Load all categories (with artefact references inside each category)
+    # Load all categories
     try:
-        categories = Category.load(withArtefacts=True) or []
+        categories = Category.load() or []
     except Exception as e:
-        Logger.log("CDN: Failed to load categories - {}".format(e))
+        Logger.log(f"CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load categories - {e}")
+        return JSONRes.new(500, ResType.ERROR, "Failed to load categories.")
 
     result = {}
 
-    # Loop through each category and compile its artefact list
+    # Build category -> artefact mapping
     for cat in categories:
-        if not cat.members:
-            continue  # Skip empty categories
-
         artefactsList = []
-        for artefact_id, catArt in cat.members.items():
-            try:
-                art = artefactMap.get(artefact_id)  # Look up the artefact from preloaded map
-                if art:
-                    artefactsList.append({
-                        "id": art.id,
-                        "name": art.name,
-                        "image": art.image,
-                        "description": art.description
-                    })
-            except Exception as e:
-                Logger.log("CDN: Failed to resolve artefact in category {} - {}".format(cat.name, e))
+        if cat.members:
+            for artefact_id, catArt in cat.members.items():
+                try:
+                    art = artefactMap.get(artefact_id)
+                    if art:
+                        artefactsList.append({
+                            "id": art.id,
+                            "name": art.name,
+                            "image": art.image,
+                            "description": art.description
+                        })
+                except Exception as e:
+                    Logger.log(f"CDN: Failed to resolve artefact in category {cat.name} - {e}")
+        result[cat.name] = artefactsList
 
-        if artefactsList:
-            result[cat.name] = artefactsList  # Add category to result if it has artefacts
-
-    # Load all books (which reference artefact IDs)
+    # Load all books
     try:
         books = Book.load() or []
     except Exception as e:
-        Logger.log("CDN: Failed to load books - {}".format(e))
+        Logger.log(f"CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load books - {e}")
+        return JSONRes.new(500, ResType.ERROR, "Failed to load books.")
 
     bookList = []
 
-    # Loop through each book to build its associated artefacts
     for book in books:
         mmDetails = []
-
         for mmID in book.mmIDs:
             try:
                 art = artefactMap.get(mmID)
@@ -223,26 +232,16 @@ def getAllCategoriesWithArtefacts():
                         "name": art.name,
                         "description": art.description
                     })
-                else:
-                    # Artefact not found — fallback to just ID
-                    mmDetails.append({
-                        "id": mmID,
-                        "name": mmID,
-                        "description": ""
-                    })
             except Exception as e:
-                Logger.log("CDN: Failed to resolve mmID {} in book {} - {}".format(mmID, book.id, e))
-
+                Logger.log(f"CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to resolve mmID {mmID} in book {book.id} - {e}")
         bookList.append({
             "id": book.id,
             "title": book.title,
             "subtitle": book.subtitle,
-            "mmArtefacts": mmDetails  # Each book now includes resolved artefacts
+            "mmArtefacts": mmDetails
         })
 
-    # Return structured catalogue of categories and books
     return JSONRes.new(200, ResType.SUCCESS, data={
         "categories": result,
         "books": bookList
     })
-
