@@ -1,7 +1,8 @@
 from flask import Blueprint, send_file, make_response, redirect
 from fm import FileManager, File
 from utils import JSONRes, ResType
-import mimetypes, datetime
+import datetime
+from typing import Dict, List
 from services import Logger
 from models import Category, Book, Artefact
 from decorators import checkSession, cache, timeit
@@ -168,17 +169,17 @@ def getAllCategoriesWithArtefacts():
 
     # Load all artefacts into a dictionary for quick lookup by ID
     try:
-        all_artefacts = Artefact.load() or []
-        artefactMap = {art.id: art for art in all_artefacts}
+        all_artefacts = Artefact.load(includeMetadata=False) or []
+        artefactMap: Dict[str, Artefact] = {art.id: art for art in all_artefacts}
     except Exception as e:
-        Logger.log(f"CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load artefacts - {e}")
+        Logger.log("CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load artefacts - {}".format(e))
         return JSONRes.new(500, ResType.ERROR, "Failed to load artefacts.")
 
     # Load all categories
     try:
-        categories = Category.load() or []
+        categories: List[Category] = Category.load() or []
     except Exception as e:
-        Logger.log(f"CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load categories - {e}")
+        Logger.log("CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load categories - {}".format(e))
         return JSONRes.new(500, ResType.ERROR, "Failed to load categories.")
 
     result = {}
@@ -187,7 +188,7 @@ def getAllCategoriesWithArtefacts():
     for cat in categories:
         artefactsList = []
         if cat.members:
-            for artefact_id, catArt in cat.members.items():
+            for artefact_id, _ in cat.members.items():
                 try:
                     art = artefactMap.get(artefact_id)
                     if art:
@@ -198,15 +199,15 @@ def getAllCategoriesWithArtefacts():
                             "description": art.description
                         })
                 except Exception as e:
-                    Logger.log(f"CDN: Failed to resolve artefact in category {cat.name} - {e}")
+                    Logger.log("CDN: Failed to resolve artefact in category {} - {}".format(cat.name, e))
         result[cat.name] = artefactsList
 
     # Load all books
     try:
-        books = Book.load() or []
+        books: List[Book] = Book.load() or []
     except Exception as e:
-        Logger.log(f"CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load books - {e}")
-        return JSONRes.new(500, ResType.ERROR, "Failed to load books.")
+        Logger.log("CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load books - {}".format(e))
+        return JSONRes.ambiguousError()
 
     bookList = []
 
@@ -222,7 +223,7 @@ def getAllCategoriesWithArtefacts():
                         "description": art.description
                     })
             except Exception as e:
-                Logger.log(f"CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to resolve mmID {mmID} in book {book.id} - {e}")
+                Logger.log("CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to resolve mmID {} in book {} - {}".format(mmID, book.id, e))
         bookList.append({
             "id": book.id,
             "title": book.title,
