@@ -20,7 +20,7 @@ def getArtefactImage(artefactId):
         art = Artefact.load(id=artefactId, includeMetadata=False)
     except Exception as e:
         Logger.log("CDN GETARTEFACT ERROR: Failed to load artefact '{}': {}".format(artefactId, e))
-        return JSONRes.new(500, ResType.ERROR, "Error loading artefact.")
+        return JSONRes.ambiguousError()
 
     if not art:
         return JSONRes.new(404, ResType.ERROR, "Artefact not found.")
@@ -64,14 +64,6 @@ def getFaceImage(filename):
     """
     file = File(filename, "people")
 
-    fileExists = file.exists()
-    if isinstance(fileExists, str):
-        Logger.log("CDN GETFACE ERROR: Failed to check file existence; response: {}".format(fileExists))
-        return JSONRes.ambiguousError()
-
-    if not fileExists[0]:
-        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
-
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
@@ -88,7 +80,7 @@ def getFaceImage(filename):
         return res
     except Exception as e:
         Logger.log("CDN GETFACE ERROR: {}".format(e))
-        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
+        return JSONRes.ambiguousError()
 
 @cdnBP.route('/asset/<filename>')
 @checkSession(strict=True)
@@ -97,15 +89,7 @@ def getAsset(filename):
     Serve a public file from the 'FileStore' store (via /FileStore).
     """    
     file = File(filename, "FileStore")
-
-    fileExists = file.exists()
-    if isinstance(fileExists, str):
-        Logger.log("CDN GETASSET ERROR: Failed to check file existence; response: {}".format(fileExists))
-        return JSONRes.ambiguousError()
-
-    if not fileExists[0]:
-        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
-
+    
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
@@ -122,7 +106,7 @@ def getAsset(filename):
         return res
     except Exception as e:
         Logger.log("CDN GETASSET ERROR: {}".format(e))
-        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
+        return JSONRes.ambiguousError()
 
 @cdnBP.route('/catalogue')
 @checkSession(strict=True)
@@ -173,14 +157,14 @@ def getAllCategoriesWithArtefacts():
         artefactMap: Dict[str, Artefact] = {art.id: art for art in all_artefacts}
     except Exception as e:
         Logger.log("CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load artefacts - {}".format(e))
-        return JSONRes.new(500, ResType.ERROR, "Failed to load artefacts.")
+        return JSONRes.ambiguousError()
 
     # Load all categories
     try:
         categories: List[Category] = Category.load() or []
     except Exception as e:
         Logger.log("CDN GETALLCATEGORIESWITHARTEFACTS ERROR: Failed to load categories - {}".format(e))
-        return JSONRes.new(500, ResType.ERROR, "Failed to load categories.")
+        return JSONRes.ambiguousError()
 
     result = {}
 
