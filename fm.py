@@ -82,7 +82,7 @@ class File:
         Returns:
             str: The filename without the extension.
         """
-        return self.filename.split(".")[0]
+        return os.path.splitext(self.filename)[0]
     
     def represent(self) -> dict:
         """

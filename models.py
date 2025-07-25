@@ -1,4 +1,4 @@
-import torch
+import torch, threading
 from enum import Enum
 from database import DI, DIRepresentable, DIError
 from fm import File, FileManager
@@ -2538,6 +2538,7 @@ class CategoryArtefact(DIRepresentable):
 class Face(DIRepresentable):
     embeddingsData: 'Dict[str, Dict[str, torch.Tensor]] | None' = None
     embeddingsFile: 'File | None' = File("embeddings.pth", "people")
+    embedFileLock = threading.RLock()
     
     def __init__(self, figure: 'Figure | str', embeddings: 'List[FaceEmbedding] | Dict[str, FaceEmbedding]', embedsLoaded: bool=False):
         # Validate embedsLoaded
@@ -2744,12 +2745,13 @@ class Face(DIRepresentable):
     
     @staticmethod
     def loadEmbeddings():
-        Face.ensureEmbeddingsFile()
-        
-        try:
-            Face.embeddingsData = torch.load(Face.embeddingsFile.path(), map_location=Universal.device)
-        except Exception as e:
-            raise Exception("FACE LOADEMBEDDINGS ERROR: Failed to load embeddings data; error: {}".format(e)) from e
+        with Face.embedFileLock:
+            Face.ensureEmbeddingsFile()
+            
+            try:
+                Face.embeddingsData = torch.load(Face.embeddingsFile.path(), map_location=Universal.device)
+            except Exception as e:
+                raise Exception("FACE LOADEMBEDDINGS ERROR: Failed to load embeddings data; error: {}".format(e)) from e
         
         return True
     
@@ -2767,15 +2769,16 @@ class Face(DIRepresentable):
     
     @staticmethod
     def saveEmbeddings():
-        try:
-            torch.save(Face.embeddingsData, Face.embeddingsFile.path())
-            
-            saveResult = FileManager.save(file=Face.embeddingsFile)
-            if isinstance(saveResult, str):
-                raise Exception(saveResult)
-        except Exception as e:
-            raise Exception("FACE SAVEEMBEDDINGS ERROR: Failed to save embeddings data; error: {}".format(e)) from e
-
+        with Face.embedFileLock:
+            try:
+                torch.save(Face.embeddingsData, Face.embeddingsFile.path())
+                
+                saveResult = FileManager.save(file=Face.embeddingsFile)
+                if isinstance(saveResult, str):
+                    raise Exception(saveResult)
+            except Exception as e:
+                raise Exception("FACE SAVEEMBEDDINGS ERROR: Failed to save embeddings data; error: {}".format(e)) from e
+        
         return True
     
     @staticmethod
