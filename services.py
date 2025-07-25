@@ -108,16 +108,16 @@ class AsyncProcessor:
         
         job = None
         if trigger.customAPTrigger != None:
-            job = self.scheduler.add_job(function, trigger.customAPTrigger, args=args, kwargs=kwargs)
+            job = self.scheduler.add_job(function, trigger.customAPTrigger, args=args, kwargs=kwargs, misfire_grace_time=None)
             self.log("Job for '{}' added with custom trigger.".format(function.__name__))
         elif trigger.immediate:
-            job = self.scheduler.add_job(function, args=args, kwargs=kwargs)
+            job = self.scheduler.add_job(function, args=args, kwargs=kwargs, misfire_grace_time=None)
             self.log("Job for '{}' added with immediate trigger.".format(function.__name__))
         elif trigger.type == "date":
-            job = self.scheduler.add_job(function, DateTrigger(run_date=trigger.triggerDate), args=args, kwargs=kwargs)
+            job = self.scheduler.add_job(function, DateTrigger(run_date=trigger.triggerDate), args=args, kwargs=kwargs, misfire_grace_time=None)
             self.log("Job for '{}' added with trigger date: {}.".format(function.__name__, trigger.triggerDate.isoformat()))
         else:
-            job = self.scheduler.add_job(function, 'interval', seconds=trigger.seconds, minutes=trigger.minutes, hours=trigger.hours, args=args, kwargs=kwargs)
+            job = self.scheduler.add_job(function, 'interval', seconds=trigger.seconds, minutes=trigger.minutes, hours=trigger.hours, args=args, kwargs=kwargs, misfire_grace_time=None)
             self.log("Job for '{}' added with trigger: {} seconds, {} minutes, {} hours.".format(function.__name__, trigger.seconds, trigger.minutes, trigger.hours))
             
         return job.id
