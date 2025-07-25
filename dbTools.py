@@ -1,7 +1,7 @@
 import time, pprint, datetime, os, sys, shutil, json
 from services import Universal, ThreadManager, Encryption, Trigger
 from firebase import FireConn
-from models import DI, User, Artefact, Metadata
+from models import DI, User, Artefact, Metadata, Category, Book, CategoryArtefact
 from fm import File, FileManager, FileOps
 from ai import LLMInterface, InteractionContext, Interaction
 from addons import ModelStore, ArchSmith
@@ -52,13 +52,18 @@ def requireLLM():
         SetupStates.llmSetup = True
 
 # Functions:
-# 1. populate 2 users and 5 artefacts
-# 2. create/delete user
-# 3. create/delete artefact
-# 4. process artefact and save
-# 5. wipe DB
-# 6. wipe FM
-# 7. reset local data files
+# 1. Populate DB with 2 users and 5 artefacts
+# 2. Create a new user
+# 3. Delete a user
+# 4. Create a new artefact
+# 5. Delete an artefact
+# 6. Process an artefact and save metadata
+# 7. Wipe DB
+# 8. Wipe FM
+# 9. Reset local data files
+# 10. Remove categories
+# 11. Populate more data (after 1)
+# 0: Exit
 
 def populateDB():
     requireDI()
@@ -123,8 +128,10 @@ def populateDB():
             
             print("Copied file '{}' to artefacts. Save result: {}".format(filename, FileManager.save(file.store, file.filename)))
         
+        description = "Description for artefact {}".format(filename)
+        
         if filename not in currentArtefactImages:
-            art = Artefact(filename, filename, metadata=None)
+            art = Artefact(filename, filename, description=description, metadata=None)
             art.save()
             print("Saved artefact to DB: {}".format(art.name))
     
@@ -359,6 +366,178 @@ def resetLocalDataFiles():
     
     sys.exit(0)
 
+def removeCategories(cat_name):
+    requireDI()
+    print()
+    print("Attempting to remove category: {}".format(cat_name))
+
+    try:
+        cat = Category.load(name=cat_name)
+    except Exception as e:
+        print("Error loading category '{}': {}".format(cat_name, str(e)))
+        return False
+
+    if cat:
+        try:
+            cat.destroy()
+            print("Category '{}' removed from the database.".format(cat.name))
+            return True
+        except Exception as e:
+            print("Error deleting category '{}': {}".format(cat.name, str(e)))
+            return False
+    else:
+        print("Category '{}' not found.".format(cat_name))
+        return False
+            
+def duplicateDummyImages(folder="./dummy", out_folder="./moreDummy"):
+    if not os.path.exists(out_folder):
+        os.makedirs(out_folder)
+
+    # HF duplication
+    hf_sources = [os.path.join(folder, "hf{}.png".format(i)) for i in range(1, 3)]
+    for i in range(3, 51):
+        src = hf_sources[(i - 3) % 2]
+        dst = os.path.join(out_folder, "hf{}.png".format(i))
+        shutil.copyfile(src, dst)
+        print("Created {} from {}".format(dst, os.path.basename(src)))
+
+    # MM duplication
+    mm_sources = [os.path.join(folder, "mm{}.jpg".format(i)) for i in range(1, 4)]
+    for i in range(4, 51):
+        src = mm_sources[(i - 4) % 3]
+        dst = os.path.join(out_folder, "mm{}.jpg".format(i))
+        shutil.copyfile(src, dst)
+        print("Created {} from {}".format(dst, os.path.basename(src)))
+
+def populateMoreArtefacts():
+    requireDI()
+    requireFM()
+
+    print("\nPreparing moreDummy folder...\n")
+    moreDummyPath = os.path.join(os.getcwd(), "moreDummy")
+    if not os.path.exists(moreDummyPath):
+        os.makedirs(moreDummyPath)
+
+    # Check if 50 hf and 50 mm images are present
+    hf_files = ["hf{}.png".format(i) for i in range(1, 51)]
+    mm_files = ["mm{}.jpg".format(i) for i in range(1, 51)]
+    existing_files = set(os.listdir(moreDummyPath))
+
+    hf_count = sum(1 for f in hf_files if f in existing_files)
+    mm_count = sum(1 for f in mm_files if f in existing_files)
+
+    if hf_count < 50 or mm_count < 50:
+        print("Not enough HF/MM images found in 'moreDummy'. Generating from './dummy'...")
+        duplicateDummyImages(folder="./dummy", out_folder=moreDummyPath)
+    else:
+        print("Found 50 HF and 50 MM images in moreDummy.")
+
+    currentArtefacts = Artefact.load()
+    currentArtefactImages = {art.image for art in currentArtefacts}
+
+    # Create artefacts
+    more_mm = ["mm{}.jpg".format(i) for i in range(4, 51)]
+    more_hf = ["hf{}.png".format(i) for i in range(3, 51)]
+    allFiles = more_mm + more_hf
+    newlyAdded = []
+
+    for filename in allFiles:
+        file = File(filename, "artefacts")
+        target_path = file.path()
+        source_path = os.path.join(moreDummyPath, filename)
+
+        if not os.path.isfile(target_path):
+            shutil.copy(source_path, target_path)
+            FileManager.save(file.store, file.filename)
+            print("Copied '{}' to artefacts.".format(filename))
+
+        if filename not in currentArtefactImages:
+            description = "Description for artefact {}".format(filename)
+            art = Artefact(filename, filename, description=description, metadata=None)
+            art.save()
+            newlyAdded.append(filename)
+            print("Saved artefact to DB: {}".format(filename))
+
+    print("\n{} artefacts populated: {}\n".format(len(newlyAdded), ", ".join(newlyAdded)))
+
+    # Create categories for human figures
+    print("Adding categories for human figures...")
+    all_artefacts = Artefact.load()
+    image_to_id = {art.image: art.id for art in all_artefacts}
+    hf_all = ["hf{}.png".format(i) for i in range(1, 51)]
+
+    categories = [
+        ("Human Group 1", hf_all[:30]),
+        ("Human Group 2", hf_all[30:45]),
+        ("Human Group 3", hf_all[45:])
+    ]
+
+    for cat_name, artefact_filenames in categories:
+        cat = Category.load(name=cat_name)
+        if not cat:
+            cat = Category(name=cat_name, description="Category for {}".format(cat_name.lower()))
+
+        added = 0
+        for filename in artefact_filenames:
+            artefact_id = image_to_id.get(filename)
+            if not artefact_id:
+                print("Artefact with image '{}' not found in DB. Skipping.".format(filename))
+                continue
+
+            try:
+                cat.add(artefact_id, reason="Auto-assigned to {}".format(cat_name))
+                added += 1
+            except Exception as e:
+                print("Failed to add '{}' to '{}': {}".format(filename, cat_name, e))
+
+        cat.save()
+        print("Category '{}' saved with {}/{} artefacts.".format(cat.name, added, len(artefact_filenames)))
+        
+    # Create an empty category
+    print("\nCreating an empty category...\n")
+    empty_cat_name = "Empty Category"
+    empty_category = Category.load(name=empty_cat_name)
+    if not empty_category:
+        empty_category = Category(name=empty_cat_name, description="This is an empty category with no artefacts.")
+        empty_category.save()
+        print("Empty category '{}' created.".format(empty_cat_name))
+    else:
+        print("Empty category '{}' already exists.".format(empty_cat_name))
+
+    # Create 10 books using mm1.jpg to mm50.jpg, but store artefact IDs, not filenames
+    print("\nPopulating database with 10 books using mm1.jpg to mm50.jpg...\n")
+    mm_all = ["mm{}.jpg".format(i) for i in range(1, 51)]
+    mm_counts = [15, 10, 5, 5, 5, 5, 4, 3, 1, 0]
+    created = []
+    offset = 0
+
+    for i, count in enumerate(mm_counts):
+        title = "SCCCI Minutes Volume {}".format(i + 1)
+        subtitle = "Auto-generated Volume {}".format(i + 1)
+        mm_filenames = mm_all[offset: offset + count]
+        offset += count
+
+        # Convert mm filenames to artefact IDs
+        mmIDs = []
+        for mm_file in mm_filenames:
+            artefact_id = image_to_id.get(mm_file)
+            if artefact_id:
+                mmIDs.append(artefact_id)
+            else:
+                print("Warning: Artefact ID for '{}' not found, skipping in book '{}'.".format(mm_file, title))
+
+        existing_book = Book.load(title=title)
+        if not existing_book:
+            book = Book(title=title, subtitle=subtitle, mmIDs=mmIDs)
+            book.save()
+            created.append(book)
+            print("Created Book: '{}' with {} MMIDs".format(book.title, len(mmIDs)))
+        else:
+            print("Book already exists: '{}'".format(existing_book.title))
+
+    print("\n{} book(s) created.\n".format(len(created)))
+    return True
+
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
     print("This is a debug script to quickly carry out common tasks.")
@@ -381,12 +560,13 @@ def main(choices: list[int] | None=None):
             print("7. Wipe DB")
             print("8. Wipe FM")
             print("9. Reset local data files")
-            print("0. Exit")
-            print()
+            print("10. Remove categories")
+            print("11. Populate more data (after 1)")
+            print("0: Exit")
         
         try:
             choice = int(input("Enter choice: ")) if choice is None else choice
-            if choice not in range(10):
+            if choice not in range(12):
                 raise Exception()
         except KeyboardInterrupt:
             print("\nExiting...")
@@ -417,6 +597,16 @@ def main(choices: list[int] | None=None):
             wipeFM()
         elif choice == 9:
             resetLocalDataFiles()
+        elif choice == 10:
+            print()
+            print("Enter category names to remove. Type 'done' to finish.")
+            while True:
+                name = input("Category name: ").strip()
+                if name.lower() == "done":
+                    break
+            removeCategories(name)
+        elif choice == 11:
+            populateMoreArtefacts()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)

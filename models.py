@@ -12,7 +12,7 @@ class Artefact(DIRepresentable):
     Artefacts contain metadata and are associated with stored files. This class handles the creation,
     persistence, file management, and metadata binding of artefact objects.
     """
-    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
+    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', description: str=None, public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
         """
         Initializes a new Artefact instance.
 
@@ -36,10 +36,20 @@ class Artefact(DIRepresentable):
                 metadata = Metadata(artefactID=id)
         else:
             metadata = None
+            
+        if description is None:
+            if metadata.isMM():
+                summary = metadata.raw.summary
+                artDescription = summary[:30] + "..." if len(summary) > 30 else summary
+            else:
+                artDescription = None
+        else:
+            artDescription = description
 
         self.id = id
         self.name = name
         self.image = image
+        self.description = artDescription
         self.public = public
         self.created = created
         self.metadata: Metadata | None = metadata
@@ -113,15 +123,17 @@ class Artefact(DIRepresentable):
             'public': self.public,
             'name': self.name,
             'image': self.image,
+            'description': self.description,
             'created': self.created,
             'metadata': self.metadata.represent() if self.metadata is not None else None
         }
     
     def __str__(self):
-        return "Artefact(id='{}', name='{}', image='{}', public={}, created='{}', metadataLoaded={}, metadata={})".format(
+        return "Artefact(id='{}', name='{}', image='{}', description='{}', public={}, created='{}', metadataLoaded={}, metadata={})".format(
             self.id,
             self.name,
             self.image,
+            self.description,
             self.public,
             self.created,
             self.metadataLoaded,
@@ -141,7 +153,8 @@ class Artefact(DIRepresentable):
         Returns:
             Artefact: Constructed artefact object.
         """
-        requiredParams = ['public', 'name', 'image', 'created', 'metadata']
+        
+        requiredParams = ['public', 'name', 'description', 'image', 'created', 'metadata']
         for param in requiredParams:
             if param not in data:
                 if param == 'public':
@@ -156,6 +169,7 @@ class Artefact(DIRepresentable):
         output = Artefact(
             name=data['name'], 
             image=data['image'],
+            description=data['description'],
             metadata=metadata,
             public=data['public'],
             created=data['created'],

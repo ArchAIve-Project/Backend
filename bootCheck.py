@@ -69,6 +69,7 @@ class BootCheck:
         "facenet-pytorch": "facenet-pytorch",
         "uuid": "uuid",
         "transformers": "transformers",
+        "nltk": "nltk",
         "Pympler": "Pympler"
     }
     
