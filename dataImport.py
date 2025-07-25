@@ -5,7 +5,7 @@ from utils import JSONRes, ResType
 from services import Logger, Encryption, Universal, FileOps
 from sessionManagement import checkSession
 from models import Metadata, Artefact, User, Batch, BatchArtefact, BatchProcessingJob
-from fm import FileManager, File
+from fm import FileManager, File, FileUtils
 from services import ThreadManager
 from metagen import MetadataGenerator
 from ingestion import DataImportProcessor
@@ -13,15 +13,9 @@ from services import Logger
 
 dataimportBP = Blueprint('dataimport', __name__, url_prefix="/dataimport")
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}  
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-
-def allowed_file(filename: str) -> bool:
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
 @dataimportBP.route('/upload', methods=['POST'])
-@checkSession(strict=True)
-def upload():
+@checkSession(strict=True, provideUser=True)
+def upload(user : User):
     """
     Handles artefact file uploads.
 
@@ -43,21 +37,19 @@ def upload():
         return JSONRes.new(400, "No files selected.")
 
     fileSaveUpdates = {}
+    sucessfulFiles = []
 
     for file in files:
         if file and file.filename: 
-            # check file type
-            if not allowed_file(file.filename):
+           # Check file type
+            if not FileUtils.allowedFile(file.filename):
                 fileSaveUpdates[file.filename] = "ERROR: File type not allowed."
                 continue
 
-            # check file size
-            file.seek(0, os.SEEK_END)
-            file_length = file.tell()
-            file.seek(0)  # reset pointer for reading later
-
-            if file_length > MAX_FILE_SIZE:
-                fileSaveUpdates[file.filename] = "ERROR: File too large. Max allowed is 5MB."
+            # Check file size
+            validSize = FileUtils.fileSize(file)
+            if not validSize:
+                fileSaveUpdates[file.filename] = "ERROR: File size > 10 MB."
                 continue
            
             # save file locally
@@ -68,19 +60,20 @@ def upload():
             try:
                 file.save(fileObj.path())
             except Exception as e:
-                fileSaveUpdates[file.filename] = "ERROR: Failed to save locally. ({})".format(str(e))
+                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to save file: {}".format(e))
+                fileSaveUpdates[file.filename] = "ERROR: Failed to save file: {}".format(str(e))
                 continue
 
             # sync local to firebase 
             res = FileManager.save(file=fileObj)
             if isinstance(res, str): # if fail
-                Logger.log("DATAIMPORT UPLOAD FILEMANAGER ERROR: Failed to save file to FileManager: {}. ".format(res))
+                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to save file: {}. ".format(res))
                 
                 remove = FileManager.removeLocally(fileObj) 
                 if remove != True:
-                    Logger.log("DATAIMPORT UPLOAD FILEMANAGER ERROR: Failed to   file locally: {}".format(remove))
+                    Logger.log("DATAIMPORT UPLOAD ERROR: Failed to remove file: {}".format(remove))
                 
-                fileSaveUpdates[file.filename] = "ERROR: Failed to upload to FileManager: {}".format(res)
+                fileSaveUpdates[file.filename] = "ERROR: Failed to save file: {}".format(res)
                 continue
 
             # create artefact
@@ -88,17 +81,28 @@ def upload():
             
             try:
                 artefact.save()
-                fileSaveUpdates[file.filename] = "Uploaded successfully to database."
+                sucessfulFiles.append(artefact)
+                fileSaveUpdates[file.filename] = "File uploaded successfully."
 
             except Exception as e:
-                Logger.log("DATAIMPORT UPLOAD ARTEFACT ERROR: Failed to save artefact for {}: {}".format(file.filename, str(e)))
+                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to save artefact for {}: {}".format(file.filename, str(e)))
 
                 FileManager.delete(file=fileObj)
 
                 fileSaveUpdates[file.filename] = "ERROR: Failed to save artefact: {}".format(str(e))
                 continue
+    
+    if not sucessfulFiles:
+        return JSONRes.new(400, "No artefacts were successfully uploaded.", ResType.ERROR, updates=fileSaveUpdates)
+    
+    try:
+        batch = Batch(user.id, batchArtefacts=sucessfulFiles)
+        batch.save()
 
-    return JSONRes.new(200, "Upload results.", ResType.SUCCESS, updates=fileSaveUpdates)
+    except Exception as e:
+        Logger.log("DATAIMPORT UPLOAD ERROR: Failed to create batch: {}".format(e))
+
+    return JSONRes.new(200, "Upload results.", ResType.SUCCESS, updates=fileSaveUpdates, batchID=batch.id)
 
     # @checkSession(strict=True, provideUser=True)
     # accID = session.get('accID') 
