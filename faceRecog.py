@@ -88,21 +88,28 @@ class FaceRecognition:
         return faces
 
     @staticmethod
-    def detect_face_crops(img_path) -> list[Image.Image] | str:
+    def detect_face_crops(img_path, min_size: tuple[int, int]=(60, 60), min_conf=0.9) -> list[Image.Image] | str:
         if not FileOps.exists(os.path.join(os.getcwd(), img_path), 'file'):
             return "ERROR: File does not exist: {}".format(img_path)
         
         try:
             img = Image.open(img_path).convert("RGB")
-            boxes, _ = FaceRecognition.mtcnn.detect(img)
+            boxes, probs = FaceRecognition.mtcnn.detect(img)
             if boxes is None or len(boxes) == 0:
                 return []
             
             cropped_faces = []
-            for box in boxes:
+            for box, prob in zip(boxes, probs):
+                if prob < min_conf:
+                    continue
+                
                 x1, y1, x2, y2 = map(int, box)
-                cropped_face = img.crop((x1, y1, x2, y2))
-                cropped_faces.append(cropped_face)
+                width = x2 - x1
+                height = y2 - y1
+                
+                if width >= min_size[0] and height >= min_size[1]:
+                    cropped_face = img.crop((x1, y1, x2, y2))
+                    cropped_faces.append(cropped_face)
         except Exception as e:
             return "ERROR: Failed to detect face crops: {}".format(e)
         
