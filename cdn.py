@@ -30,29 +30,19 @@ def getArtefactImage(artefactId):
         return JSONRes.new(404, ResType.ERROR, "Artefact has no associated image.")
 
     # Attempt to create file object
-    try:
-        file = File(filename, "artefacts")
-    except Exception as e:
-        Logger.log("CDN GETARTEFACT ERROR: Failed to construct File object '{}': {}".format(filename, e))
-        return JSONRes.ambiguousError()
-
-    # Attempt to check if file exists in the cloud
-    fileExists = file.exists()
-    if isinstance(fileExists, str):
-        Logger.log("CDN GETARTEFACT ERROR: File existence check returned error string: {}".format(fileExists))
-        return JSONRes.ambiguousError()
-    if not fileExists[0]:
-        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+    file = File(filename, "artefacts")
 
     # Attempt to generate signed URL
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
+        if url.startswith("ERROR"):
+            if url == "ERROR: File does not exist.":
+                return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+            else:
+                raise Exception(url)
     except Exception as e:
-        Logger.log("CDN GETARTEFACT ERROR: Failed to generate signed URL for '{}': {}".format(filename, e))
-        return JSONRes.new(500, ResType.ERROR, "Error generating signed URL.")
-
-    if url.startswith("ERROR"):
-        return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+        Logger.log("CDN GETARTEFACT ERROR: Failed to generate signed URL for '{}': {}".format(artefactId, e)) # changed to artefactId
+        return JSONRes.ambiguousError()
 
     # Attempt to redirect with no-cache headers
     try:
@@ -63,7 +53,7 @@ def getArtefactImage(artefactId):
         return res
     except Exception as e:
         Logger.log("CDN GETARTEFACT ERROR: Failed to construct response for artefact '{}': {}".format(artefactId, e))
-        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
+        return JSONRes.ambiguousError()
 
 @cdnBP.route('/people/<filename>')
 @checkSession(strict=True)
@@ -135,7 +125,6 @@ def getAsset(filename):
 
 @cdnBP.route('/catalogue')
 @checkSession(strict=True)
-@timeit
 @cache
 def getAllCategoriesWithArtefacts():
     """
