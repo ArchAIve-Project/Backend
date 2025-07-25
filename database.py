@@ -1,4 +1,4 @@
-import os, sys, json, shutil
+import os, sys, json, threading
 from typing import List, Dict, Any
 from abc import ABC, abstractmethod
 from services import Logger
@@ -144,6 +144,7 @@ class DI:
     failoverStrategy = "comprehensive" if not ('DI_FAILOVER_STRATEGY' in os.environ and os.environ.get('DI_FAILOVER_STRATEGY') == 'efficient') else 'efficient' # "comprehensive" or "efficient"
     syncStatus = True
     unsyncedRefs: List[Ref] = []
+    _dataFileLock = threading.Lock()
     
     @staticmethod
     def setup():
@@ -184,9 +185,10 @@ class DI:
         '''
         Creates a `DI.localFile` if it does not exist.
         '''
-        if not os.path.isfile(os.path.join(os.getcwd(), DI.localFile)):
-            with open(DI.localFile, "w") as f:
-                json.dump({}, f)
+        with DI._dataFileLock:
+            if not os.path.isfile(os.path.join(os.getcwd(), DI.localFile)):
+                with open(DI.localFile, "w") as f:
+                    json.dump({}, f)
         
         return
 
@@ -214,74 +216,75 @@ class DI:
         
         dumpRequired = False
         try:
-            localData = None
-            with open(DI.localFile, "r") as f:
-                localData = json.load(f)
-            
-            if len(ref.subscripts) == 0:
-                # Root ref
-                dumpRequired = True
-                if payload == None:
-                    localData = {}
-                elif localData != payload:
-                    localData = payload
-            else:
-                # Non-root ref
-                targetDataPointer = localData
-                referenceNotFound = False
-                try:
-                    for subscriptIndex in range(len(ref.subscripts)):
-                        targetDataPointer = targetDataPointer[ref.subscripts[subscriptIndex]]
-                        if targetDataPointer == None:
-                            referenceNotFound = True
-                            break
-                except KeyError:
-                    referenceNotFound = True
+            with DI._dataFileLock:
+                localData = None
+                with open(DI.localFile, "r") as f:
+                    localData = json.load(f)
                 
-                if referenceNotFound and payload == None:
-                    # print("Case 0")
-                    return
-                elif not referenceNotFound and payload == None:
-                    # Data exists at local reference but payload is None
+                if len(ref.subscripts) == 0:
+                    # Root ref
                     dumpRequired = True
-                    # print("Case 1")
+                    if payload == None:
+                        localData = {}
+                    elif localData != payload:
+                        localData = payload
+                else:
+                    # Non-root ref
                     targetDataPointer = localData
+                    referenceNotFound = False
+                    try:
+                        for subscriptIndex in range(len(ref.subscripts)):
+                            targetDataPointer = targetDataPointer[ref.subscripts[subscriptIndex]]
+                            if targetDataPointer == None:
+                                referenceNotFound = True
+                                break
+                    except KeyError:
+                        referenceNotFound = True
                     
-                    # Anchor on parent ref of target ref and update child ref subscripted on targetDataPointer (thus updating localData)
-                    for subscriptIndex in range(len(ref.subscripts) - 1):
-                        targetDataPointer = targetDataPointer[ref.subscripts[subscriptIndex]]
-                    targetDataPointer[ref.subscripts[-1]] = None
-                elif referenceNotFound and payload != None:
-                    # Local reference does not exist but payload is not None
-                    dumpRequired = True
-                    # print("Case 2")
-                    
-                    # Create parent branches, if they don't already exist. For the last subscript, set the payload.
-                    targetDataPointer = localData
-                    for subscriptIndex in range(len(ref.subscripts)):
-                        if subscriptIndex == (len(ref.subscripts) - 1):
-                            targetDataPointer[ref.subscripts[subscriptIndex]] = payload
-                        elif ref.subscripts[subscriptIndex] not in targetDataPointer or targetDataPointer[ref.subscripts[subscriptIndex]] == None:
-                            targetDataPointer[ref.subscripts[subscriptIndex]] = {}
+                    if referenceNotFound and payload == None:
+                        # print("Case 0")
+                        return
+                    elif not referenceNotFound and payload == None:
+                        # Data exists at local reference but payload is None
+                        dumpRequired = True
+                        # print("Case 1")
+                        targetDataPointer = localData
                         
-                        targetDataPointer = targetDataPointer[ref.subscripts[subscriptIndex]]
-                    
-                elif targetDataPointer != payload:
-                    # Local reference exists but data does not match with the payload
-                    dumpRequired = True
-                    # print("Case 3")
-                    targetDataPointer = localData
-                    
-                    # Anchor on parent ref of target ref and update child ref subscripted on targetDataPointer (thus updating localData)
-                    for subscriptIndex in range(len(ref.subscripts) - 1):
-                        targetDataPointer = targetDataPointer[ref.subscripts[subscriptIndex]]
-                    targetDataPointer[ref.subscripts[-1]] = payload
-            
-            if dumpRequired:
-                with open(DI.localFile, "w") as f:
-                    json.dump(localData, f, indent=4)
+                        # Anchor on parent ref of target ref and update child ref subscripted on targetDataPointer (thus updating localData)
+                        for subscriptIndex in range(len(ref.subscripts) - 1):
+                            targetDataPointer = targetDataPointer[ref.subscripts[subscriptIndex]]
+                        targetDataPointer[ref.subscripts[-1]] = None
+                    elif referenceNotFound and payload != None:
+                        # Local reference does not exist but payload is not None
+                        dumpRequired = True
+                        # print("Case 2")
+                        
+                        # Create parent branches, if they don't already exist. For the last subscript, set the payload.
+                        targetDataPointer = localData
+                        for subscriptIndex in range(len(ref.subscripts)):
+                            if subscriptIndex == (len(ref.subscripts) - 1):
+                                targetDataPointer[ref.subscripts[subscriptIndex]] = payload
+                            elif ref.subscripts[subscriptIndex] not in targetDataPointer or targetDataPointer[ref.subscripts[subscriptIndex]] == None:
+                                targetDataPointer[ref.subscripts[subscriptIndex]] = {}
+                            
+                            targetDataPointer = targetDataPointer[ref.subscripts[subscriptIndex]]
+                        
+                    elif targetDataPointer != payload:
+                        # Local reference exists but data does not match with the payload
+                        dumpRequired = True
+                        # print("Case 3")
+                        targetDataPointer = localData
+                        
+                        # Anchor on parent ref of target ref and update child ref subscripted on targetDataPointer (thus updating localData)
+                        for subscriptIndex in range(len(ref.subscripts) - 1):
+                            targetDataPointer = targetDataPointer[ref.subscripts[subscriptIndex]]
+                        targetDataPointer[ref.subscripts[-1]] = payload
                 
-                # print("Dumped data '{}' to '{}'".format(payload, ref))
+                if dumpRequired:
+                    with open(DI.localFile, "w") as f:
+                        json.dump(localData, f, indent=4)
+                    
+                    # print("Dumped data '{}' to '{}'".format(payload, ref))
         except Exception as e:
             Logger.log("DI EFFICIENTFAILOVER WARNING: Failed to write data object to ref '{}' for efficient local failover; error: {}".format(ref, e))
     
@@ -307,8 +310,9 @@ class DI:
         data = None
         
         try:
-            with open(DI.localFile, "r") as f:
-                data = json.load(f)
+            with DI._dataFileLock:
+                with open(DI.localFile, "r") as f:
+                    data = json.load(f)
         except Exception as e:
             return DIError("DI LOADLOCAL ERROR: Failed to load JSON data from file; error: {}".format(e))
         

@@ -27,6 +27,7 @@ class EnvVariable:
             EnvVariable("DEBUG_MS_AUTOLOAD", True, False),
             EnvVariable("FM_DEBUG_MODE", True, False),
             EnvVariable("DECORATOR_DEBUG_MODE", True, False),
+            EnvVariable("DB_DEBUG_MODE", True, False),
             EnvVariable("ARCHSMITH_ENABLED", True, True),
             EnvVariable("API_KEY", False, True),
             EnvVariable("SECRET_KEY", False, True),
@@ -68,7 +69,8 @@ class BootCheck:
         "facenet-pytorch": "facenet-pytorch",
         "uuid": "uuid",
         "transformers": "transformers",
-        "nltk": "nltk"
+        "nltk": "nltk",
+        "Pympler": "Pympler"
     }
     
     @staticmethod

@@ -1,4 +1,4 @@
-import os, shutil, json, base64, random, datetime, uuid, functools
+import os, shutil, json, base64, random, datetime, uuid, functools, threading
 from enum import Enum
 from typing import List, Dict
 from dotenv import load_dotenv
@@ -348,6 +348,7 @@ class Universal:
         
 class Logger:
     file = "logs.txt"
+    _persist_lock = threading.Lock()
     
     '''## Intro
     A class offering silent and quick logging services.
@@ -383,16 +384,17 @@ class Logger:
 
     @staticmethod
     def log(message, debugPrintExplicitDeny=False):
-        if "DEBUG_MODE" in os.environ and os.environ["DEBUG_MODE"] == 'True' and (not debugPrintExplicitDeny):
-            print("LOG: {}".format(message))
-        if Logger.checkPermission():
-            try:
-                with open(Logger.file, "a") as f:
-                    f.write("{}UTC {}\n".format(Universal.utcNowString(), message))
-            except Exception as e:
-                print("LOGGER LOG ERROR: Failed to log message. Error: {}".format(e))
-        
-        return
+        with Logger._persist_lock:
+            if "DEBUG_MODE" in os.environ and os.environ["DEBUG_MODE"] == 'True' and (not debugPrintExplicitDeny):
+                print("LOG: {}".format(message))
+            if Logger.checkPermission():
+                try:
+                    with open(Logger.file, "a") as f:
+                        f.write("{}UTC {}\n".format(Universal.utcNowString(), message))
+                except Exception as e:
+                    print("LOGGER LOG ERROR: Failed to log message. Error: {}".format(e))
+            
+            return
     
     @staticmethod
     def destroyAll():

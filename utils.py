@@ -1,6 +1,12 @@
 from typing import List, Dict, Any
 from enum import Enum
+from pympler.asizeof import asizeof as sizeOf
 from flask import jsonify
+
+class Memory:
+    @staticmethod
+    def getSize(anyObject):
+        return sizeOf(anyObject)
 
 class Ref:
     illegalChars = ['.', '#', '$', '[', ']', '/']
