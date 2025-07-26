@@ -1,13 +1,11 @@
-import os, time
-from werkzeug.utils import secure_filename
-from flask import Blueprint, request, redirect, url_for, session
+import os
+from flask import Blueprint, request
 from utils import JSONRes, ResType
-from services import Logger, Encryption, Universal, FileOps
+from services import Logger, Universal, FileOps
 from sessionManagement import checkSession
-from models import Metadata, Artefact, User, Batch, BatchArtefact, BatchProcessingJob
+from models import Artefact, User, Batch, BatchProcessingJob
 from fm import FileManager, File
 from services import ThreadManager
-from metagen import MetadataGenerator
 from ingestion import DataImportProcessor
 from services import Logger
 
@@ -75,7 +73,7 @@ def upload(user : User):
                 file.save(fileObj.path())
             except Exception as e:
                 Logger.log("DATAIMPORT UPLOAD ERROR: Failed to save file: {}".format(e))
-                fileSaveUpdates[file.filename] = "ERROR: Failed to save file: {}".format(str(e))
+                fileSaveUpdates[file.filename] = "ERROR: Failed to save file."
                 continue
 
             # Sync local to firebase 
@@ -87,7 +85,7 @@ def upload(user : User):
                 if remove != True:
                     Logger.log("DATAIMPORT UPLOAD ERROR: Failed to remove file: {}".format(remove))
                 
-                fileSaveUpdates[file.filename] = "ERROR: Failed to save file: {}".format(res)
+                fileSaveUpdates[file.filename] = "ERROR: Failed to save file."
                 continue
 
             # Create artefact
@@ -103,7 +101,7 @@ def upload(user : User):
 
                 FileManager.delete(file=fileObj)
 
-                fileSaveUpdates[file.filename] = "ERROR: Failed to save artefact: {}".format(str(e))
+                fileSaveUpdates[file.filename] = "ERROR: Failed to save artefact."
                 continue
     
     if not sucessfulFiles:
@@ -165,7 +163,7 @@ def confirm(user: User):
 @checkSession(strict=True)
 def getAllBatches():
     try:
-        batches = Batch.load()  # Assuming returns list of all batches
+        batches = Batch.load()
         if not batches:
             return JSONRes.new(200, "No batches found.")
 
@@ -218,44 +216,72 @@ def cancelBatch(user: User, batchID: str):
 @dataimportBP.route('/batches/<batchID>/delete', methods=['DELETE'])
 @checkSession(strict=True, provideUser=True)
 def deleteBatch(user: User, batchID: str):
+    """
+    Deletes a batch and its artefacts.
+
+    For each artefact:
+    - Attempts to delete from FileManager
+    - Attempts to delete DB record
+    - Logs and records errors if any step fails
+
+    Returns a summary of deletion results per artefact and batchID.
+    """
     try:
-        # Load batch with artefacts
         batch = Batch.load(id=batchID, withArtefacts=True)
         if not batch:
-            return JSONRes.new(404, "Batch not found.")
+            return JSONRes.new(404, "Batch {} not found.".format(batchID))
 
         if batch.userID != user.id:
             return JSONRes.unauthorised()
 
-        # Delete artefacts first
-        failures = []
-        for artefactID in getattr(batch, "artefacts", []):
-            try:
-                artefact = Artefact.load(id=artefactID) 
-                if not artefact:
-                    return JSONRes.new(404, "Artefact {} not found.".format(artefactID))
+        deletionResults = {}
+        artefacts = getattr(batch, "artefacts", [])
 
+        for artefactRef in artefacts:
+            artefactID = artefactRef if isinstance(artefactRef, str) else getattr(artefactRef, 'id', None)
+            if not artefactID:
+                deletionResults["unknown_artefact"] = "Skipped invalid artefact reference with no ID."
+                continue
+
+            try:
+                artefact = artefactRef if isinstance(artefactRef, Artefact) else Artefact.load(id=artefactID)
+                if not artefact:
+                    deletionResults[artefactID] = "ERROR: Artefact not found."
+                    continue
+
+                # Delete file from FileManager
                 res = artefact.fmDelete()
                 if res is not True:
-                    return JSONRes.new(500, "Failed to delete artefact {}: {}".format(artefactID, res))
+                    deletionResults[artefactID] = "ERROR: Failed to delete file."
+                    continue
 
-                artefact.destroy()
+                # Delete DB record
+                try:
+                    artefact.destroy()
+                    deletionResults[artefactID] = "Artefact deleted successfully."
+
+                except Exception as e:
+                    Logger.log("DATAIMPORT DELETE ERROR: Failed to delete artefact DB record {}: {}".format(artefactID, e))
+                    deletionResults[artefactID] = "ERROR: Failed to delete artefact DB record."
 
             except Exception as e:
-                Logger.log("DATAIMPORT DELETE ERROR: Failed to delete artefact {}: {}".format(artefact.id, e))
-                failures.append({"artefactID": artefact.id, "error": str(e)})
+                Logger.log("DATAIMPORT DELETE ERROR: Failed to delete artefact {}: {}".format(artefactID, e))
+                deletionResults[artefactID] = "ERROR: Unexpected failure during artefact deletion."
 
-        # Delete the batch itself
+        # Attempt to delete the batch
         try:
             batch.destroy()
+            deletionResults["batch"] = "Batch deleted successfully."
         except Exception as e:
-            Logger.log("DATAIMPORT DELETE ERROR: Failed to delete batch {}: {}".format(batch.id, e))
-            failures.append({"batchID": batch.id, "error": str(e)})
+            Logger.log("DATAIMPORT DELETE ERROR: Failed to delete batch {}: {}".format(batchID, e))
+            deletionResults["batch"] = "ERROR: Failed to delete batch."
 
-        if failures:
-            return JSONRes.new(207, "Batch {} deleted with some errors.".format(batchID), failures=failures, batchID=batchID)
+        # Determine overall response
+        hasErrors = any("ERROR" in msg for msg in deletionResults.values())
+        if hasErrors:
+            return JSONRes.new(207, "Batch {} deletion partially failed.".format(batchID), updates=deletionResults, batchID=batchID)
 
-        return JSONRes.new(200, "Batch {} and artefacts deleted.".format(batchID))
+        return JSONRes.new(200, "Batch {} and all artefacts deleted.".format(batchID), updates=deletionResults, batchID=batchID)
 
     except Exception as e:
         Logger.log("DATAIMPORT DELETE ERROR: {}".format(e))
