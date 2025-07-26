@@ -6,7 +6,7 @@ from typing import Dict, List
 from services import Logger
 from models import Category, Book, Artefact
 from decorators import cache, timeit
-from sessionManagement import checkSession, cache, timeit
+from sessionManagement import checkSession
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
