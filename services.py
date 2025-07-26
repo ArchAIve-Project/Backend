@@ -602,5 +602,5 @@ class FileOps:
 
             return True
         
-        except Exception as e:
+        except:
             return False
