@@ -1,3 +1,4 @@
+from database import DI, DIRepresentable, DIError
 from userModels import User
 from artefactModels import Artefact, Metadata, MMData, HFData
 from collectionModels import Book, Batch, BatchProcessingJob, BatchArtefact, Category, CategoryArtefact
