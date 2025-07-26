@@ -2682,6 +2682,15 @@ class Face(DIRepresentable):
         }
     
     def save(self, embeds=True):
+        """Save the Face object and its embeddings.
+
+        Args:
+            embeds (bool, optional): Whether to save the embeddings. Defaults to True.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         DI.save(self.represent(), self.originRef)
         
         if not self.embedsLoaded and embeds:
@@ -2692,6 +2701,22 @@ class Face(DIRepresentable):
         return True
     
     def addEmbedding(self, embedding: FaceEmbedding, autoSave: bool=False, embedID: str=None) -> str:
+        """Add an embedding to the face.
+
+        Args:
+            embedding (FaceEmbedding): The embedding to add.
+            autoSave (bool, optional): Whether to automatically save changes with `self.saveEmbeds()`. Defaults to False.
+            embedID (str, optional): The ID to assign to the embedding. Defaults to None.
+
+        Raises:
+            Exception: If the embedding is not a FaceEmbedding object.
+            Exception: If the embeddings are not loaded.
+            Exception: If the embedding ID already exists.
+
+        Returns:
+            str: The ID assigned to the embedding.
+        """
+        
         if not isinstance(embedding, FaceEmbedding):
             raise Exception("FACE ADDEMBEDDING ERROR: 'embedding' must be a FaceEmbedding object.")
         if not self.embedsLoaded:
@@ -2711,6 +2736,15 @@ class Face(DIRepresentable):
         return embedID
     
     def loadEmbeds(self, matchDBEmbeddings: bool=True) -> bool:
+        """Load embeddings for the face.
+
+        Args:
+            matchDBEmbeddings (bool, optional): Whether to match embeddings with the database, i.e remove embeddings that are not found in the database. Defaults to True.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         if Face.embeddingsData is None:
             Face.loadEmbeddings()
         
@@ -2735,6 +2769,15 @@ class Face(DIRepresentable):
         return True
     
     def saveEmbeds(self):
+        """Save the embeddings for the face to `Face.embeddingsFile`.
+
+        Raises:
+            Exception: If the embeddings are not loaded.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         if not self.embedsLoaded:
             raise Exception("FACE SAVEEMBEDS ERROR: Embeddings are not loaded; call loadEmbeds() first.")
         
@@ -2747,6 +2790,12 @@ class Face(DIRepresentable):
         return True
     
     def offloadEmbeds(self):
+        """Offload the embeddings for the face, i.e clear them from memory. Will set `embedsLoaded` to False.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         for embed in self.embeddings.values():
             embed.value = None
         
@@ -2754,6 +2803,15 @@ class Face(DIRepresentable):
         return True
     
     def destroy(self, embeds: bool=True):
+        """Destroy the face and its embeddings data from the database and/or the embeddings file.
+
+        Args:
+            embeds (bool, optional): Whether to destroy the embeddings data from `Face.embeddingsFile`. Defaults to True.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         DI.save(None, self.originRef)
         
         if embeds:
@@ -2766,6 +2824,16 @@ class Face(DIRepresentable):
         return True
     
     def destroyEmbedding(self, embedID: str, includingValue: bool=True):
+        """Destroy an embedding from the face from the database and/or the embeddings file.
+
+        Args:
+            embedID (str): The ID of the embedding to destroy.
+            includingValue (bool, optional): Whether to destroy the embedding from `Face.embeddingsFile`. Defaults to True (recommended).
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         if embedID in self.embeddings:
             del self.embeddings[embedID]
         
@@ -2775,6 +2843,19 @@ class Face(DIRepresentable):
         return True
     
     def reload(self, withEmbeddings: bool=True, matchDBEmbeddings: bool=True):
+        """Reload the face data from the database and/or the embeddings file.
+
+        Args:
+            withEmbeddings (bool, optional): Whether to load the embeddings data as well (impacts `embedsLoaded`). Defaults to True.
+            matchDBEmbeddings (bool, optional): Whether to match the embeddings with the database. Defaults to True.
+
+        Raises:
+            Exception: If any part of the reload process fails, such as DI load errors or unexpected data formats.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
             raise Exception("FACE RELOAD ERROR: DIError occurred: {}".format(data))
@@ -2794,6 +2875,18 @@ class Face(DIRepresentable):
     
     @staticmethod
     def rawLoad(figureID: str, data: dict, withEmbeddings: bool=True, matchDBEmbeddings: bool=True) -> 'Face':
+        """Load a Face object from raw dictionary and embeddings data.
+
+        Args:
+            figureID (str): The ID of the figure.
+            data (dict): The raw database dictionary to load from.
+            withEmbeddings (bool, optional): Whether to load the embeddings data as well from `Face.embeddingsFile` (impacts `embedsLoaded`). Defaults to True.
+            matchDBEmbeddings (bool, optional): Whether to match the embeddings with the database. Defaults to True.
+
+        Returns:
+            Face: The loaded Face object.
+        """
+        
         dbEmbeds: Dict[str, Dict[str, str]] = data.get('embeddings', {})
         
         objectEmbeddings: Dict[str, FaceEmbedding] = {}
@@ -2814,6 +2907,19 @@ class Face(DIRepresentable):
 
     @staticmethod
     def load(figure: 'Figure | str', withEmbeddings: bool=True, matchDBEmbeddings: bool=True) -> 'Face | None':
+        """Load a Face object from the database and/or the embeddings file given a figure object or ID.
+
+        Args:
+            figure (Figure | str): The figure object or it's identifier to load the `Face` for.
+            withEmbeddings (bool, optional): Whether to load the embeddings data as well from `Face.embeddingsFile` (impacts `embedsLoaded`). Defaults to True.
+            matchDBEmbeddings (bool, optional): Whether to match the embeddings with the database. Defaults to True.
+
+        Raises:
+            Exception: If any part of the loading process fails.
+
+        Returns: `Face | None`: The loaded Face object or `None` if not found.
+        """
+        
         figureID = figure.id if isinstance(figure, Figure) else figure
         
         data = DI.load(Face.ref(figureID))
@@ -2837,6 +2943,18 @@ class Face(DIRepresentable):
     
     @staticmethod
     def ensureEmbeddingsFile():
+        """Ensures that an embeddings file exists in the `people` FileManager store and is ready for use.
+        
+        Sets up a blank file if it does not exist and saves.
+
+        Raises:
+            Exception: If a `FileManager` existence check for `Face.embeddingsFile` fails.
+            Exception: If `FileManager.prepFile` couldn't prepare the embeddings file for local use.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         fileExists = Face.embeddingsFile.exists()
         
         if isinstance(fileExists, str):
@@ -2853,6 +2971,17 @@ class Face(DIRepresentable):
     
     @staticmethod
     def loadEmbeddings():
+        """Loads all embeddings data into memory at `Face.embeddingsData` from the `Face.embeddingsFile`.
+        
+        For thread-safety, this operation uses a re-entrant lock (`Face.embedFileLock`).
+
+        Raises:
+            Exception: If any part of the loading process fails.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         with Face.embedFileLock:
             Face.ensureEmbeddingsFile()
             
@@ -2865,6 +2994,18 @@ class Face(DIRepresentable):
     
     @staticmethod
     def offloadEmbeddings(includingFile: bool=False):
+        """Offloads embeddings data from memory and optionally from the `people` FileManager store.
+
+        Args:
+            includingFile (bool, optional): If True, offloads `Face.embeddingsFile` from the local filesystem as well. Defaults to False.
+
+        Raises:
+            Exception: If `includingFile` and `FileManager.offload` fails.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         if Face.embeddingsData != None:
             Face.embeddingsData = None
         
@@ -2877,6 +3018,17 @@ class Face(DIRepresentable):
     
     @staticmethod
     def saveEmbeddings():
+        """Saves all embeddings data from `Face.embeddingsData` to the `Face.embeddingsFile`. Embeddings data must be loaded first.
+        
+        For thread-safety, this operation uses a re-entrant lock (`Face.embedFileLock`).
+
+        Raises:
+            Exception: If any part of the saving process fails, such as if `Face.embeddingsData` is `None`.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         if Face.embeddingsData is None:
             raise Exception("FACE SAVEEMBEDDINGS ERROR: Embeddings data is not loaded; call Face.loadEmbeddings() first.")
         
@@ -2893,7 +3045,18 @@ class Face(DIRepresentable):
         return True
     
     @staticmethod
-    def extractEmbeddings(figure: 'Figure | str'):
+    def extractEmbeddings(figure: 'Figure | str') -> 'Dict[str, torch.Tensor] | None':
+        """Extracts all embeddings for a given figure. Embeddings data must be loaded first.
+
+        Args:
+            figure (Figure | str): The figure object or its ID.
+
+        Raises:
+            Exception: If an invalid `figure` is provided or if `Face.embeddingsData` is not loaded.
+
+        Returns: `Dict[str, torch.Tensor] | None`
+        """
+        
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
             raise Exception("FACE EXTRACTEMBEDDINGS ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
@@ -2906,7 +3069,19 @@ class Face(DIRepresentable):
         return Face.embeddingsData.get(figureID, None)
     
     @staticmethod
-    def extractEmbedding(figure: 'Figure | str', embeddingID: str):
+    def extractEmbedding(figure: 'Figure | str', embeddingID: str) -> 'torch.Tensor | None':
+        """Extracts a specific embedding for a given figure. Embeddings data must be loaded first.
+
+        Args:
+            figure (Figure | str): The figure object or its ID.
+            embeddingID (str): The ID of the embedding to extract.
+
+        Raises:
+            Exception: If an invalid `figure` or `embeddingID` is provided, or if `Face.embeddingsData` is not loaded.
+
+        Returns: `torch.Tensor | None`: The extracted embedding tensor or None if not found.
+        """
+        
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
             raise Exception("FACE EXTRACTEMBEDDING ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
@@ -2920,6 +3095,21 @@ class Face(DIRepresentable):
     
     @staticmethod
     def setEmbeddings(figure: 'Figure | str', embeddings: Dict[str, torch.Tensor]):
+        """Sets the embeddings for a given figure. Embeddings data must be loaded first.
+        
+        Warning: This operation modifies in-memory data only; persist changes by calling `Face.saveEmbeddings()`.
+
+        Args:
+            figure (Figure | str): The figure object or its ID.
+            embeddings (Dict[str, torch.Tensor]): A dictionary of embeddings to set, keyed by unique IDs.
+
+        Raises:
+            Exception: If an invalid `figure` or `embeddings` is provided, or if `Face.embeddingsData` is not loaded.
+        
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
             raise Exception("FACE SETEMBEDDINGS ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
@@ -2935,6 +3125,22 @@ class Face(DIRepresentable):
     
     @staticmethod
     def setEmbedding(figure: 'Figure | str', embeddingID: str, embedding: torch.Tensor):
+        """Sets a specific embedding for a given figure. Embeddings data must be loaded first.
+        
+        Warning: This operation modifies in-memory data only; persist changes by calling `Face.saveEmbeddings()`.
+
+        Args:
+            figure (Figure | str): The figure object or its ID.
+            embeddingID (str): The ID of the embedding to set.
+            embedding (torch.Tensor): The embedding tensor to set.
+
+        Raises:
+            Exception: If an invalid `figure`, `embeddingID`, or `embedding` is provided, or if `Face.embeddingsData` is not loaded.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
             raise Exception("FACE SETEMBEDDING ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
@@ -2954,6 +3160,20 @@ class Face(DIRepresentable):
     
     @staticmethod
     def deleteFigure(figure: 'Figure | str'):
+        """Deletes a figure from embeddings data. Embeddings data must be loaded first.
+        
+        Warning: This operation modifies in-memory data only; persist changes by calling `Face.saveEmbeddings()`.
+
+        Args:
+            figure (Figure | str): The figure object or its ID.
+
+        Raises:
+            Exception: If an invalid `figure` is provided, or if `Face.embeddingsData` is not loaded.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
             raise Exception("FACE DELETEFIGURE ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
@@ -2968,6 +3188,21 @@ class Face(DIRepresentable):
     
     @staticmethod
     def deleteEmbedding(figure: 'Figure | str', embeddingID: str):
+        """Deletes an embedding from a figure's embeddings data. Embeddings data must be loaded first.
+        
+        Warning: This operation modifies in-memory data only; persist changes by calling `Face.saveEmbeddings()`.
+
+        Args:
+            figure (Figure | str): The figure object or its ID.
+            embeddingID (str): The ID of the embedding to delete.
+
+        Raises:
+            Exception: If an invalid `figure` or `embeddingID` is provided, or if `Face.embeddingsData` is not loaded.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         figureID = figure.id if isinstance(figure, Figure) else figure
         if not isinstance(figureID, str):
             raise Exception("FACE DELETEEMBEDDING ERROR: 'figure' must be a Figure object or a string representing the figure ID.")
