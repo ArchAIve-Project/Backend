@@ -79,8 +79,8 @@ def getFaceImage(filename):
         
         return res
     except Exception as e:
-        Logger.log("CDN GETFACE ERROR: {}".format(e))
-        return JSONRes.ambiguousError()
+        Logger.log(f"CDN GETFACE ERROR: {e}")
+        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
 
 @cdnBP.route('/asset/<filename>')
 @checkSession(strict=True)
