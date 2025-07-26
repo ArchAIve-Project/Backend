@@ -2536,11 +2536,119 @@ class CategoryArtefact(DIRepresentable):
         return Ref("categories", categoryID, "members", artefactID)
 
 class Face(DIRepresentable):
+    """Represents a collection of face embeddings associated with a figure, dubbed as a `Face`.
+    
+    This class sits at the intersection of `DI`, `FileManager` and the facial recognition and detection systems in `faceRecog.py`.
+    While having representations for each, individual embedding in the database (`origin` and `added`),
+    the model also setups, loads and saves actual `torch` embedding tensors into an `embeddings.pth` (`Face.embeddingsFile`) file in the `people` FileManager store.
+    
+    Thus, `Face` is a collection of ID-keyed `FaceEmbedding` objects that are populated from 2 data points:
+    1. Torch-compatible embeddings file in the `people` store that is backed up by `FileManager`.
+    2. The `DatabaseInterface` (DI) NoSQL database that stores non-numerical attributes for each embedding,
+    such as `origin` (the image name of the artefact where the embedding was extracted from a face crop) and `added` (the timestamp that the embedding was created).
+    
+    Attributes:
+        embeddings (Dict[str, FaceEmbedding]): A dictionary mapping embedding IDs to FaceEmbedding objects.
+        embedsLoaded (bool): Indicates whether the embeddings have been loaded from the file.
+        figureID (str): The ID of the figure associated with this Face.
+        originRef (Ref): The reference object for database operations, pointing to the figure's Face
+    
+    Static Attributes:
+        embeddingsData (Dict[str, Dict[str, torch.Tensor]] | None): Cached embeddings data loaded from the embeddings file.
+        embeddingsFile (File): The file where embeddings are stored, managed by FileManager.
+        embedFileLock (threading.RLock): A reentrant lock for thread-safe access to the embeddings file. **Should not be used outside of this class**.
+    
+    Methods:
+        __init__(figure, embeddings, embedsLoaded=False):
+            Initializes a Face instance with a figure and embeddings.
+        represent():
+            Returns a dictionary representation of the Face for serialization.
+        save(embeds=True):
+            Saves the Face to the database and optionally saves embeddings to the embeddings file.
+        addEmbedding(embedding, autoSave=False, embedID=None):
+            Adds a FaceEmbedding to the Face.
+        loadEmbeds(matchDBEmbeddings=True):
+            Loads embeddings from the embeddings file and matches them with the database entries.
+        saveEmbeds():
+            Saves the current embeddings to the embeddings file.
+        offloadEmbeds():
+            Clears the embeddings from memory, setting embedsLoaded to False.
+        destroy(embeds=True):
+            Deletes the Face from the database and optionally removes its embeddings.
+        destroyEmbedding(embedID, includingValue=True):
+            Removes a specific embedding from the Face.
+        reload(withEmbeddings=True, matchDBEmbeddings=True):
+            Reloads the Face data from the database, optionally reloading embeddings and matching them with the database entries.
+    
+    Static Methods:
+        ensureEmbeddingsFile():
+            Ensures that the embeddings file exists and is ready for use.
+        loadEmbeddings():
+            Loads the embeddings data from the embeddings file into the cached embeddingsData.
+        offloadEmbeddings():
+            Clears the cached embeddings data, freeing up memory.
+        saveEmbeddings():
+            Saves the cached embeddings data to the embeddings file.
+            Requires `loadEmbeddings()` to be called first to populate `embeddingsData`.
+        extractEmbeddings(figureID: str) -> Dict[str, torch.Tensor]:
+            Extracts embeddings for a given figure ID from the cached embeddings data.
+            Requires `loadEmbeddings()` to be called first to populate `embeddingsData`.
+        extractEmbedding(figureID: str, embeddingID: str) -> torch.Tensor | None:
+            Extracts a specific embedding for a given figure ID and embedding ID from the cached embeddings data.
+            Requires `loadEmbeddings()` to be called first to populate `embeddingsData`.
+        setEmbeddings(figureID: str, embeddings: Dict[str, torch.Tensor]):
+            Sets the embeddings for a given figure ID in the cached embeddings data.
+            Requires `loadEmbeddings()` to be called first to populate `embeddingsData`.
+        setEmbedding(figureID: str, embeddingID: str, embedding: torch.Tensor):
+            Sets a specific embedding for a given figure ID and embedding ID in the cached embeddings data.
+            Requires `loadEmbeddings()` to be called first to populate `embeddingsData`.
+        deleteFigure(figureID: str):
+            Deletes the embeddings for a given figure ID from the cached embeddings data.
+        deleteEmbedding(figureID: str, embeddingID: str):
+            Deletes a specific embedding for a given figure ID and embedding ID from the cached embeddings data.
+            Requires `loadEmbeddings()` to be called first to populate `embeddingsData`.
+    
+    Sample usage:
+    ```python
+    from fm import FileManager
+    from models import DI, Face, FaceEmbedding
+    
+    DI.setup()
+    FileManager.setup() # required as Face uses FileManager for embeddings storage
+    
+    # Create a new Face with a figure and some embeddings
+    figure = "figure123"  # This should be a Figure object or its ID
+    embeddings = [
+        FaceEmbedding(value=torch.tensor([0.1, 0.2, 0.3]), origin="image1.jpg")
+    ]
+    
+    face = Face(figure=figure, embeddings=embeddings, embedsLoaded=True)
+    face.save()  # Save the Face and its embeddings
+    
+    face = Face.load(figureID="figure123", withEmbeddings=True)  # Load the Face by figure ID with embeddings
+    print(face)  # Print the Face representation
+    ```
+    
+    Notes:
+        - The `embeddings` attribute is a dictionary mapping embedding IDs to `FaceEmbedding` objects.
+        - The `embedsLoaded` attribute indicates whether the embeddings have been loaded from the embeddings file.
+        - After making any edits to `Face` or its embeddings, you need to call `save()` to persist changes. Changes are not persisted automatically.
+        - The embeddings stored in `Face.embeddingsFile` are in a format compatible with PyTorch, allowing for efficient storage and retrieval of face embeddings. They cannot be opened in direct text editor formats.
+    """
+    
     embeddingsData: 'Dict[str, Dict[str, torch.Tensor]] | None' = None
     embeddingsFile: 'File | None' = File("embeddings.pth", "people")
     embedFileLock = threading.RLock()
     
     def __init__(self, figure: 'Figure | str', embeddings: 'List[FaceEmbedding] | Dict[str, FaceEmbedding]', embedsLoaded: bool=False):
+        """Initialize a Face object.
+
+        Args:
+            figure (Figure | str): The figure associated with this face.
+            embeddings (List[FaceEmbedding] | Dict[str, FaceEmbedding]): The embeddings for this face. Both lists and dictionaries are supported.
+            embedsLoaded (bool, optional): Whether the embeddings have been loaded. Defaults to False.
+        """
+        
         # Validate embedsLoaded
         if not isinstance(embedsLoaded, bool):
             raise Exception("FACE INIT ERROR: 'embedsLoaded' must be a boolean value.")
@@ -2769,6 +2877,9 @@ class Face(DIRepresentable):
     
     @staticmethod
     def saveEmbeddings():
+        if Face.embeddingsData is None:
+            raise Exception("FACE SAVEEMBEDDINGS ERROR: Embeddings data is not loaded; call Face.loadEmbeddings() first.")
+        
         with Face.embedFileLock:
             try:
                 torch.save(Face.embeddingsData, Face.embeddingsFile.path())
@@ -2920,8 +3031,11 @@ class Figure(DIRepresentable):
     Sample usage:
     ```python
     import torch
+    from fm import FileManager
     from models import DI, Figure, Face
+    
     DI.setup()
+    FileManager.setup() # required as FileManager is used by the Face model
     
     # Create a new figure with a headshot and face embeddings
     figure = Figure(label="John Doe", headshot="john_doe.jpg", face=None) # face=None will initialise an empty Face object
