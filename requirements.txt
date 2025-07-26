@@ -11,6 +11,7 @@ certifi==2025.7.14
 cffi==1.17.1
 charset-normalizer==3.4.2
 click==8.2.1
+colorama==0.4.6
 contourpy==1.3.2
 cryptography==45.0.5
 cycler==0.12.1
@@ -27,6 +28,7 @@ Flask-Limiter==3.12
 fonttools==4.58.5
 fsspec==2025.5.1
 future==1.0.0
+getmac==0.9.5
 gfpgan==1.3.8
 google-api-core==2.25.1
 google-api-python-client==2.176.0
@@ -54,6 +56,7 @@ imageio==2.37.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
 jiter==0.10.0
+joblib==1.5.1
 kiwisolver==1.4.8
 lazy_loader==0.4
 limits==5.4.0
@@ -67,6 +70,7 @@ mdurl==0.1.2
 mpmath==1.3.0
 msgpack==1.1.1
 networkx==3.5
+nltk==3.9.1
 numba==0.61.2
 numpy==2.2.6
 openai==1.95.1
@@ -106,11 +110,13 @@ tensorboard-data-server==0.7.2
 tifffile==2025.6.11
 tokenizers==0.21.2
 torch==2.7.1
+torchaudio==2.7.1
 torchvision==0.22.1
 tqdm==4.67.1
 transformers==4.53.2
 typing-inspection==0.4.1
 typing_extensions==4.14.1
+tzdata==2025.2
 tzlocal==5.3.1
 uritemplate==4.2.0
 urllib3==2.5.0
