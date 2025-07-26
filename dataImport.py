@@ -24,10 +24,13 @@ def upload(user : User):
     - Saves locally
     - Uploads to Firebase
     - Creates DB record
+    
+    Creates a Batch containing all successfully uploaded Artefacts.
+    If no files were successfully uploaded, no batch is created.
 
     On failure at any step, the file is skipped and the error is logged and returned.
 
-    Returns a summary of upload results per file.
+    Returns a summary of upload results per file and batchid.
     """
     if 'file' not in request.files:
         return JSONRes.new(400, "No file part in request.")
@@ -42,12 +45,12 @@ def upload(user : User):
     for file in files:
         if file and file.filename: 
            # Check file type
-            if not FileUtils.allowedFile(file.filename):
+            if not FileOps.allowedFileExtension(file.filename):
                 fileSaveUpdates[file.filename] = "ERROR: File type not allowed."
                 continue
 
             # Check file size
-            validSize = FileUtils.fileSize(file)
+            validSize = FileOps.fileSize(file)
             if not validSize:
                 fileSaveUpdates[file.filename] = "ERROR: File size > 10 MB."
                 continue

@@ -986,39 +986,3 @@ class FileManager:
         
         idPath = File.generateIDPath(store, filename)
         return FileManager.context.get(idPath)
-    
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
-MAX_FILE_SIZE = 10 * 1024 * 1024  
-
-class FileUtils:
-    @staticmethod
-    def allowedFile(filename: str) -> bool:
-        """
-        Check if the file has an allowed extension.
-        """
-        return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-    @staticmethod
-    def fileSize(file, max_size: int = MAX_FILE_SIZE) -> Tuple[bool, str]:
-        """
-        Validates the size of the uploaded file.
-
-        Args:
-            file: The file object from Flask request.
-            max_size: Maximum allowed file size in bytes.
-
-        Returns:
-            A tuple (false , error message).
-        """
-        try:
-            file.seek(0, os.SEEK_END)
-            file_length = file.tell()
-            file.seek(0)  # Reset file pointer for future reads
-
-            if file_length > max_size:
-                return False, "File too large. Max allowed is {} MB.".format(max_size // (1024*1024))
-
-            return True, ""
-        
-        except Exception as e:
-            return False, "Failed to determine file size: {}".format(str(e))
