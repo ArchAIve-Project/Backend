@@ -219,17 +219,44 @@ def cancelBatch(user: User, batchID: str):
 @checkSession(strict=True, provideUser=True)
 def deleteBatch(user: User, batchID: str):
     try:
-        batch = Batch.load(id=batchID)
+        # Load batch with artefacts
+        batch = Batch.load(id=batchID, withArtefacts=True)
         if not batch:
             return JSONRes.new(404, "Batch not found.")
 
         if batch.userID != user.id:
             return JSONRes.unauthorised()
 
-        batch.destroy()
+        # Delete artefacts first
+        failures = []
+        for artefactID in getattr(batch, "artefacts", []):
+            try:
+                artefact = Artefact.load(id=artefactID) 
+                if not artefact:
+                    return JSONRes.new(404, "Artefact {} not found.".format(artefactID))
+
+                res = artefact.fmDelete()
+                if res is not True:
+                    return JSONRes.new(500, "Failed to delete artefact {}: {}".format(artefactID, res))
+
+                artefact.destroy()
+
+            except Exception as e:
+                Logger.log("DATAIMPORT DELETE ERROR: Failed to delete artefact {}: {}".format(artefact.id, e))
+                failures.append({"artefactID": artefact.id, "error": str(e)})
+
+        # Delete the batch itself
+        try:
+            batch.destroy()
+        except Exception as e:
+            Logger.log("DATAIMPORT DELETE ERROR: Failed to delete batch {}: {}".format(batch.id, e))
+            failures.append({"batchID": batch.id, "error": str(e)})
+
+        if failures:
+            return JSONRes.new(207, "Batch {} deleted with some errors.".format(batchID), failures=failures, batchID=batchID)
 
         return JSONRes.new(200, "Batch {} and artefacts deleted.".format(batchID))
 
     except Exception as e:
-        Logger.log("BATCH DELETE ERROR: {}".format(e))
+        Logger.log("DATAIMPORT DELETE ERROR: {}".format(e))
         return JSONRes.ambiguousError(str(e))
