@@ -40,6 +40,26 @@ class HFProcessor:
     # Face Recognition + Detection and Matching
     @staticmethod
     def identifyFaces(imagePath: str, tracer: ASTracer) -> list[str]:
+        """Detects and recognises faces in the given image.
+
+        Args:
+            imagePath (str): The path to the image file.
+            tracer (ASTracer): An instance of `ASTracer` to log reports.
+
+        Returns:
+            list[str]: A list of recognized face IDs.
+        
+        Workflow:
+        1. Extract face crops from the image with `FaceRecognition.detect_face_crops`.
+        2. Compute and get embeddings for each face crop using `FaceRecognition.get_face_embedding`.
+        3. For each face crop embedding:
+            - Load all figures with embeddings with `Figure.load(withEmbeddings=True)`.
+            - For each figure, match the embedding against the figure's face embeddings using `FaceDetection.match`.
+            - If a match is found, add the figure ID to the matched set.
+            - If no match is found, create a new `Figure` and `Face`, save the face crop image, and add the embedding to the new figure and save it.
+        4. Return a list of matched figure IDs.
+        """
+        
         imgName = os.path.basename(imagePath)
         
         face_crops = FaceRecognition.detect_face_crops(imagePath)
