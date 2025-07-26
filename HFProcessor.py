@@ -81,20 +81,6 @@ class HFProcessor:
             )
         )
         
-        # # Carry out face matching
-        # figures: list[Figure] = []
-        # try:
-        #     figures = Figure.load(withEmbeddings=True)
-        # except Exception as e:
-        #     tracer.addReport(
-        #         ASReport(
-        #             source="HFPROCESSOR IDENTIFYFACES ERROR",
-        #             message="Failed to load figures for face matching (fallback to empty list); response: {}".format(e),
-        #             extraData={"imagePath": imagePath}
-        #         )
-        #     )
-        #     return []
-        
         matchedFigureIDs: set[str] = set()
         
         index = 0

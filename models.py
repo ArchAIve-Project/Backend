@@ -2876,7 +2876,84 @@ class Face(DIRepresentable):
         return Ref("figures", figureID, "face")
 
 class Figure(DIRepresentable):
+    """A data model that represents a Figure, i.e a person who has appeared in artefact images.
+    
+    Figures are meant to be unique database objects for each person that appears in any artefact across the catalogue.
+    Each figure has a label, a headshot image, and a Face object that contains embeddings and numerical information about the figure's face.
+    
+    The model is primarily part of the data import workflow, where the face crop matching algorithm in `HFProcessor` creates new `Figure` objects. This data model
+    also supports Face Recognition and Auto Profile features.
+    
+    The `Face` object is closely linked to `Figure`, and is stored as the `face` attribute. It primarily contains embeddings and other numerical data about the figure's face
+    that is useful for face detection and comparison.
+    
+    The `headshot` attribute is meant to be the image name in the `people` FileManager store; the image should be a "headshot"/"face crop" of the figure.
+    
+    The `label` might default to the figure's ID, but it is recommended to update it to the figure's actual name, which can be user-provided.
+    
+    Attributes:
+        id (str): Unique identifier for the figure.
+        label (str): Name or label of the figure.
+        headshot (str): Name of the headshot image file in the `people` File
+        face (Face): Face object containing embeddings and numerical data about the figure's face.
+        profile (None): Placeholder for a profile object, if applicable.
+        originRef (Ref): Reference object for database operations, pointing to the figure's data in DI.
+    
+    Methods:
+        __init__(label: str, headshot: str, face: Face, profile: None=None, id: str=None):
+            Initializes a Figure instance with the provided label, headshot, face, profile, and ID.
+        represent() -> dict:
+            Returns a dictionary representation of the Figure instance for serialization.
+        save(embeds: bool=True):
+            Saves the Figure instance to the database, optionally saving embeddings if they are loaded.
+        destroy(embeds: bool=True):
+            Deletes the Figure instance from the database, optionally deleting associated embeddings.
+        reload(withEmbeddings: bool=True, matchDBEmbeddings: bool=True):
+            Reloads the Figure instance from the database, updating its attributes and optionally loading embeddings.
+        rawLoad(figureID: str, data: dict, withEmbeddings: bool=False, matchDBEmbeddings: bool=True) -> 'Figure':
+            Loads a Figure instance from raw data, including face embeddings if specified.
+        load(id: str=None, label: str=None, withEmbeddings: bool=False, matchDBEmbeddings: bool=True) -> 'Figure | List[Figure] | None':
+            Loads a Figure instance by ID or label, optionally loading embeddings.
+        ref(id: str) -> Ref:
+            Returns a reference object for the Figure instance, used for database operations.
+    
+    Sample usage:
+    ```python
+    import torch
+    from models import DI, Figure, Face
+    DI.setup()
+    
+    # Create a new figure with a headshot and face embeddings
+    figure = Figure(label="John Doe", headshot="john_doe.jpg", face=None) # face=None will initialise an empty Face object
+    figure.face = Face(figure=figure, embeddings=[FaceEmbedding(value=torch.randn(1, 512), origin="sourceArtefact.jpg")], embedsLoaded=True) # Create a Face object with sample embeddings
+    figure.save(embeds=True)  # Save the figure and its face embeddings
+    
+    # Load an existing figure by ID
+    loaded_figure = Figure.load(figure.id, withEmbeddings=True)
+    print(loaded_figure.represent())
+    ```
+    
+    Notes:
+        - The `label` should be updated to the figure's actual name after creation.
+        - The `headshot` should be a valid image file name in the `people` FileManager store.
+        - The `face` attribute is crucial for face recognition and should be properly initialized with embeddings.
+        - The `profile` attribute is currently a placeholder and can be extended to include additional profile information if needed.
+    """
+    
     def __init__(self, label: str, headshot: str, face: Face, profile: None=None, id: str=None):
+        """Initializes a Figure instance.
+
+        Args:
+            label (str): The name or label of the figure.
+            headshot (str): The file name of the figure's headshot image.
+            face (Face): The Face object containing embeddings and data about the figure's face. Defaults to an empty Face object if `None` is provided.
+            profile (None, optional): Placeholder for a profile object, if applicable. Defaults to None.
+            id (str, optional): Unique identifier for the figure. Defaults to a new unique ID if not provided.
+        
+        Raises:
+            Exception: If the `face` parameter is not a Face object or `None`.
+        """
+        
         if id is None:
             id = Universal.generateUniqueID()
         if face is None:
@@ -2900,6 +2977,15 @@ class Figure(DIRepresentable):
         }
     
     def save(self, embeds: bool=True):
+        """Saves the figure and its associated data. Will save to database and embeddings file (through `Face.saveEmbeds`) by default.
+
+        Args:
+            embeds (bool, optional): Whether to save embeddings. Defaults to True.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         DI.save(self.represent(), self.originRef)
         
         if not self.face.embedsLoaded and embeds:
@@ -2910,6 +2996,15 @@ class Figure(DIRepresentable):
         return True
     
     def destroy(self, embeds: bool=True):
+        """Destroys the figure and its associated data. Deletes embeddings data and database entry by default.
+
+        Args:
+            embeds (bool, optional): Whether to delete embeddings. Defaults to True.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         DI.save(None, self.originRef)
         
         if embeds:
@@ -2922,6 +3017,16 @@ class Figure(DIRepresentable):
         return True
     
     def reload(self, withEmbeddings: bool=True, matchDBEmbeddings: bool=True):
+        """Reloads the figure and its associated data.
+
+        Args:
+            withEmbeddings (bool, optional): Whether to reload embeddings. Defaults to True.
+            matchDBEmbeddings (bool, optional): Whether to match database embeddings. Defaults to True.
+
+        Returns:
+            bool: Almost always `True`.
+        """
+        
         data = DI.load(self.originRef)
         if isinstance(data, DIError):
             raise Exception("FIGURE RELOAD ERROR: DIError occurred: {}".format(data))
@@ -2935,6 +3040,18 @@ class Figure(DIRepresentable):
     
     @staticmethod
     def rawLoad(figureID: str, data: dict, withEmbeddings: bool=False, matchDBEmbeddings: bool=True) -> 'Figure':
+        """Loads a figure from the provided data dictionary.
+
+        Args:
+            figureID (str): The ID of the figure to load.
+            data (dict): The data dictionary containing figure information.
+            withEmbeddings (bool, optional): Whether to load embeddings. Defaults to False.
+            matchDBEmbeddings (bool, optional): Whether to match database embeddings. Defaults to True.
+
+        Returns:
+            Figure: The loaded figure.
+        """
+        
         reqParams = ['label', 'headshot', 'face', 'profile']
         for reqParam in reqParams:
             if reqParam not in data:
@@ -2957,6 +3074,20 @@ class Figure(DIRepresentable):
     
     @staticmethod
     def load(id: str=None, label: str=None, withEmbeddings: bool=False, matchDBEmbeddings: bool=True) -> 'Figure | List[Figure] | None':
+        """Loads a figure or figures based on the provided parameters.
+
+        Args:
+            id (str, optional): The ID of the figure to load. Defaults to None.
+            label (str, optional): The label of the figure to load. Defaults to None.
+            withEmbeddings (bool, optional): Whether to load embeddings. Defaults to False.
+            matchDBEmbeddings (bool, optional): Whether to match database embeddings. Defaults to True.
+
+        Raises:
+            Exception: If there is an error loading the figure data from the database or if the response format is unexpected.
+
+        Returns: `Figure | List[Figure] | None`: The loaded figure or `None` if unique identifiers are provided, otherwise a list of figures (that may be empty).
+        """
+        
         if id != None:
             data = DI.load(Figure.ref(id))
             if data is None:
