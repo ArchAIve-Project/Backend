@@ -24,12 +24,12 @@ def getArtefactImage(artefactId):
         return JSONRes.ambiguousError()
 
     if not art:
-        return JSONRes.new(404, ResType.ERROR, "Artefact not found.")
+        return JSONRes.new(404, "Artefact not found.")
 
     # Attempt to get image filename
     filename = art.image
     if not filename:
-        return JSONRes.new(404, ResType.ERROR, "Artefact has no associated image.")
+        return JSONRes.new(404, "Artefact has no associated image.")
 
     # Attempt to create file object
     file = File(filename, "artefacts")
@@ -39,7 +39,7 @@ def getArtefactImage(artefactId):
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         if url.startswith("ERROR"):
             if url == "ERROR: File does not exist.":
-                return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+                return JSONRes.new(404, "Requested file not found.")
             else:
                 raise Exception(url)
     except Exception as e:
@@ -69,7 +69,7 @@ def getFaceImage(filename):
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
         if url.startswith("ERROR"):
-            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+            return JSONRes.new(404, "Requested file not found.")
         
         res = make_response(redirect(url))
 
@@ -81,7 +81,7 @@ def getFaceImage(filename):
         return res
     except Exception as e:
         Logger.log(f"CDN GETFACE ERROR: {e}")
-        return JSONRes.new(500, ResType.ERROR, "Error sending file.")
+        return JSONRes.new(500, "Error sending file.")
 
 @cdnBP.route('/asset/<filename>')
 @checkSession(strict=True)
@@ -95,7 +95,7 @@ def getAsset(filename):
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
         if url.startswith("ERROR"):
-            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+            return JSONRes.new(404, "Requested file not found.")
         
         res = make_response(redirect(url))
 
@@ -216,7 +216,7 @@ def getAllCategoriesWithArtefacts():
             "mmArtefacts": mmDetails
         })
 
-    return JSONRes.new(200, ResType.SUCCESS, data={
+    return JSONRes.new(200, "Retrieval success.", data={
         "categories": result,
         "books": bookList
     })
