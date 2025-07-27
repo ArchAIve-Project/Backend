@@ -5,7 +5,8 @@ import datetime
 from typing import Dict, List
 from services import Logger
 from models import Category, Book, Artefact
-from decorators import checkSession, cache, timeit
+from decorators import cache
+from sessionManagement import checkSession
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
@@ -23,12 +24,12 @@ def getArtefactImage(artefactId):
         return JSONRes.ambiguousError()
 
     if not art:
-        return JSONRes.new(404, ResType.ERROR, "Artefact not found.")
+        return JSONRes.new(404, "Artefact not found.")
 
     # Attempt to get image filename
     filename = art.image
     if not filename:
-        return JSONRes.new(404, ResType.ERROR, "Artefact has no associated image.")
+        return JSONRes.new(404, "Artefact has no associated image.")
 
     # Attempt to create file object
     file = File(filename, "artefacts")
@@ -38,7 +39,7 @@ def getArtefactImage(artefactId):
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         if url.startswith("ERROR"):
             if url == "ERROR: File does not exist.":
-                return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+                return JSONRes.new(404, "Requested file not found.")
             else:
                 raise Exception(url)
     except Exception as e:
@@ -68,7 +69,7 @@ def getFaceImage(filename):
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
         if url.startswith("ERROR"):
-            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+            return JSONRes.new(404, "Requested file not found.")
         
         res = make_response(redirect(url))
 
@@ -94,7 +95,7 @@ def getAsset(filename):
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
         if url.startswith("ERROR"):
-            return JSONRes.new(404, ResType.ERROR, "Requested file not found.")
+            return JSONRes.new(404, "Requested file not found.")
         
         res = make_response(redirect(url))
 
@@ -215,7 +216,7 @@ def getAllCategoriesWithArtefacts():
             "mmArtefacts": mmDetails
         })
 
-    return JSONRes.new(200, ResType.SUCCESS, data={
+    return JSONRes.new(200, "Retrieval success.", data={
         "categories": result,
         "books": bookList
     })
