@@ -3,6 +3,93 @@ from utils import Ref
 from services import Universal
 from typing import List, Dict
 
+class AuditLog(DIRepresentable):
+    def __init__(self, user: 'User | str', title: str, description: str, created: str=None, id: str=None):
+        userID = user.id if isinstance(user, User) else user
+        if not isinstance(userID, str):
+            raise Exception("AUDITLOG INIT ERROR: 'user' must be a User instance or a string representing the user ID.")
+        
+        if id is None:
+            id = Universal.generateUniqueID()
+        if created is None:
+            created = Universal.utcNowString()
+        
+        self.id = id
+        self.userID = userID
+        self.title = title
+        self.description = description
+        self.created = created
+        self.originRef = AuditLog.ref(userID, id)
+    
+    def represent(self):
+        return {
+            "title": self.title,
+            "description": self.description,
+            "created": self.created
+        }
+    
+    def save(self):
+        return DI.save(self.represent(), self.originRef)
+    
+    def __str__(self):
+        return "AuditLog(id='{}', userID='{}', title='{}', description='{}', created='{}')".format(
+            self.id,
+            self.userID,
+            self.title,
+            self.description,
+            self.created
+        )
+    
+    @staticmethod
+    def rawLoad(userID: str, logID: str, data: dict) -> 'AuditLog':
+        reqParams = ['title', 'description', 'created']
+        for reqParam in reqParams:
+            if reqParam not in data:
+                data[reqParam] = None
+        
+        return AuditLog(
+            user=userID,
+            title=data.get('title'),
+            description=data.get('description'),
+            created=data.get('created'),
+            id=logID
+        )
+    
+    @staticmethod
+    def load(userID: str=None, logID: str=None) -> 'AuditLog | List[AuditLog] | None':
+        if not isinstance(userID, str):
+            raise Exception("AUDITLOG LOAD ERROR: At least a valid `userID` string must be provided.")
+        
+        if logID != None:
+            data = DI.load(AuditLog.ref(userID, logID))
+            if isinstance(data, DIError):
+                raise Exception("AUDITLOG LOAD ERROR: DIError occurred: {}".format(data))
+            if data == None:
+                return None
+            if not isinstance(data, dict):
+                raise Exception("AUDITLOG LOAD ERROR: Unexpected DI load response format; response: {}".format(data))
+            
+            return AuditLog.rawLoad(userID, logID, data)
+        else:
+            data = DI.load(Ref("auditLogs", userID))
+            if isinstance(data, DIError):
+                raise Exception("AUDITLOG LOAD ERROR: DIError occurred: {}".format(data))
+            if data == None:
+                return []
+            if not isinstance(data, dict):
+                raise Exception("AUDITLOG LOAD ERROR: Failed to load dictionary logs data; response: {}".format(data))
+            
+            logs: Dict[str, AuditLog] = {}
+            for logID in data:
+                if isinstance(data[logID], dict):
+                    logs[logID] = AuditLog.rawLoad(userID, logID, data[logID])
+            
+            return list(logs.values())
+    
+    @staticmethod
+    def ref(userID: str, logID: str) -> Ref:
+        return Ref("auditLogs", userID, logID)
+
 class User(DIRepresentable):
     """User model representation.
     
@@ -60,6 +147,7 @@ class User(DIRepresentable):
         self.superuser = superuser
         self.lastLogin = lastLogin
         self.created = created
+        self.logs: 'List[AuditLog] | None' = None
         self.originRef = User.ref(id)
     
     def represent(self) -> dict:
@@ -74,17 +162,27 @@ class User(DIRepresentable):
         }
     
     def __str__(self):
-        return "User(id='{}', username='{}', email='{}', pwd='{}', authToken='{}', superuser={}, lastLogin='{}', created='{}')".format(
+        return """<User instance
+ID: {}
+Username: {}
+Email: {}
+Password: {}
+Audit Logs:{}
+Auth Token: {}
+Superuser: {}
+Last Login: {}
+Created: {} />""".format(
             self.id,
             self.username,
             self.email,
             self.pwd,
+            ("\n---\n- " + ("\n- ".join((str(log) if isinstance(log, AuditLog) else "CORRUPTED AUDITLOG AT INDEX '{}'".format(i)) for i, log in enumerate(self.logs))) + "\n---") if isinstance(self.logs, list) else " None",
             self.authToken,
             self.superuser,
             self.lastLogin,
             self.created
         )
-    
+
     def save(self, checkSuperuserIntegrity: bool=True):
         """Saves the user to the database.
 
