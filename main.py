@@ -120,7 +120,7 @@ if __name__ == "__main__":
         superuser = User.getSuperuser()
         if superuser == None:
             pwd = "123456"
-            debugSuperuser = User("johndoe", "john@example.com", Encryption.encodeToSHA256(pwd), superuser=True)
+            debugSuperuser = User("johndoe", "john@example.com", Encryption.encodeToSHA256(pwd), "John", "Doe", "Boss", superuser=True)
             debugSuperuser.save()
             print("MAIN BOOT DEBUG: Superuser created with username '{}' and password '{}'.".format(debugSuperuser.username, pwd))
 

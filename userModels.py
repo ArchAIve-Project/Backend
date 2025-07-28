@@ -166,7 +166,7 @@ class User(DIRepresentable):
     from models import DI, User
     DI.setup()
     
-    user = User("johndoe", "john@doe.com", "securepwd")
+    user = User("johndoe", "john@doe.com", "securepwd", "John", "Doe", "Admin", superuser=True)
     user.authToken = "123456"
     user.save()
     
@@ -209,7 +209,7 @@ class User(DIRepresentable):
         self.fname = fname
         self.lname = lname
         self.role = role
-        self.contact = contact
+        self.contact = contact or ""
         self.authToken = authToken
         self.superuser = superuser
         self.lastLogin = lastLogin
@@ -266,7 +266,7 @@ Reset Key: {} />""".format(
             self.resetKey
         )
 
-    def save(self, checkSuperuserIntegrity: bool=True):
+    def save(self, checkIntegrity: bool=True):
         """Saves the user to the database.
 
         Args:
@@ -280,14 +280,21 @@ Reset Key: {} />""".format(
             bool: Almost exclusively returns `True`.
         """
         
-        if self.superuser == True and checkSuperuserIntegrity:
+        if checkIntegrity:
             allUsers = User.load()
             if not isinstance(allUsers, list):
                 raise Exception("USER SAVE ERROR: Unexpected User load response format; response: {}".format(allUsers))
             
             for user in allUsers:
-                if user.id != self.id and user.superuser == True:
-                    raise Exception("USER SAVE ERROR: Cannot save superuser user when another superuser already exists.")
+                if user.id != self.id:
+                    if self.superuser == True and user.superuser == True:
+                        raise Exception("USER SAVE ERROR: Cannot save superuser user when another superuser already exists.")
+                    elif user.username == self.username:
+                        raise Exception("USER SAVE ERROR: Cannot save when user with username '{}' already exists.".format(self.username))
+                    elif user.email == self.email:
+                        raise Exception("USER SAVE ERROR: Cannot save when user with email '{}' already exists.".format(self.email))
+                    elif user.authToken == self.authToken and isinstance(self.authToken, str) and len(self.authToken) > 0:
+                        raise Exception("USER SAVE ERROR: Cannot save when user with authToken '{}' already exists.".format(self.authToken))
         
         convertedData = self.represent()
         return DI.save(convertedData, self.originRef)
