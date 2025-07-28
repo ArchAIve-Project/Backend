@@ -18,6 +18,7 @@ FileStore/
 GroundTruths/
 UpscaledOutput/
 outputs/
-moreDummy/
 testing/
+moreDummy/
 actualKey.json
+test2.py
