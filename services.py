@@ -310,6 +310,7 @@ class Universal:
     copyright = "© 2025 The ArchAIve Team. All Rights Reserved."
     version = None
     store = {}
+    MAX_FILE_SIZE = 10 * 1024 * 1024
     
     @staticmethod
     def getVersion():
@@ -577,7 +578,7 @@ class FileOps:
         """
         Check if the file has an allowed extension.
         """
-        return '.' in filename and filename.rsplit('.', 1)[1].lower() in FileOps.ALLOWED_EXTENSIONS
+        return FileOps.getFileExtension(filename).lower() in FileOps.ALLOWED_EXTENSIONS
 
     @staticmethod
     def getFileStorageSize(file) -> int | None:
