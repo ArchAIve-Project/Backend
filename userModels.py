@@ -173,7 +173,7 @@ class User(DIRepresentable):
     ```
     """
     
-    def __init__(self, username: str, email: str, pwd: str, authToken: str=None, superuser: bool=False, lastLogin: str=None, created: str=None, id: str=None):
+    def __init__(self, username: str, email: str, pwd: str, fname: str, lname: str, role: str, contact: str='', authToken: str=None, superuser: bool=False, lastLogin: str=None, created: str=None, resetKey: str | None=None, id: str=None):
         """User model representation.
 
         Args:
@@ -195,10 +195,15 @@ class User(DIRepresentable):
         self.username = username
         self.email = email
         self.pwd = pwd
+        self.fname = fname
+        self.lname = lname
+        self.role = role
+        self.contact = contact
         self.authToken = authToken
         self.superuser = superuser
         self.lastLogin = lastLogin
         self.created = created
+        self.resetKey = resetKey
         self.logs: 'List[AuditLog] | None' = None
         self.originRef = User.ref(id)
     
@@ -207,32 +212,47 @@ class User(DIRepresentable):
             "username": self.username,
             "email": self.email,
             "pwd": self.pwd,
+            "fname": self.fname,
+            "lname": self.lname,
+            "role": self.role,
+            "contact": self.contact if len(self.contact) > 0 else None,
             "authToken": self.authToken,
             "superuser": self.superuser,
             "lastLogin": self.lastLogin,
-            "created": self.created
+            "created": self.created,
+            "resetKey": self.resetKey
         }
     
     def __str__(self):
         return """<User instance
 ID: {}
+First Name: {}
+Last Name: {}
 Username: {}
 Email: {}
 Password: {}
+Role: {}
+Contact: {}
 Audit Logs:{}
 Auth Token: {}
 Superuser: {}
 Last Login: {}
-Created: {} />""".format(
+Created: {}
+Reset Key: {} />""".format(
             self.id,
+            self.fname,
+            self.lname,
             self.username,
             self.email,
             self.pwd,
+            self.role,
+            self.contact if len(self.contact) > 0 else "None",
             ("\n---\n- " + ("\n- ".join((str(log) if isinstance(log, AuditLog) else "CORRUPTED AUDITLOG AT INDEX '{}'".format(i)) for i, log in enumerate(self.logs))) + "\n---") if isinstance(self.logs, list) and len(self.logs) > 0 else " None or Empty",
             self.authToken,
             self.superuser,
             self.lastLogin,
-            self.created
+            self.created,
+            self.resetKey
         )
 
     def save(self, checkSuperuserIntegrity: bool=True):
