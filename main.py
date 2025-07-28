@@ -115,6 +115,9 @@ if __name__ == "__main__":
     from cdn import cdnBP
     app.register_blueprint(cdnBP)
     
+    from userProfile import profileBP
+    app.register_blueprint(profileBP)
+    
     # Debug execution
     if os.environ.get("DEBUG_MODE", "False") == "True":
         superuser = User.getSuperuser()
