@@ -1,5 +1,5 @@
 import os, shutil, sys, json, pprint, datetime, threading
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from enum import Enum
 from services import FileOps, Logger, Universal
 from firebase import FireStorage

@@ -107,8 +107,8 @@ if __name__ == "__main__":
     from identity import identityBP
     app.register_blueprint(identityBP)
 
-    from dataImport import dataimportBP
-    app.register_blueprint(dataimportBP)
+    from dataImport import dataImportBP
+    app.register_blueprint(dataImportBP)
     
     from cdn import cdnBP
     app.register_blueprint(cdnBP)

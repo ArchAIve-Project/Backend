@@ -510,7 +510,6 @@ Commands:
 
 class FileOps:
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
-    MAX_FILE_SIZE = 10 * 1024 * 1024  
 
     @staticmethod
     def exists(path: str, type: str="folder"):
@@ -581,26 +580,21 @@ class FileOps:
         return '.' in filename and filename.rsplit('.', 1)[1].lower() in FileOps.ALLOWED_EXTENSIONS
 
     @staticmethod
-    def fileSize(file, max_size: int = MAX_FILE_SIZE) -> bool:
+    def getFileStorageSize(file) -> int | None:
         """
-        Validates the size of the uploaded file.
+        Returns the size of the uploaded file in bytes.
 
         Args:
             file: The file object from Flask request.
-            max_size: Maximum allowed file size in bytes.
 
         Returns:
-            bool (True/False).
+            File size in bytes (int), or None if failed.
         """
         try:
             file.seek(0, os.SEEK_END)
-            file_length = file.tell()
+            fileLength = file.tell()
             file.seek(0)  # Reset file pointer for future reads
+            return fileLength
 
-            if file_length > max_size:
-                return False
-
-            return True
-        
         except:
-            return False
+            return None

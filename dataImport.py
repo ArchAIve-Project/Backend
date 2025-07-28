@@ -8,10 +8,13 @@ from fm import FileManager, File
 from services import ThreadManager
 from ingestion import DataImportProcessor
 from services import Logger
+from decorators import jsonOnly, enforceSchema
 
-dataimportBP = Blueprint('dataimport', __name__, url_prefix="/dataimport")
+dataImportBP = Blueprint('dataimport', __name__, url_prefix="/dataimport")
 
-@dataimportBP.route('/upload', methods=['POST'])
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+@dataImportBP.route('/upload', methods=['POST'])
 @checkSession(strict=True, provideUser=True)
 def upload(user : User):
     """
@@ -34,92 +37,101 @@ def upload(user : User):
         return JSONRes.new(400, "No file part in request.")
 
     files = request.files.getlist('file')
+    files = list(filter(lambda f: f and f.filename, files)) 
     if not files or all(file.filename == '' for file in files):
-        return JSONRes.new(400, "No files selected.")
+        return JSONRes.new(400, "No files selected.", ResType.USERERROR)
 
     fileSaveUpdates = {}
-    sucessfulFiles = []
+    successfulFiles = []
     processedNames = set()
 
     for file in files:
-        if file and file.filename: 
-            
-            fileName = os.path.splitext(file.filename)[0].lower()
+        
+        fileName = os.path.splitext(file.filename)[0].lower()
 
-            # Check duplicate in current request
-            if fileName in processedNames:
-                fileSaveUpdates[file.filename] = "ERROR: Duplicate file."
-                continue
+        # Check duplicate in current request
+        if fileName in processedNames:
+            fileSaveUpdates[file.filename] = "ERROR: Duplicate file."
+            continue
 
-            processedNames.add(fileName)
+        processedNames.add(fileName)
 
-           # Check file type
-            if not FileOps.allowedFileExtension(file.filename):
-                fileSaveUpdates[file.filename] = "ERROR: File type not allowed."
-                continue
+        # Check file type
+        if not FileOps.allowedFileExtension(file.filename):
+            fileSaveUpdates[file.filename] = "ERROR: File type not allowed."
+            continue
 
-            # Check file size
-            validSize = FileOps.fileSize(file)
-            if not validSize:
-                fileSaveUpdates[file.filename] = "ERROR: File size > 10 MB."
-                continue
-           
-            # Save file locally
-            filename = Universal.generateUniqueID()
-            filename = "{}.{}".format(filename, FileOps.getFileExtension(file.filename))
-            fileObj = File(filename, 'artefacts')
-    
-            try:
-                file.save(fileObj.path())
-            except Exception as e:
-                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to save file: {}".format(e))
-                fileSaveUpdates[file.filename] = "ERROR: Failed to save file."
-                continue
+        # Get file size and check file size
+        validSize = FileOps.getFileStorageSize(file)
+        if validSize is None:
+            fileSaveUpdates[file.filename] = "ERROR: Failed to get file size."
+            continue
 
-            # Sync local to firebase 
-            res = FileManager.save(file=fileObj)
-            if isinstance(res, str): # if fail
-                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to save file: {}. ".format(res))
+        if validSize > MAX_FILE_SIZE:
+            fileSaveUpdates[file.filename] = "ERROR: File size exceeds 10MB."
+            continue
+        
+        # Save file locally
+        filename = Universal.generateUniqueID()
+        filename = "{}.{}".format(filename, FileOps.getFileExtension(file.filename))
+        fileObj = File(filename, 'artefacts')
+
+        try:
+            file.save(fileObj.path())
+        except Exception as e:
+            Logger.log("DATAIMPORT UPLOAD ERROR: Failed to save file '{}' with original name '{}'; error: {}".format(fileObj.identifierPath(), file.filename, e))
+            fileSaveUpdates[file.filename] = "ERROR: Failed to save file."
+            continue
+
+        # Sync local to firebase 
+        res = FileManager.save(file=fileObj)
+        if isinstance(res, str): # if fail
+            Logger.log("DATAIMPORT UPLOAD ERROR: Failed to upload file to Firebase. File path: '{}', original filename: '{}'. Error: {}".format(fileObj.identifierPath(), file.filename, res))
                 
-                remove = FileManager.removeLocally(fileObj) 
-                if remove != True:
-                    Logger.log("DATAIMPORT UPLOAD ERROR: Failed to remove file: {}".format(remove))
-                
-                fileSaveUpdates[file.filename] = "ERROR: Failed to save file."
-                continue
-
-            # Create artefact
-            artefact = Artefact.fromFMFile(fileObj)
+            remove = FileManager.removeLocally(fileObj) 
+            if remove != True:
+                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to remove local file after Firebase upload failure. File path: '{}', original filename: '{}'. Remove result: {}".format(fileObj.identifierPath(), file.filename, remove))
             
-            try:
-                artefact.save()
-                sucessfulFiles.append(artefact)
-                fileSaveUpdates[file.filename] = "File uploaded successfully."
+            fileSaveUpdates[file.filename] = "ERROR: Failed to save file."
+            continue
 
-            except Exception as e:
-                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to save artefact for {}: {}".format(file.filename, str(e)))
+        # Create artefact
+        artefact = Artefact.fromFMFile(fileObj)
+        
+        try:
+            artefact.save()
+            successfulFiles.append(artefact)
+            fileSaveUpdates[file.filename] = "SUCCESS: File uploaded successfully."
 
-                FileManager.delete(file=fileObj)
+        except Exception as e:
+            Logger.log("DATAIMPORT UPLOAD ERROR: Failed to save artefact in database. File path: '{}', original filename: '{}'. Error: {}".format(fileObj.identifierPath(), file.filename, e))
+            fileSaveUpdates[file.filename] = "ERROR: Failed to save artefact."
 
-                fileSaveUpdates[file.filename] = "ERROR: Failed to save artefact."
-                continue
+            delFile = FileManager.delete(file=fileObj)
+            if isinstance(delFile, str):
+                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to delete local file after artefact save failure. File path: '{}', original filename: '{}'. Delete error: {}".format(fileObj.identifierPath(), file.filename, delFile))
+            continue
     
-    if not sucessfulFiles:
-        return JSONRes.new(400, "No artefacts were successfully uploaded.", ResType.ERROR, updates=fileSaveUpdates)
+    if not successfulFiles:
+        return JSONRes.new(400, "No artefacts were processed successfully.", updates=fileSaveUpdates)
     
     try:
         # Create batch
-        batch = Batch(user.id, batchArtefacts=sucessfulFiles)
+        batch = Batch(user.id, batchArtefacts=successfulFiles)
         batch.save()
 
     except Exception as e:
-        Logger.log("DATAIMPORT UPLOAD ERROR: Failed to create batch: {}".format(e))
+        Logger.log("DATAIMPORT UPLOAD ERROR: Failed to create batch for user '{}' with {} artefacts. Error: {}".format(user.id, len(successfulFiles), e))
 
-    return JSONRes.new(200, "Upload results.", ResType.SUCCESS, updates=fileSaveUpdates, batchID=batch.id)
+    return JSONRes.new(200, "Upload results.", updates=fileSaveUpdates, batchID=batch.id)
 
-@dataimportBP.route('/confirm', methods=['POST'])
+@dataImportBP.route('/confirm', methods=['POST'])
+@jsonOnly # mandates that request payloads must be in JSON form. request rejected with JSONRes.invalidRequestFormat() if otherwise
+@enforceSchema(
+    ('batchID', str) # declares that a batchID parameter must be provided with a value of data type `str`
+) # requests are rejected with JSONRes.invalidRequestFormat() if any data validation fails
 @checkSession(strict=True, provideUser=True)
-def confirm(user: User):
+def confirmBatch(user: User):
     """
     Confirms a previously created upload batch and triggers processing.
 
@@ -132,90 +144,104 @@ def confirm(user: User):
 
     Return batchID and jobID.
     """
-    data = request.get_json(silent=True)
-    if not data or "batchID" not in data:
-        return JSONRes.new(400, "batchID is required.")
-    
-    batchID = data["batchID"]
+    batchID: str = request.json.get('batchID')
 
     # Load batch
-    batch = Batch.load(batchID)
-    if not batch:
-        return JSONRes.new(404, "Batch not found.")
+    batch = None
+    try:
+        batch = Batch.load(batchID)
+        if batch is None:
+            return JSONRes.new(404, "Batch not found.")
+        if not isinstance(batch, Batch):
+            raise Exception("Unexpected response in loading Batch; response: {}".format(batch))
     
+    except Exception as e:
+        Logger.log("DATAIMPORT CONFIRMBATCH ERROR: Failed to load batch {}; error: {}".format(batchID, e))
+        return JSONRes.ambiguousError()
+
     # Ensure user owns the batch
     if batch.userID != user.id:
-        return JSONRes.new(403, "You do not have permission for this batch.", ResType.ERROR)
+        return JSONRes.new(403, "You don't have permission to start this batch's processing.", ResType.USERERROR)
     
     try:
         batch.initJob()
         batch.job.jobID = ThreadManager.defaultProcessor.addJob(DataImportProcessor.processBatch, batch)
         batch.job.save()
-        batch.save()
 
-        return JSONRes.new(200, "message", ResType.SUCCESS, batchID=batch.id, jobID=batch.job.jobID)
+        return JSONRes.new(200, "Batch processing started.", batchID=batch.id)
     
     except Exception as e:
-        Logger.log("DATAIMPORT CONFIRM ERROR: Failed to confirm batch {}: {}".format(batchID, e))
-        return JSONRes.new(500, "Failed to start batch processing.", ResType.ERROR)
+        Logger.log("DATAIMPORT CONFIRMBATCH ERROR: Failed to confirm batch {}: {}".format(batchID, e))
+        return JSONRes.ambiguousError()
 
-@dataimportBP.route('/batches', methods=['GET'])
+@dataImportBP.route('/batches', methods=['GET'])
 @checkSession(strict=True)
 def getAllBatches():
     try:
         batches = Batch.load()
         if not batches:
             return JSONRes.new(200, "No batches found.")
+        if not isinstance(batches, list):
+            raise Exception("Expected list of batches, got {}".format(type(batches)))
 
+        # filter out sensitive information
         formatted = {b.id: b.represent() for b in batches}
         return JSONRes.new(200, "All batches retrieved.", batches=formatted)
 
     except Exception as e:
-        return JSONRes.ambiguousError(str(e))
+        Logger.log("DATAIMPORT GETALLBATCHES ERROR: {}".format(e))
+        return JSONRes.ambiguousError()
 
-@dataimportBP.route('/userbatches', methods=['GET'])
+@dataImportBP.route('/userBatches', methods=['GET'])
 @checkSession(strict=True, provideUser=True)
 def getUserBatches(user: User):
     try:
-        batches = Batch.load(userID=user.id, withArtefacts=False)
-        if not batches:
-            return JSONRes.new(200, "No batches found.")
-
-        formatted = {b.id: b.represent() for b in batches}
+        batches = Batch.load(userID=user.id)
+        
+        formatted = {b.id: b.represent() for b in batches} if batches else {}
         return JSONRes.new(200, "User batches retrieved.", batches=formatted)
 
     except Exception as e:
-        return JSONRes.ambiguousError(str(e))
+        Logger.log("DATAIMPORT GETUSERBATCHES ERROR: {}".format(e))
+        return JSONRes.ambiguousError()
 
-@dataimportBP.route('/batches/<batchID>/cancel', methods=['POST'])
+@dataImportBP.route('/batches/cancel', methods=['POST'])
 @checkSession(strict=True, provideUser=True)
-def cancelBatch(user: User, batchID: str):
+@jsonOnly
+@enforceSchema(('batchID', str)) 
+def cancelBatch(user: User):
     try:
+        batchID: str = request.json.get('batchID')
+
+        # Load the batch first to get userID
         batch = Batch.load(id=batchID)
         if not batch:
             return JSONRes.new(404, "Batch not found.")
 
-        # Ensure batch belongs to user or has permission
         if batch.userID != user.id:
             return JSONRes.unauthorised()
 
-        job = batch.job
-        if job.status in [BatchProcessingJob.Status.COMPLETED]:
+        # Now load the job
+        batchJob = BatchProcessingJob.load(batch)
+        if not batchJob:
+            return JSONRes.new(404, "Batch job not found.")
+
+        if batchJob.status == BatchProcessingJob.Status.COMPLETED:
             return JSONRes.new(400, "Batch job already completed")
-        elif job.status in [BatchProcessingJob.Status.CANCELLED]:
+        elif batchJob.status == BatchProcessingJob.Status.CANCELLED:
             return JSONRes.new(200, "Batch job already cancelled.")
 
-        job.cancel()
-        job.save()
+        batchJob.cancel()
 
-        return JSONRes.new(200, "Batch {} processing cancelled.".format(batchID))
+        return JSONRes.new(200, "Batch processing cancelled.", batchID=batchID)
 
     except Exception as e:
-        return JSONRes.ambiguousError(str(e))
+        Logger.log("DATAIMPORT CANCELBATCH ERROR: {}".format(e))
+        return JSONRes.ambiguousError()
 
-@dataimportBP.route('/batches/<batchID>/delete', methods=['DELETE'])
-@checkSession(strict=True, provideUser=True)
-def deleteBatch(user: User, batchID: str):
+@dataImportBP.route('/batches/<batchID>', methods=['DELETE'])
+@checkSession(strict=True)
+def deleteBatch(batchID: str):
     """
     Deletes a batch and its artefacts.
 
@@ -231,20 +257,12 @@ def deleteBatch(user: User, batchID: str):
         if not batch:
             return JSONRes.new(404, "Batch {} not found.".format(batchID))
 
-        if batch.userID != user.id:
-            return JSONRes.unauthorised()
-
         deletionResults = {}
-        artefacts = getattr(batch, "artefacts", [])
+        artefacts = batch.artefacts or {}
 
-        for artefactRef in artefacts:
-            artefactID = artefactRef if isinstance(artefactRef, str) else getattr(artefactRef, 'id', None)
-            if not artefactID:
-                deletionResults["unknown_artefact"] = "Skipped invalid artefact reference with no ID."
-                continue
-
+        for artefactID in artefacts:
             try:
-                artefact = artefactRef if isinstance(artefactRef, Artefact) else Artefact.load(id=artefactID)
+                artefact = Artefact.load(id=artefactID)
                 if not artefact:
                     deletionResults[artefactID] = "ERROR: Artefact not found."
                     continue
@@ -285,4 +303,4 @@ def deleteBatch(user: User, batchID: str):
 
     except Exception as e:
         Logger.log("DATAIMPORT DELETE ERROR: {}".format(e))
-        return JSONRes.ambiguousError(str(e))
+        return JSONRes.ambiguousError()
