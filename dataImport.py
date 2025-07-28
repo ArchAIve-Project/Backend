@@ -87,8 +87,8 @@ def upload(user : User):
             Logger.log("DATAIMPORT UPLOAD ERROR: Failed to upload file to FileManager. File path: '{}', original filename: '{}'. Error: {}".format(fileObj.identifierPath(), file.filename, res))
                 
             remove = FileManager.removeLocally(fileObj)
-            if remove != True: # failed to remove locally after FM save failure
-                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to remove locally file after FM save failure. File path: '{}', original filename: '{}'. Remove result: {}".format(fileObj.identifierPath(), file.filename, remove))
+            if remove != True: 
+                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to remove file locally after FM save failure. File path: '{}', original filename: '{}'. Remove result: {}".format(fileObj.identifierPath(), file.filename, remove))
             
             fileSaveUpdates[file.filename] = "ERROR: Failed to save file."
             continue
@@ -279,7 +279,7 @@ def deleteBatch(batchID: str):
         # Attempt to delete the batch
         try:
             batch.destroy()
-            deletionResults["batch"] = "Batch deleted successfully."
+            deletionResults["batch"] = "SUCCESS: Batch deleted successfully."
         except Exception as e:
             Logger.log("DATAIMPORT DELETE ERROR: Failed to delete batch {}: {}".format(batchID, e))
             deletionResults["batch"] = "ERROR: Failed to delete batch."
