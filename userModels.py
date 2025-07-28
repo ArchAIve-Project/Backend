@@ -286,7 +286,7 @@ Created: {} />""".format(
         if not (isinstance(logs, list) or logs == None):
             raise Exception("USER GETAUDITLOGS ERROR: Unexpected load response format when retrieving logs for user '{}'; response: {}".format(self.id, logs))
         
-        self.logs = logs
+        self.logs = sorted(logs, key=lambda log: log.created) if isinstance(logs, list) else logs
         return self.logs
 
     def newLog(self, title: str, description: str, autoSave: bool=True) -> AuditLog:
