@@ -10,7 +10,7 @@ from ingestion import DataImportProcessor
 from services import Logger
 from decorators import jsonOnly, enforceSchema
 
-dataImportBP = Blueprint('dataimport', __name__, url_prefix="/dataimport")
+dataImportBP = Blueprint('dataImport', __name__, url_prefix="/dataImport")
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -185,7 +185,22 @@ def getAllBatches():
             raise Exception("Expected list of batches, got {}".format(type(batches)))
 
         # filter out sensitive information
-        formatted = {b.id: b.represent() for b in batches}
+        formatted = {}
+        for b in batches:
+            rep = b.represent()
+
+            # Remove userID completely
+            rep.pop("userID", None)
+
+            # Remove processingError from each artefact
+            for artefactData in rep.get("artefacts", {}).values():
+                artefactData.pop("processingError", None)
+
+            # Keep job but remove jobID
+            if "job" in rep and isinstance(rep["job"], dict):
+                rep["job"].pop("jobID", None)
+
+            formatted[b.id] = rep
         return JSONRes.new(200, "All batches retrieved.", batches=formatted)
 
     except Exception as e:
