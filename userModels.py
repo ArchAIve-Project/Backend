@@ -149,11 +149,17 @@ class User(DIRepresentable):
         username (str): The username of the user.
         email (str): The email of the user.
         pwd (str): The password of the user.
+        fname (str): The first name of the user.
+        lname (str): The last name of the user.
+        role (str): The role of the user in the context of the organisation.
+        contact (str): The contact number for the user.
         authToken (str, optional): The auth token of the user. Defaults to None.
         superuser (bool, optional): Whether the user is a superuser. Defaults to False
         lastLogin (str, optional): The last login timestamp of the user. Defaults to None.
         created (str, optional): The creation timestamp of the user. Defaults to None.
+        resetKey (str | None, optional): The reset key for the user. Defaults to None.
         logs (List[AuditLog] | None): A convenience attribute optionally storing the audit logs associated with the user. Populated by `getAuditLogs()`.
+        originRef (Ref): The reference to the user in the database.
     
     Sample usage:
     ```python
@@ -180,10 +186,15 @@ class User(DIRepresentable):
             username (str): The username of the user.
             email (str): The email of the user.
             pwd (str): The password of the user.
+            fname (str): The first name of the user.
+            lname (str): The last name of the user.
+            role (str): The role of the user in the context of the organisation.
+            contact (str, optional): The contact number for the user. Defaults to an empty string.
             authToken (str, optional): The auth token of the user. Defaults to None.
             superuser (bool, optional): Whether the user is a superuser. Defaults to False.
             lastLogin (str, optional): The last login timestamp of the user. Defaults to None.
             created (str, optional): The creation timestamp of the user. Defaults to None. If not provided, it will be set to the current UTC time in ISO format.
+            resetKey (str | None, optional): The reset key for the user. Defaults to None.
             id (str, optional): The unique identifier of the user. Defaults to None. Auto-generated if not provided.
         """
         if id is None:
@@ -240,13 +251,13 @@ Last Login: {}
 Created: {}
 Reset Key: {} />""".format(
             self.id,
-            self.fname,
-            self.lname,
+            self.fname or "None or Empty",
+            self.lname or "None or Empty",
             self.username,
             self.email,
             self.pwd,
-            self.role,
-            self.contact if len(self.contact) > 0 else "None",
+            self.role or "None or Empty",
+            self.contact or "None or Empty",
             ("\n---\n- " + ("\n- ".join((str(log) if isinstance(log, AuditLog) else "CORRUPTED AUDITLOG AT INDEX '{}'".format(i)) for i, log in enumerate(self.logs))) + "\n---") if isinstance(self.logs, list) and len(self.logs) > 0 else " None or Empty",
             self.authToken,
             self.superuser,
@@ -338,13 +349,15 @@ Reset Key: {} />""".format(
     
     @staticmethod
     def rawLoad(data: dict, userID: str | None=None, withLogs: bool=False) -> 'User':
-        requiredParams = ['username', 'email', 'pwd', 'authToken', 'superuser', 'lastLogin', 'created']
+        requiredParams = ['username', 'email', 'pwd', 'fname', 'lname', 'role', 'contact', 'authToken', 'superuser', 'lastLogin', 'created', 'resetKey']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam in []: # add any required params that should be empty dictionaries
                     data[reqParam] = {}
                 elif reqParam in []: # add any required params that should be empty lists
                     data[reqParam] = []
+                elif reqParam in ['fname', 'lname', 'role', 'contact']: # add any required params that should be empty strings
+                    data[reqParam] = ''
                 elif reqParam in ['superuser']:
                     data[reqParam] = False
                 else:
@@ -354,13 +367,18 @@ Reset Key: {} />""".format(
             data['superuser'] = False
         
         u = User(
-            username=data['username'],
-            email=data['email'],
-            pwd=data['pwd'],
-            authToken=data['authToken'],
-            superuser=data['superuser'],
-            lastLogin=data['lastLogin'],
-            created=data['created'],
+            username=data.get('username'),
+            email=data.get('email'),
+            pwd=data.get('pwd'),
+            fname=data.get('fname'),
+            lname=data.get('lname'),
+            role=data.get('role'),
+            contact=data.get('contact', ''),
+            authToken=data.get('authToken'),
+            superuser=data.get('superuser'),
+            lastLogin=data.get('lastLogin'),
+            created=data.get('created'),
+            resetKey=data.get('resetKey'),
             id=userID
         )
         
