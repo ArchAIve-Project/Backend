@@ -171,7 +171,7 @@ def getAllBatches():
             raise Exception("Expected list of batches, got {}".format(type(batches)))
 
     except Exception as e:
-        Logger.log("DATAIMPORT GETALLBATCHES ERROR: Failled to load batches; error: {}".format(e))
+        Logger.log("DATAIMPORT GETALLBATCHES ERROR: Failed to load batches; error: {}".format(e))
         return JSONRes.ambiguousError()
 
     # filter out sensitive information
@@ -269,15 +269,8 @@ def deleteBatch(batchID: str):
     batchArtefacts = batch.artefacts or {}
 
     for artefactID in batchArtefacts:
-        try:
-            artefact = batchArtefacts[artefactID].artefact
-            if not artefact:
-                deletionResults[artefactID] = "ERROR: Artefact not found."
-                continue
 
-        except Exception as e:
-            Logger.log("DATAIMPORT DELETE ERROR: Failed to access artefact '{}'; error: {}".format(artefactID, e))
-            deletionResults[artefactID] = "ERROR: Failed to access artefact."
+        artefact = batchArtefacts[artefactID].artefact
 
         # Delete file from FileManager
         res = artefact.fmDelete()
