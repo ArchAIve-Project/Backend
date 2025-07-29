@@ -35,7 +35,7 @@ def upload(user : User):
         return JSONRes.new(400, "No file part in request.")
 
     files = request.files.getlist('file')
-    files = list(filter(lambda f: f and f.filename, files)) 
+    files = list(filter(lambda f: f and f.filename, files))
     if not files:
         return JSONRes.new(400, "No files selected.", ResType.USERERROR)
 
@@ -44,7 +44,7 @@ def upload(user : User):
     processedNames = set()
 
     for file in files:
-        
+
         fileName = os.path.splitext(file.filename)[0].lower()
 
         # Check duplicate in current request
@@ -68,7 +68,7 @@ def upload(user : User):
         if validSize > Universal.MAX_FILE_SIZE:
             fileSaveUpdates[file.filename] = "ERROR: File size exceeds 10MB."
             continue
-        
+
         # Save file locally
         filename = Universal.generateUniqueID()
         filename = "{}.{}".format(filename, FileOps.getFileExtension(file.filename))
@@ -81,40 +81,40 @@ def upload(user : User):
             fileSaveUpdates[file.filename] = "ERROR: Failed to save file."
             continue
 
-        # Sync local to firebase 
+        # Sync local to firebase
         res = FileManager.save(file=fileObj)
         if isinstance(res, str):
-            Logger.log("DATAIMPORT UPLOAD ERROR: Failed to upload file to FileManager. File path: '{}', original filename: '{}'. Error: {}".format(fileObj.identifierPath(), file.filename, res))
-                
+            Logger.log("DATAIMPORT UPLOAD ERROR: Failed to upload file to FileManager. File path: '{}', original filename: '{}'; error: {}".format(fileObj.identifierPath(), file.filename, res))
+
             remove = FileManager.removeLocally(fileObj)
-            if remove != True: 
-                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to remove file locally after FM save failure. File path: '{}', original filename: '{}'. Remove result: {}".format(fileObj.identifierPath(), file.filename, remove))
-            
+            if remove != True:
+                Logger.log("DATAIMPORT UPLOAD ERROR: Failed to remove file locally after FM save failure. File path: '{}', original filename: '{}'; error: {}".format(fileObj.identifierPath(), file.filename, remove))
+
             fileSaveUpdates[file.filename] = "ERROR: Failed to save file."
             continue
 
         # Create artefact
         artefact = Artefact.fromFMFile(fileObj)
-        
+
         artefact.save()
         successfulFiles.append(artefact)
         fileSaveUpdates[file.filename] = "SUCCESS: File uploaded successfully."
-    
+
     if not successfulFiles:
         return JSONRes.new(400, "No artefacts were processed successfully.", updates=fileSaveUpdates)
-    
+
     try:
         # Create batch
         batch = Batch(user.id, batchArtefacts=successfulFiles)
         batch.save()
 
     except Exception as e:
-        Logger.log("DATAIMPORT UPLOAD ERROR: Failed to create batch for user '{}' with {} artefacts. Error: {}".format(user.id, len(successfulFiles), e))
+        Logger.log("DATAIMPORT UPLOAD ERROR: Failed to create batch for user '{}' with '{}' artefacts; error: {}".format(user.id, len(successfulFiles), e))
 
     return JSONRes.new(200, "Upload results.", updates=fileSaveUpdates, batchID=batch.id)
 
 @dataImportBP.route('/confirm', methods=['POST'])
-@jsonOnly 
+@jsonOnly
 @enforceSchema( ('batchID', str) )
 @checkSession(strict=True, provideUser=True)
 def confirmBatch(user: User):
@@ -139,25 +139,25 @@ def confirmBatch(user: User):
         if batch is None:
             return JSONRes.new(404, "Batch not found.")
         if not isinstance(batch, Batch):
-            raise Exception("Unexpected response in loading batch; response: {}".format(batch))
-    
+            raise Exception("Unexpected response in loading batch; error: {}".format(batch))
+
     except Exception as e:
-        Logger.log("DATAIMPORT CONFIRMBATCH ERROR: Failed to load batch {}; error: {}".format(batchID, e))
+        Logger.log("DATAIMPORT CONFIRMBATCH ERROR: Failed to load batch '{}'; error: {}".format(batchID, e))
         return JSONRes.ambiguousError()
 
     # Ensure user owns the batch
     if batch.userID != user.id:
         return JSONRes.new(403, "You don't have permission to start this batch's processing.", ResType.USERERROR)
-    
+
     try:
         batch.initJob()
         batch.job.jobID = ThreadManager.defaultProcessor.addJob(DataImportProcessor.processBatch, batch)
         batch.job.save()
 
         return JSONRes.new(200, "Batch processing started.", batchID=batch.id)
-    
+
     except Exception as e:
-        Logger.log("DATAIMPORT CONFIRMBATCH ERROR: Failed to confirm batch {}: {}".format(batchID, e))
+        Logger.log("DATAIMPORT CONFIRMBATCH ERROR: Failed to confirm batch '{}'; error: {}".format(batchID, e))
         return JSONRes.ambiguousError()
 
 @dataImportBP.route('/batches', methods=['GET'])
@@ -169,11 +169,11 @@ def getAllBatches():
             return JSONRes.new(200, "No batches found.", batches={})
         if not isinstance(batches, list):
             raise Exception("Expected list of batches, got {}".format(type(batches)))
-    
+
     except Exception as e:
-        Logger.log("DATAIMPORT GETALLBATCHES ERROR: {}".format(e))
+        Logger.log("DATAIMPORT GETALLBATCHES ERROR: Failled to load batches; error: {}".format(e))
         return JSONRes.ambiguousError()
-    
+
     # filter out sensitive information
     formatted = {}
     for b in batches:
@@ -194,8 +194,8 @@ def getAllBatches():
             formatted[b.id] = rep
 
         except Exception as e:
-            Logger.log("DATAIMPORT GETALLBATCHES ERROR: Failed to load batch {}: {}".format(b.id, e))
-            continue  
+            Logger.log("DATAIMPORT GETALLBATCHES ERROR: Failed to filter batch '{}'; error: {}".format(b.id, e))
+            continue
 
     return JSONRes.new(200, "All batches retrieved.", batches=formatted)
 
@@ -209,19 +209,24 @@ def getUserBatches(user: User):
         return JSONRes.new(200, "User batches retrieved.", batches=formatted)
 
     except Exception as e:
-        Logger.log("DATAIMPORT GETUSERBATCHES ERROR: {}".format(e))
+        Logger.log("DATAIMPORT GETUSERBATCHES ERROR: Failed to retrieve batches for user '{}'; error: {}".format(user.id, e))
         return JSONRes.ambiguousError()
 
 @dataImportBP.route('/batches/cancel', methods=['POST'])
 @jsonOnly
-@enforceSchema(('batchID', str)) 
+@enforceSchema(('batchID', str))
 @checkSession(strict=True, provideUser=True)
 def cancelBatch(user: User):
 
     batchID: str = request.json.get('batchID')
 
-    # Now load the job
-    batchJob = BatchProcessingJob.load(batchID)
+    try:
+        batchJob = BatchProcessingJob.load(batchID)
+
+    except Exception as e:
+        Logger.log("DATAIMPORT CANCELBATCH ERROR: Failed to load batch '{}'; error: {}".format(batchID, e))
+        return JSONRes.ambiguousError()
+
     if not batchJob:
         return JSONRes.new(404, "Batch job not found.")
 
@@ -235,7 +240,7 @@ def cancelBatch(user: User):
         return JSONRes.new(200, "Batch processing cancelled.", batchID=batchID)
 
     except Exception as e:
-        Logger.log("DATAIMPORT CANCELBATCH ERROR: {}".format(e))
+        Logger.log("DATAIMPORT CANCELBATCH ERROR: Failed to cancel batch '{}'; error: {}".format(batchJob.batchID, e))
         return JSONRes.ambiguousError()
 
 @dataImportBP.route('/batches/<batchID>', methods=['DELETE'])
@@ -254,43 +259,53 @@ def deleteBatch(batchID: str):
     try:
         batch = Batch.load(id=batchID, withArtefacts=True)
         if not batch:
-            return JSONRes.new(404, "Batch {} not found.".format(batchID))
+            return JSONRes.new(404, "Batch '{}' not found.".format(batchID))
 
-        deletionResults = {}
-        batchArt = batch.artefacts or {}
+    except Exception as e:
+        Logger.log("DATAIMPORT DELETE ERROR: Failed to load batch '{}'; error : {}".format(batchID, e))
+        return JSONRes.ambiguousError()
 
-        for artefactID in batchArt:
+    deletionResults = {}
+    batchArtefacts = batch.artefacts or {}
 
-            artefact = batchArt[artefactID].artefact
+    for artefactID in batchArtefacts:
+        try:
+            artefact = batchArtefacts[artefactID].artefact
             if not artefact:
                 deletionResults[artefactID] = "ERROR: Artefact not found."
                 continue
 
-            # Delete file from FileManager
-            res = artefact.fmDelete()
-            if res is not True: # Add log
-                deletionResults[artefactID] = "ERROR: Failed to delete file."
-                continue
+        except Exception as e:
+            Logger.log("DATAIMPORT DELETE ERROR: Failed to access artefact '{}'; error: {}".format(artefactID, e))
+            deletionResults[artefactID] = "ERROR: Failed to access artefact."
 
+        # Delete file from FileManager
+        res = artefact.fmDelete()
+        if res is not True:
+            Logger.log("DATAIMPORT DELETE ERROR: Failed to FM delete file for artefact '{}'; error: {}".format(artefactID, res))
+            deletionResults[artefactID] = "ERROR: Failed to FM delete artefact."
+            continue
+
+        try:
             # Delete DB record
             artefact.destroy()
             deletionResults[artefactID] = "SUCCESS: Artefact deleted successfully."
-        
-        # Attempt to delete the batch
-        try:
-            batch.destroy()
-            deletionResults["batch"] = "SUCCESS: Batch deleted successfully."
+
         except Exception as e:
-            Logger.log("DATAIMPORT DELETE ERROR: Failed to delete batch {}: {}".format(batchID, e))
-            deletionResults["batch"] = "ERROR: Failed to delete batch."
+            Logger.log("DATAIMPORT DELETE ERROR: Failed to DB delete artefact '{}'; error: {}".format(artefactID, e))
+            deletionResults[artefactID]= "ERROR: Failed to DB delete artefact."
 
-        # Determine overall response
-        hasErrors = any("ERROR" in msg for msg in deletionResults.values())
-        if hasErrors:
-            return JSONRes.new(207, "Batch {} deletion partially failed.".format(batchID), updates=deletionResults, batchID=batchID)
-
-        return JSONRes.new(200, "Batch {} and all artefacts deleted.".format(batchID), updates=deletionResults, batchID=batchID)
-
+    # Attempt to delete the batch
+    try:
+        batch.destroy()
+        deletionResults["batch"] = "SUCCESS: Batch deleted successfully."
     except Exception as e:
-        Logger.log("DATAIMPORT DELETE ERROR: {}".format(e))
-        return JSONRes.ambiguousError()
+        Logger.log("DATAIMPORT DELETE ERROR: Failed to delete batch '{}'; error: {}".format(batchID, e))
+        deletionResults["batch"] = "ERROR: Failed to delete batch."
+
+    # Determine overall response
+    hasErrors = any("ERROR" in msg for msg in deletionResults.values())
+    if hasErrors:
+        return JSONRes.new(207, "Batch '{}' deletion partially failed.".format(batchID), updates=deletionResults, batchID=batchID)
+
+    return JSONRes.new(200, "Batch '{}' and all artefacts deleted.".format(batchID), updates=deletionResults, batchID=batchID)
