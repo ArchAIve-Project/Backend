@@ -298,10 +298,10 @@ def deleteBatch(batchID: str):
     # Attempt to delete the batch
     try:
         batch.destroy()
-        deletionResults["batch"] = "SUCCESS: Batch deleted successfully."
+        deletionResults[batchID] = "SUCCESS: Batch deleted successfully."
     except Exception as e:
         Logger.log("DATAIMPORT DELETE ERROR: Failed to delete batch '{}'; error: {}".format(batchID, e))
-        deletionResults["batch"] = "ERROR: Failed to delete batch."
+        deletionResults[batchID] = "ERROR: Failed to delete batch."
 
     # Determine overall response
     hasErrors = any("ERROR" in msg for msg in deletionResults.values())
