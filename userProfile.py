@@ -15,14 +15,16 @@ def getInfo(user: User):
     return JSONRes.new(
         code=200,
         msg="Information retrieved successfully.",
-        username=user.username,
-        email=user.email,
-        fname=user.fname,
-        lname=user.lname,
-        role=user.role,
-        contact=user.contact,
-        lastLogin=user.lastLogin,
-        created=user.created
+        info={
+            'username': user.username,
+            'email': user.email,
+            'fname': user.fname,
+            'lname': user.lname,
+            'role': user.role,
+            'contact': user.contact,
+            'lastLogin': user.lastLogin,
+            'created': user.created
+        }
     )
 
 @profileBP.route('/update', methods=['POST'])
