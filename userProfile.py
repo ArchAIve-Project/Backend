@@ -125,7 +125,7 @@ def update(user: User):
     ),
     Param(
         "newPassword",
-        lambda x: isinstance(x, str) and len(x) > 6 and len(x) < 16 and (not re.search(r'\s', x)),
+        lambda x: isinstance(x, str) and len(x) >= 6 and len(x) <= 16 and (not re.search(r'\s', x)),
         invalidRes=JSONRes.new(400, "New password must be between 6 and 16 characters and contain no spaces.", ResType.USERERROR, serialise=False)
     )
 )
@@ -133,6 +133,9 @@ def update(user: User):
 def changePassword(user: User):
     currentPassword = request.json['currentPassword'].strip()
     newPassword = request.json['newPassword'].strip()
+    
+    if newPassword == currentPassword:
+        return JSONRes.new(400, "New password cannot be same as current password.", ResType.USERERROR)
     
     if not Encryption.verifySHA256(currentPassword, user.pwd):
         return JSONRes.new(401, "Current password is incorrect.", ResType.USERERROR)
