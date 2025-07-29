@@ -88,10 +88,12 @@ if __name__ == "__main__":
         autoLoad=os.environ.get("DEBUG_MS_AUTOLOAD", "True") == "True",
         ccr=CCRPipeline.loadChineseClassifier,
         ccrCharFilter=CCRPipeline.loadBinaryClassifier,
-        ner=NERPipeline.load_model,
         cnn=ImageClassifier.load_model,
         imageCaptioner=ImageCaptioning.loadModel
     )
+    
+    # Load NERP model
+    NERPipeline.load_model()
     
     # Setup LLMInterface
     res = LLMInterface.initDefaultClients()

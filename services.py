@@ -1,9 +1,8 @@
-import os, shutil, json, base64, random, datetime, uuid, functools, threading
+import os, shutil, json, base64, random, datetime, uuid, threading, torch
 from enum import Enum
 from typing import List, Dict
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
-from firebase import FireStorage
 from passlib.hash import sha256_crypt as sha
 from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -109,16 +108,16 @@ class AsyncProcessor:
         
         job = None
         if trigger.customAPTrigger != None:
-            job = self.scheduler.add_job(function, trigger.customAPTrigger, args=args, kwargs=kwargs)
+            job = self.scheduler.add_job(function, trigger.customAPTrigger, args=args, kwargs=kwargs, misfire_grace_time=None)
             self.log("Job for '{}' added with custom trigger.".format(function.__name__))
         elif trigger.immediate:
-            job = self.scheduler.add_job(function, args=args, kwargs=kwargs)
+            job = self.scheduler.add_job(function, args=args, kwargs=kwargs, misfire_grace_time=None)
             self.log("Job for '{}' added with immediate trigger.".format(function.__name__))
         elif trigger.type == "date":
-            job = self.scheduler.add_job(function, DateTrigger(run_date=trigger.triggerDate), args=args, kwargs=kwargs)
+            job = self.scheduler.add_job(function, DateTrigger(run_date=trigger.triggerDate), args=args, kwargs=kwargs, misfire_grace_time=None)
             self.log("Job for '{}' added with trigger date: {}.".format(function.__name__, trigger.triggerDate.isoformat()))
         else:
-            job = self.scheduler.add_job(function, 'interval', seconds=trigger.seconds, minutes=trigger.minutes, hours=trigger.hours, args=args, kwargs=kwargs)
+            job = self.scheduler.add_job(function, 'interval', seconds=trigger.seconds, minutes=trigger.minutes, hours=trigger.hours, args=args, kwargs=kwargs, misfire_grace_time=None)
             self.log("Job for '{}' added with trigger: {} seconds, {} minutes, {} hours.".format(function.__name__, trigger.seconds, trigger.minutes, trigger.hours))
             
         return job.id
@@ -311,6 +310,10 @@ class Universal:
     version = None
     store = {}
     MAX_FILE_SIZE = 10 * 1024 * 1024
+    device = os.environ.get(
+        "DEVICE",
+        "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+    )
     
     @staticmethod
     def getVersion():
@@ -334,6 +337,21 @@ class Universal:
             while out in notIn:
                 out = ''.join(random.choices(source, k=customLength))
             return out
+    
+    @staticmethod
+    def getBestDevice(supported: list[str]=None):
+        if supported == None:
+            supported = ["cuda", "mps", "cpu"]
+        
+        if Universal.device not in supported:
+            if 'cuda' in supported and torch.cuda.is_available():
+                return 'cuda'
+            elif 'mps' in supported and torch.backends.mps.is_available():
+                return 'mps'
+            
+            return 'cpu'
+        else:
+            return Universal.device
     
     @staticmethod
     def utcNow():

@@ -22,6 +22,8 @@ class EnvVariable:
     @staticmethod
     def defaults():
         return [
+            EnvVariable("DI_FAILOVER_STRATEGY", False, False),
+            EnvVariable("DEVICE", False, False),
             EnvVariable("LOGGING_ENABLED", True, False),
             EnvVariable("DEBUG_MODE", True, False),
             EnvVariable("DEBUG_MS_AUTOLOAD", True, False),
@@ -69,6 +71,7 @@ class BootCheck:
         "facenet-pytorch": "facenet-pytorch",
         "uuid": "uuid",
         "transformers": "transformers",
+        "nltk": "nltk",
         "Pympler": "Pympler"
     }
     
