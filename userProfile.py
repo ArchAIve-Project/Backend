@@ -2,7 +2,7 @@ import re
 from flask import Blueprint, url_for, request
 from utils import JSONRes, ResType
 from services import Universal, Logger, Encryption
-from decorators import jsonOnly, enforceSchema, checkAPIKey
+from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
 from sessionManagement import checkSession
 from models import User, AuditLog
 
@@ -30,18 +30,38 @@ def getInfo(user: User):
 @profileBP.route('/update', methods=['POST'])
 @checkAPIKey
 @enforceSchema(
-    ("username", lambda x: isinstance(x, str) and len(x) > 0, None),
-    ("fname", lambda x: isinstance(x, str) and len(x) > 0, None),
-    ("lname", lambda x: isinstance(x, str) and len(x) > 0, None),
-    ("contact", lambda x: isinstance(x, str) and x.isdigit(), None),
-    ("email", lambda x: isinstance(x, str) and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', x), None)
+    Param(
+        "username",
+        lambda x: isinstance(x, str) and len(x) > 3 and x.isalpha() and (not re.search(r'[^a-zA-Z0-9]', x)), None,
+        invalidRes=JSONRes.new(400, "Username must be at least 3 characters, without any spaces or special characters.", ResType.USERERROR, serialise=False)
+    ),
+    Param(
+        "fname",
+        lambda x: isinstance(x, str) and len(x) > 2 and x.isalpha(), None,
+        invalidRes=JSONRes.new(400, "First name must be at least 2 characters and have only letters.", ResType.USERERROR, serialise=False)
+    ),
+    Param(
+        "lname",
+        lambda x: isinstance(x, str) and len(x) > 1 and x.isalpha(), None,
+        invalidRes=JSONRes.new(400, "Last name must be at least 1 character and have only letters.", ResType.USERERROR, serialise=False)
+    ),
+    Param(
+        "contact",
+        lambda x: isinstance(x, str) and len(x.replace(' ', '').strip()) == 8 and x.replace(' ', '').strip().isdigit(), None,
+        invalidRes=JSONRes.new(400, "Contact number must be 8 digits.", ResType.USERERROR, serialise=False)
+    ),
+    Param(
+        "email",
+        lambda x: isinstance(x, str) and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', x.strip()), None,
+        invalidRes=JSONRes.new(400, "Invalid email.", ResType.USERERROR, serialise=False)
+    )
 )
 @checkSession(strict=True, provideUser=True)
 def update(user: User):
     username = request.json.get('username', user.username).strip()
     fname = request.json.get('fname', user.fname).strip()
     lname = request.json.get('lname', user.lname).strip()
-    contact = request.json.get('contact', user.contact).strip()
+    contact = request.json.get('contact', user.contact).replace(' ', '').strip()
     email = request.json.get('email', user.email).strip()
     
     # Check username uniqueness

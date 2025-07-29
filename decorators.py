@@ -95,42 +95,69 @@ def checkAPIKey(func):
     
     return wrapper_checkAPIKey
 
-def enforceSchema(*expectedArgs):
+class Param:
+    """Parameter for request validation.
+    
+    Each parameter has a name, a list of expectations (types, validation functions that return a `bool`, or specific values),
+    and an optional invalid response (`invalidRes`).
+    
+    If the parameter is not present in the request, it will return `invalidRes`.
+    
+    If the parameter is present but does not match any of the expectations, it will return `invalidRes`.
+    
+    `invalidRes` defaults to `JSONRes.invalidRequestFormat()`.
+    """
+    
+    def __init__(self, name: str, *expectations, invalidRes: JSONRes | tuple | str=None):
+        """Initialize a new Param instance.
+
+        Args:
+            name (str): The name of the parameter.
+            invalidRes (JSONRes | tuple | str, optional): The response to return if the parameter is invalid. Leave `None` to default as `JSONRes.invalidRequestFormat()`.
+        """
+        
+        self.name = name
+        self.invalidRes = invalidRes
+        self.expectations = expectations
+    
+    def optional(self):
+        return None in self.expectations
+    
+    def invalid(self):
+        return self.invalidRes or JSONRes.invalidRequestFormat()
+    
+    @staticmethod
+    def backwardsCompatible(value: tuple | str) -> 'Param':
+        if isinstance(value, str):
+            return Param(value)
+        elif isinstance(value, tuple):
+            if len(value) == 1:
+                return Param(value[0])
+            elif len(value) > 1:
+                return Param(value[0], *value[1:])
+        else:
+            raise TypeError("PARAM BACKWARDSCOMPATIBLE ERROR: 'value' must be a string or a tuple.")
+
+def enforceSchema(*expectedParams):
     """Enforce a specific schema for the JSON payload.
     
     Requires request to be in JSON format, or 415 Unsupported Media Type error will be raised.
     
-    Sample implementation:
+    Sample usage:
     ```python
-    @app.route("/")
+    from decorators import enforceSchema, Param
+    
+    @app.route('/example', methods=['POST'])
     @enforceSchema(
-        ("hello", int),
-        "world",
-        ("john"),
-        ("smth", str, "specificValue", lambda x: isinstance(x, str) and len(x) > 5, None)
+        Param("name", str), # Required, string expected
+        Param("bmi", int, float), # Required, int or float expected
+        Param("email", lambda x: isinstance(x, str) and '@' in x, None, invalidRes=JSONRes.new(400, "Invalid email format.", ResType.USERERROR)), # Optional, custom validation function and response
+        Param("optionalField", str, None)  # Optional field        
     )
-    def home():
-        return "Success!"
+    def example():
+        # Your function logic here
+        return JSONRes.new(200, "Success")
     ```
-    
-    The above example enforces that:
-    - `hello` is provided and is a valid `int`.
-    - `world` is provided and can be of any type.
-    - `john` is provided and can be of any type.
-    - `smth` is optionally provided, and should it exist, it should be either a `str`, have the value of `specificValue`, or be a `str` with length greater than 5
-    
-    The validation schema is quite flexible. For every parameter in `expectedArgs`:
-    - If only the name is provided, either as a string or as the only item in a tuple, it just checks that the parameter is present in the JSON payload.
-    - In a tuple, the first element is considered as the parameter name, and the rest are considered as expectations for that parameter.
-    - To make a parameter optional, include `None` in the expectations.
-    - Do note that the parameter only has to match any ONE expectation to be considered valid.
-    - Expectations can be:
-        - A type (like `int`, `str`, etc.) to ensure the parameter is of that type.
-        - A function that takes the parameter value and returns `True` if the value is valid, and `False` otherwise.
-        - A specific value to ensure the parameter matches that value.
-        - `None` to indicate optionality.
-    
-    Returns `JSONRes.invalidRequestFormat` if the schema is not met.
     """
     def decorator_enforceSchema(func):
         @functools.wraps(func)
@@ -138,36 +165,43 @@ def enforceSchema(*expectedArgs):
         def wrapper_enforceSchema(*args, **kwargs):
             jsonData = request.get_json()
             
-            for param in expectedArgs:
-                if isinstance(param, tuple):
-                    key, *expectations = param
-                    value_present = key in jsonData
+            for param in expectedParams:
+                if not isinstance(param, Param):
+                    # Convert param to Param if it is not already
+                    param = Param.backwardsCompatible(param)
+                
+                # Check if the parameter is present in the JSON data
+                if param.name not in jsonData:
+                    if not param.optional():
+                        return param.invalid()
+                    else:
+                        continue
+                
+                # Extract value and validate against expectations
+                value = jsonData[param.name]
+                if param.expectations:
+                    valid = len(param.expectations) == 1 and param.expectations[0] is None
+                    if valid:
+                        # If only None is expected, any value is valid
+                        continue
                     
-                    if value_present:
-                        value = jsonData[key]
-                        if expectations:
-                            valid = len(expectations) == 1 and expectations[0] is None
-                            if valid:
-                                # If only None is expected, any value is valid
-                                continue
-                            
-                            for expect in expectations:
-                                if isinstance(expect, type) and isinstance(value, expect):
-                                    valid = True
-                                    break
-                                elif isinstance(expect, FunctionType) and expect(value):
-                                    valid = True
-                                    break
-                                elif value == expect and expect is not None:
-                                    valid = True
-                                    break
-                            
-                            if not valid:
-                                return JSONRes.invalidRequestFormat()
-                    elif None not in expectations:
-                        return JSONRes.invalidRequestFormat()
-                elif param not in jsonData:
-                    return JSONRes.invalidRequestFormat()
+                    for expect in param.expectations:
+                        if isinstance(expect, type) and isinstance(value, expect):
+                            # If the expectation is a type, check if value is of that type
+                            valid = True
+                            break
+                        elif isinstance(expect, FunctionType) and expect(value):
+                            # If the expectation is a function, call it with the value
+                            valid = True
+                            break
+                        elif value == expect and expect is not None:
+                            # If the expectation is a specific value, check if value matches it
+                            valid = True
+                            break
+                    
+                    if not valid:
+                        # If none of the expectations matched, return invalid response
+                        return param.invalid()
             
             return func(*args, **kwargs)
         
