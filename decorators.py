@@ -41,7 +41,7 @@ def timeit(func):
         start_time = time.time()
         value = func(*args, **kwargs)
         end_time = time.time()
-        print(f"{func.__name__} took {end_time - start_time:.4f} seconds")
+        print(f"{func.__name__} took {end_time - start_time:.6f} seconds")
         return value
     return wrapper_timeit
 
@@ -120,16 +120,47 @@ def enforceSchema(*expectedArgs):
     def decorator_enforceSchema(func):
         @functools.wraps(func)
         @debug
+        @timeit
         def wrapper_enforceSchema(*args, **kwargs):
             jsonData = request.get_json()
-            for expectedTuple in expectedArgs:
-                if isinstance(expectedTuple, tuple):
-                    if expectedTuple[0] not in jsonData:
+            
+            for param in expectedArgs:
+                if isinstance(param, tuple):
+                    key, *expectations = param
+                    value_present = key in jsonData
+                    
+                    if value_present:
+                        value = jsonData[key]
+                        if expectations:
+                            if not any(
+                                (isinstance(expect, type) and isinstance(value, expect)) or value == expect
+                                for expect in expectations
+                            ):
+                                return JSONRes.invalidRequestFormat()
+                    elif None not in expectations:
                         return JSONRes.invalidRequestFormat()
-                    if len(expectedTuple) > 1:
-                        if not isinstance(jsonData[expectedTuple[0]], expectedTuple[1]):
-                            return JSONRes.invalidRequestFormat()
-                elif expectedTuple not in jsonData:
+                    
+                    # # Extract valid types/values for the parameter, if provided
+                    # expectations = expectedTuple[1:]
+                    
+                    # if expectedTuple[0] in jsonData:
+                    #     if len(expectations) > 0:
+                    #         expected = False
+                    #         for expectation in expectations:
+                    #             if isinstance(expectation, type) and isinstance(jsonData[expectedTuple[0]], expectation):
+                    #                 expected = True
+                    #                 break
+                    #             elif jsonData[expectedTuple[0]] == expectation:
+                    #                 expected = True
+                    #                 break
+                            
+                    #         # If the parameter is present but does not match any of the expected types/values, return invalid request format
+                    #         if not expected:
+                    #             return JSONRes.invalidRequestFormat()
+                    # elif None not in expectations:
+                    #     # If the parameter is not present and no None expectation is provided, return invalid request format
+                    #     return JSONRes.invalidRequestFormat()
+                elif param not in jsonData:
                     return JSONRes.invalidRequestFormat()
             
             return func(*args, **kwargs)
