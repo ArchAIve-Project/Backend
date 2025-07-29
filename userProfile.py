@@ -29,6 +29,7 @@ def getInfo(user: User):
 
 @profileBP.route('/update', methods=['POST'])
 @checkAPIKey
+@jsonOnly
 @enforceSchema(
     Param(
         "username",
@@ -112,3 +113,32 @@ def update(user: User):
         return JSONRes.new(200, "No changes made to the profile.")
     
     return JSONRes.new(200, "Profile updated successfully.")
+
+@profileBP.route('/changePassword', methods=['POST'])
+@checkAPIKey
+@jsonOnly
+@enforceSchema(
+    Param(
+        "currentPassword",
+        lambda x: isinstance(x, str) and len(x) > 0,
+        invalidRes=JSONRes.new(400, "Current password is required.", ResType.USERERROR, serialise=False)
+    ),
+    Param(
+        "newPassword",
+        lambda x: isinstance(x, str) and len(x) > 6 and len(x) < 16 and (not re.search(r'\s', x)),
+        invalidRes=JSONRes.new(400, "New password must be between 6 and 16 characters and contain no spaces.", ResType.USERERROR, serialise=False)
+    )
+)
+@checkSession(strict=True, provideUser=True)
+def changePassword(user: User):
+    currentPassword = request.json['currentPassword'].strip()
+    newPassword = request.json['newPassword'].strip()
+    
+    if not Encryption.verifySHA256(currentPassword, user.pwd):
+        return JSONRes.new(401, "Current password is incorrect.", ResType.USERERROR)
+    
+    user.pwd = Encryption.encodeToSHA256(newPassword)
+    user.save()
+    user.newLog("Password Change", "Password changed successfully.")
+    
+    return JSONRes.new(200, "Password changed successfully.")
