@@ -220,3 +220,4 @@ def getAllCategoriesWithArtefacts():
         "categories": result,
         "books": bookList
     })
+

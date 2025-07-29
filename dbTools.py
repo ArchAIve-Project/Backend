@@ -1,4 +1,4 @@
-import time, pprint, datetime, os, sys, shutil, json
+import time, pprint, datetime, os, sys, shutil, json, random
 from services import Universal, ThreadManager, Encryption, Trigger
 from firebase import FireConn
 from models import DI, User, Artefact, Metadata, Category, Book, CategoryArtefact
@@ -538,6 +538,105 @@ def populateMoreArtefacts():
     print("\n{} book(s) created.\n".format(len(created)))
     return True
 
+def populateHFCat():
+    requireDI()
+    requireFM()
+
+    def duplicateHFImages(folder, out_folder, prefix="hf", ext=".png", count=50):
+        """Duplicates images from folder into out_folder as hf1.png to hf50.png."""
+        if not os.path.exists(out_folder):
+            os.makedirs(out_folder)
+
+        source_files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
+        if not source_files:
+            print(f"No source images found in '{folder}' to duplicate.")
+            return
+
+        for i in range(count):
+            src_file = random.choice(source_files)
+            src_path = os.path.join(folder, src_file)
+            dst_filename = f"{prefix}{i + 1}{ext}"
+            dst_path = os.path.join(out_folder, dst_filename)
+            shutil.copy(src_path, dst_path)
+            print(f"Created {dst_path} from {src_file}")
+
+    print("\nPreparing hfDummy folder...\n")
+    hfDummyPath = os.path.join(os.getcwd(), "hfDummy")
+    if not os.path.exists(hfDummyPath):
+        os.makedirs(hfDummyPath)
+
+    hf_files = [f"hf{i}.png" for i in range(1, 51)]
+    existing_files = set(os.listdir(hfDummyPath))
+    hf_count = sum(1 for f in hf_files if f in existing_files)
+
+    if hf_count < 50:
+        print("Not enough HF images found in 'hfDummy'. Generating from './dummy'...")
+        duplicateHFImages(folder="./dummy", out_folder=hfDummyPath)
+    else:
+        print("Found 50 HF images in hfDummy.")
+
+    currentArtefacts = Artefact.load()
+    currentArtefactImages = {art.image for art in currentArtefacts}
+
+    newlyAdded = []
+    for filename in hf_files:
+        file = File(filename, "artefacts")
+        target_path = file.path()
+        source_path = os.path.join(hfDummyPath, filename)
+
+        if not os.path.isfile(source_path):
+            print(f"Source file missing: {source_path}. Skipping.")
+            continue
+
+        if not os.path.isfile(target_path):
+            shutil.copy(source_path, target_path)
+            FileManager.save(file.store, file.filename)
+            print(f"Copied '{filename}' to artefacts.")
+
+        if filename not in currentArtefactImages:
+            description = f"Description for artefact {filename}"
+            art = Artefact(filename, filename, description=description, metadata=None)
+            art.save()
+            newlyAdded.append(filename)
+            print(f"Saved artefact to DB: {filename}")
+
+    print(f"\n{len(newlyAdded)} HF artefacts populated.\n")
+
+    # Assign categories
+    all_artefacts = Artefact.load()
+    image_to_id = {art.image: art.id for art in all_artefacts}
+    hf_all = [f"hf{i}.png" for i in range(1, 51)]
+
+    categories = [
+        ("Human Set A", hf_all[:20]),
+        ("Human Set B", hf_all[20:30]),
+        ("Human Set C", []),  # empty
+    ]
+
+    for cat_name, artefact_filenames in categories:
+        cat = Category.load(name=cat_name)
+        if not cat:
+            cat = Category(name=cat_name, description=f"Category for {cat_name.lower()}")
+
+        added = 0
+        for filename in artefact_filenames:
+            artefact_id = image_to_id.get(filename)
+            if not artefact_id:
+                print(f"Artefact with image '{filename}' not found. Skipping.")
+                continue
+
+            try:
+                cat.add(artefact_id, reason=f"Auto-assigned to {cat_name}")
+                added += 1
+            except Exception as e:
+                print(f"Failed to add '{filename}' to '{cat_name}': {e}")
+
+        cat.save()
+        print(f"Category '{cat.name}' saved with {added}/{len(artefact_filenames)} artefacts.")
+
+    print("\nHF-only population complete.\n")
+    return True
+
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
     print("This is a debug script to quickly carry out common tasks.")
@@ -562,11 +661,12 @@ def main(choices: list[int] | None=None):
             print("9. Reset local data files")
             print("10. Remove categories")
             print("11. Populate more data (after 1)")
+            print("12: Populate 50 HF and 3 Cat (20 ungrouped HF, 1 empty Cat)")
             print("0: Exit")
         
         try:
             choice = int(input("Enter choice: ")) if choice is None else choice
-            if choice not in range(12):
+            if choice not in range(13):
                 raise Exception()
         except KeyboardInterrupt:
             print("\nExiting...")
@@ -607,6 +707,8 @@ def main(choices: list[int] | None=None):
             removeCategories(name)
         elif choice == 11:
             populateMoreArtefacts()
+        elif choice == 12:
+            populateHFCat()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)
