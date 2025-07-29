@@ -1,3 +1,4 @@
+import re
 from flask import Blueprint, url_for, request
 from utils import JSONRes, ResType
 from services import Universal, Logger, Encryption
@@ -26,18 +27,66 @@ def getInfo(user: User):
 
 @profileBP.route('/update', methods=['POST'])
 @checkAPIKey
+@enforceSchema(
+    ("username", lambda x: isinstance(x, str) and len(x) > 0, None),
+    ("fname", lambda x: isinstance(x, str) and len(x) > 0, None),
+    ("lname", lambda x: isinstance(x, str) and len(x) > 0, None),
+    ("contact", lambda x: isinstance(x, str) and x.isdigit(), None),
+    ("email", lambda x: isinstance(x, str) and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', x), None)
+)
 @checkSession(strict=True, provideUser=True)
 def update(user: User):
-    username = request.json.get('username', user.username)
-    if username != user.username:
-        existingUser = None
-        try:
-            existingUser = User.load(username=username)
-        except Exception as e:
-            Logger.log("USERPROFILE UPDATE ERROR: Failed to load user for username '{}' uniqueness check; error: {}".format(username, e))
+    username = request.json.get('username', user.username).strip()
+    fname = request.json.get('fname', user.fname).strip()
+    lname = request.json.get('lname', user.lname).strip()
+    contact = request.json.get('contact', user.contact).strip()
+    email = request.json.get('email', user.email).strip()
     
-    fname = request.json.get('fname', user.fname)
-    lname = request.json.get('lname', user.lname)
-    contact = request.json.get('contact', user.contact)
-    email = request.json.get('email', user.email)
-    return "lmao"
+    # Check username uniqueness
+    if username != user.username:
+        conflictingUser = None
+        try:
+            conflictingUser = User.load(username=username)
+            print(conflictingUser)
+            if isinstance(conflictingUser, User):
+                return JSONRes.new(400, "Username already exists.", ResType.USERERROR)
+        except Exception as e:
+            Logger.log("USERPROFILE UPDATE ERROR: Failed to load user with username '{}' for uniqueness check; error: {}".format(username, e))
+            return JSONRes.ambiguousError()
+    
+    # Check email uniqueness
+    if email != user.email:
+        conflictingUser = None
+        try:
+            conflictingUser = User.load(email=email)
+            if isinstance(conflictingUser, User):
+                return JSONRes.new(400, "Email already exists.", ResType.USERERROR)
+        except Exception as e:
+            Logger.log("USERPROFILE UPDATE ERROR: Failed to load user with email '{}' for uniqueness check; error: {}".format(email, e))
+            return JSONRes.ambiguousError()
+    
+    # Update user details
+    changes = []
+    if username != user.username:
+        user.username = username
+        changes.append("Username")
+    if fname != user.fname:
+        user.fname = fname
+        changes.append("First Name")
+    if lname != user.lname:
+        user.lname = lname
+        changes.append("Last Name")
+    if contact != user.contact:
+        user.contact = contact
+        changes.append("Contact")
+    if email != user.email:
+        user.email = email
+        changes.append("Email")
+    
+    if changes:
+        user.save()
+        user.newLog("Profile Update", "{} details updated.".format(", ".join(changes)))
+    else:
+        return JSONRes.new(200, "No changes made to the profile.")
+    
+    return JSONRes.new(200, "Profile updated successfully.")

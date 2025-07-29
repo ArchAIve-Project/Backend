@@ -445,20 +445,24 @@ Reset Key: {} />""".format(
                         u.getAuditLogs()
                 
                 return list(users.values())
-
+            
+            target: User | None = None
             for userID in users:
-                targetUser = users[userID]
-                if username != None and targetUser.username == username:
+                user = users[userID]
+                if username != None and user.username == username:
+                    target = user
                     break
-                elif email != None and targetUser.email == email:
+                elif email != None and user.email == email:
+                    target = user
                     break
-                elif authToken != None and targetUser.authToken == authToken:
+                elif authToken != None and user.authToken == authToken:
+                    target = user
                     break
-
-            if targetUser:
+            
+            if target:
                 if withLogs:
-                    targetUser.getAuditLogs()
-                return targetUser
+                    target.getAuditLogs()
+                return target
             else:
                 return None
     

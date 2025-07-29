@@ -123,6 +123,7 @@ def enforceSchema(*expectedArgs):
     - If only the name is provided, either as a string or as the only item in a tuple, it just checks that the parameter is present in the JSON payload.
     - In a tuple, the first element is considered as the parameter name, and the rest are considered as expectations for that parameter.
     - To make a parameter optional, include `None` in the expectations.
+    - Do note that the parameter only has to match any ONE expectation to be considered valid.
     - Expectations can be:
         - A type (like `int`, `str`, etc.) to ensure the parameter is of that type.
         - A function that takes the parameter value and returns `True` if the value is valid, and `False` otherwise.
