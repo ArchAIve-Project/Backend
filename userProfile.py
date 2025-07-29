@@ -24,13 +24,6 @@ def getInfo(user: User):
         created=user.created
     )
 
-@profileBP.route('/test')
-@enforceSchema(
-    ("hello", 2333, None)
-)
-def test():
-    return "Profile test endpoint is working!"
-
 @profileBP.route('/update', methods=['POST'])
 @checkAPIKey
 @checkSession(strict=True, provideUser=True)

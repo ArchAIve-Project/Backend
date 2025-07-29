@@ -1,4 +1,5 @@
 import os, functools, time
+from types import FunctionType
 from flask import request
 from utils import JSONRes
 
@@ -97,30 +98,42 @@ def checkAPIKey(func):
 def enforceSchema(*expectedArgs):
     """Enforce a specific schema for the JSON payload.
     
-    Requires request to be in JSON format, or 415 werkzeug.exceptions.BadRequest error will be raised.
+    Requires request to be in JSON format, or 415 Unsupported Media Type error will be raised.
     
     Sample implementation:
     ```python
     @app.route("/")
-    @enforceSchema(("hello", int), "world", ("john"))
+    @enforceSchema(
+        ("hello", int),
+        "world",
+        ("john"),
+        ("smth", str, "specificValue", lambda x: isinstance(x, str) and len(x) > 5, None)
+    )
     def home():
         return "Success!"
     ```
     
-    The above implementation mandates that 'hello', 'world' and 'john' attributes must be present. Additionally, 'hello' must be an integer.
+    The above example enforces that:
+    - `hello` is provided and is a valid `int`.
+    - `world` is provided and can be of any type.
+    - `john` is provided and can be of any type.
+    - `smth` is optionally provided, and should it exist, it should be either a `str`, have the value of `specificValue`, or be a `str` with length greater than 5
     
-    Parameter definition can be one of the following:
-    - String: Just ensures that the parameter is present, regardless of its value's datatype.
-    - Tuple, with two elements: First element is the parameter name, second element is the expected datatype.
-        - If the datatype (second element) is not provided, it will be as if the parameter's name was provided directly, i.e. it will just ensure that the parameter is present.
-        - Example: `("hello", int)` ensures that 'hello' is present and is an integer. But, `("hello")` ensures that 'hello' is present, but does not enforce any datatype.
-        
-    Raises `"ERROR: Invalid request format", 400` if the schema is not met.
+    The validation schema is quite flexible. For every parameter in `expectedArgs`:
+    - If only the name is provided, either as a string or as the only item in a tuple, it just checks that the parameter is present in the JSON payload.
+    - In a tuple, the first element is considered as the parameter name, and the rest are considered as expectations for that parameter.
+    - To make a parameter optional, include `None` in the expectations.
+    - Expectations can be:
+        - A type (like `int`, `str`, etc.) to ensure the parameter is of that type.
+        - A function that takes the parameter value and returns `True` if the value is valid, and `False` otherwise.
+        - A specific value to ensure the parameter matches that value.
+        - `None` to indicate optionality.
+    
+    Returns `JSONRes.invalidRequestFormat` if the schema is not met.
     """
     def decorator_enforceSchema(func):
         @functools.wraps(func)
         @debug
-        @timeit
         def wrapper_enforceSchema(*args, **kwargs):
             jsonData = request.get_json()
             
@@ -132,34 +145,26 @@ def enforceSchema(*expectedArgs):
                     if value_present:
                         value = jsonData[key]
                         if expectations:
-                            if not any(
-                                (isinstance(expect, type) and isinstance(value, expect)) or value == expect
-                                for expect in expectations
-                            ):
+                            valid = len(expectations) == 1 and expectations[0] is None
+                            if valid:
+                                # If only None is expected, any value is valid
+                                continue
+                            
+                            for expect in expectations:
+                                if isinstance(expect, type) and isinstance(value, expect):
+                                    valid = True
+                                    break
+                                elif isinstance(expect, FunctionType) and expect(value):
+                                    valid = True
+                                    break
+                                elif value == expect and expect is not None:
+                                    valid = True
+                                    break
+                            
+                            if not valid:
                                 return JSONRes.invalidRequestFormat()
                     elif None not in expectations:
                         return JSONRes.invalidRequestFormat()
-                    
-                    # # Extract valid types/values for the parameter, if provided
-                    # expectations = expectedTuple[1:]
-                    
-                    # if expectedTuple[0] in jsonData:
-                    #     if len(expectations) > 0:
-                    #         expected = False
-                    #         for expectation in expectations:
-                    #             if isinstance(expectation, type) and isinstance(jsonData[expectedTuple[0]], expectation):
-                    #                 expected = True
-                    #                 break
-                    #             elif jsonData[expectedTuple[0]] == expectation:
-                    #                 expected = True
-                    #                 break
-                            
-                    #         # If the parameter is present but does not match any of the expected types/values, return invalid request format
-                    #         if not expected:
-                    #             return JSONRes.invalidRequestFormat()
-                    # elif None not in expectations:
-                    #     # If the parameter is not present and no None expectation is provided, return invalid request format
-                    #     return JSONRes.invalidRequestFormat()
                 elif param not in jsonData:
                     return JSONRes.invalidRequestFormat()
             
