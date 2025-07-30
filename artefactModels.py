@@ -37,9 +37,15 @@ class Artefact(DIRepresentable):
             metadata = None
         
         if description is None:
-            if metadata.isMM():
-                summary = metadata.raw.summary
-                artDescription = summary[:30] + "..." if len(summary) > 30 else summary
+            if metadata is not None:
+                if metadata.isMM():
+                    summary = metadata.raw.summary
+                    artDescription = summary[:30] + "..." if len(summary) > 30 else summary
+                elif metadata.isHF():
+                    caption = metadata.raw.caption
+                    artDescription = caption[:30] + "..." if len(caption) > 30 else caption
+                else:
+                    artDescription = None
             else:
                 artDescription = None
         else:
@@ -52,7 +58,7 @@ class Artefact(DIRepresentable):
         self.public = public
         self.created = created
         self.metadata: Metadata | None = metadata
-        self.artType: str | None = None
+        self.artType: str | None = artType
         self.metadataLoaded: bool = metadataLoaded
         self.originRef = Artefact.ref(self.id)
     
@@ -164,7 +170,7 @@ class Artefact(DIRepresentable):
         metadata = None
         artType: str | None = None
         if isinstance(data['metadata'], dict) and isinstance(artefactID, str):
-            if includeMetadata and isinstance(data['metadata'], dict) and isinstance(artefactID, str):
+            if includeMetadata:
                 metadata = Metadata.rawLoad(artefactID, data['metadata'])
             artType = 'mm' if data['metadata'].get('tradCN', None) != None else 'hf'
 

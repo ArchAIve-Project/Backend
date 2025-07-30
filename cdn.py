@@ -7,6 +7,7 @@ from services import Logger
 from models import Category, Book, Artefact
 from decorators import cache, timeit
 from sessionManagement import checkSession
+import json
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
@@ -114,17 +115,18 @@ def getAsset(filename):
 @cache
 def getAllCategoriesWithArtefacts():
     """
-    Returns all artefacts grouped by category and a list of books with their associated artefacts.
+    Returns all human-figure artefacts grouped by category and all books with their associated
+    meeting-minute artefacts.
 
     This endpoint:
-    - Loads all artefacts into a lookup map.
-    - Loads all categories and links each category to its artefacts using the map.
-    - Loads all books and links each book to its listed artefact IDs (mmIDs).
-    - Handles exceptions at a granular level (load calls and lookup failures).
+    - Loads all artefacts (without metadata) into a lookup map, with `artType` used to differentiate types.
+    - Loads all categories and links each to its human-figure artefacts (artType = 'hf').
+    - Loads all books and links each to its meeting-minute artefacts (artType = 'mm') via mmIDs.
+    - Handles exceptions at each loading or lookup stage.
     - Caches the output and requires session authentication.
-    
+
     Response Format:
-    ```
+    ```json
     {
         "categories": {
             "CategoryName1": [
@@ -169,14 +171,13 @@ def getAllCategoriesWithArtefacts():
 
     result = {}
 
-    # Build category -> artefact mapping
     for cat in categories:
         artefactsList = []
         if cat.members:
             for artefact_id, _ in cat.members.items():
                 try:
                     art = artefactMap.get(artefact_id)
-                    if art:
+                    if art and art.artType == "hf":
                         artefactsList.append({
                             "id": art.id,
                             "name": art.name,
@@ -201,7 +202,7 @@ def getAllCategoriesWithArtefacts():
         for mmID in book.mmIDs:
             try:
                 art = artefactMap.get(mmID)
-                if art:
+                if art and art.artType == "mm":
                     mmDetails.append({
                         "id": art.id,
                         "name": art.name,
@@ -221,3 +222,21 @@ def getAllCategoriesWithArtefacts():
         "books": bookList
     })
 
+
+@cdnBP.route('/artefactMetadata/<artID>')
+@checkSession(strict=True)
+@cache
+def getArtefactMetedata(artID):
+    """
+    Returns the metadata of an artefact.
+    """
+    try:
+        art = Artefact.load(id=artID, includeMetadata=True)
+        if not isinstance(art, Artefact):
+            return JSONRes.new(404, "Artefact not found.")
+        
+        return JSONRes.new(200, "Retrieval success.", data=art.metadata.represent())
+
+    except Exception as e:
+        Logger.log("CDN GETARTEFACTMETADATA ERROR: Failed to load artefact metadata - {}".format(e))
+        return JSONRes.ambiguousError()
