@@ -12,19 +12,33 @@ profileBP = Blueprint('profile', __name__, url_prefix='/profile')
 @checkAPIKey
 @checkSession(strict=True, provideUser=True)
 def getInfo(user: User):
+    if request.args.get('includeLogs', 'false').lower() == 'true':
+        try:
+            user.getAuditLogs()
+        except Exception as e:
+            Logger.log("USERPROFILE INFO ERROR: Failed to retrieve audit logs for user '{}' (will skip); error: {}".format(user.username, e))
+            user.logs = None
+    
+    info = {
+        'username': user.username,
+        'email': user.email,
+        'fname': user.fname,
+        'lname': user.lname,
+        'role': user.role,
+        'contact': user.contact,
+        'lastLogin': user.lastLogin,
+        'created': user.created
+    }
+    
+    if isinstance(user.logs, list):
+        info['logs'] = [log.represent() for log in user.logs]
+    else:
+        info['logs'] = None
+    
     return JSONRes.new(
         code=200,
         msg="Information retrieved successfully.",
-        info={
-            'username': user.username,
-            'email': user.email,
-            'fname': user.fname,
-            'lname': user.lname,
-            'role': user.role,
-            'contact': user.contact,
-            'lastLogin': user.lastLogin,
-            'created': user.created
-        }
+        info=info
     )
 
 @profileBP.route('/update', methods=['POST'])
