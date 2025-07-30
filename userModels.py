@@ -152,7 +152,8 @@ class User(DIRepresentable):
         fname (str): The first name of the user.
         lname (str): The last name of the user.
         role (str): The role of the user in the context of the organisation.
-        contact (str): The contact number for the user.
+        contact (str, optional): The contact number for the user.
+        pfp (str | None, optional): The profile picture URL of the user.
         authToken (str, optional): The auth token of the user. Defaults to None.
         superuser (bool, optional): Whether the user is a superuser. Defaults to False
         lastLogin (str, optional): The last login timestamp of the user. Defaults to None.
@@ -179,7 +180,7 @@ class User(DIRepresentable):
     ```
     """
     
-    def __init__(self, username: str, email: str, pwd: str, fname: str, lname: str, role: str, contact: str='', authToken: str=None, superuser: bool=False, lastLogin: str=None, created: str=None, resetKey: str | None=None, id: str=None):
+    def __init__(self, username: str, email: str, pwd: str, fname: str, lname: str, role: str, contact: str='', pfp: str | None=None, authToken: str=None, superuser: bool=False, lastLogin: str=None, created: str=None, resetKey: str | None=None, id: str=None):
         """User model representation.
 
         Args:
@@ -190,6 +191,7 @@ class User(DIRepresentable):
             lname (str): The last name of the user.
             role (str): The role of the user in the context of the organisation.
             contact (str, optional): The contact number for the user. Defaults to an empty string.
+            pfp (str | None, optional): The profile picture image filename string for the user. The image name should be in `<userID>.<ext>` format. Defaults to None.
             authToken (str, optional): The auth token of the user. Defaults to None.
             superuser (bool, optional): Whether the user is a superuser. Defaults to False.
             lastLogin (str, optional): The last login timestamp of the user. Defaults to None.
@@ -210,6 +212,7 @@ class User(DIRepresentable):
         self.lname = lname
         self.role = role
         self.contact = contact or ""
+        self.pfp = pfp
         self.authToken = authToken
         self.superuser = superuser
         self.lastLogin = lastLogin
@@ -227,6 +230,7 @@ class User(DIRepresentable):
             "lname": self.lname,
             "role": self.role,
             "contact": self.contact if len(self.contact) > 0 else None,
+            "pfp": self.pfp,
             "authToken": self.authToken,
             "superuser": self.superuser,
             "lastLogin": self.lastLogin,
@@ -244,6 +248,7 @@ Email: {}
 Password: {}
 Role: {}
 Contact: {}
+Profile Picture: {}
 Audit Logs:{}
 Auth Token: {}
 Superuser: {}
@@ -258,6 +263,7 @@ Reset Key: {} />""".format(
             self.pwd,
             self.role or "None or Empty",
             self.contact or "None or Empty",
+            self.pfp or "None or Empty",
             ("\n---\n- " + ("\n- ".join((str(log) if isinstance(log, AuditLog) else "CORRUPTED AUDITLOG AT INDEX '{}'".format(i)) for i, log in enumerate(self.logs))) + "\n---") if isinstance(self.logs, list) and len(self.logs) > 0 else " None or Empty",
             self.authToken,
             self.superuser,
@@ -356,7 +362,7 @@ Reset Key: {} />""".format(
     
     @staticmethod
     def rawLoad(data: dict, userID: str | None=None, withLogs: bool=False) -> 'User':
-        requiredParams = ['username', 'email', 'pwd', 'fname', 'lname', 'role', 'contact', 'authToken', 'superuser', 'lastLogin', 'created', 'resetKey']
+        requiredParams = ['username', 'email', 'pwd', 'fname', 'lname', 'role', 'contact', 'pfp', 'authToken', 'superuser', 'lastLogin', 'created', 'resetKey']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam in []: # add any required params that should be empty dictionaries
@@ -381,6 +387,7 @@ Reset Key: {} />""".format(
             lname=data.get('lname'),
             role=data.get('role'),
             contact=data.get('contact', ''),
+            pfp=data.get('pfp'),
             authToken=data.get('authToken'),
             superuser=data.get('superuser'),
             lastLogin=data.get('lastLogin'),
