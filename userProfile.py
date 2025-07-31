@@ -1,9 +1,10 @@
 import re
 from flask import Blueprint, url_for, request
 from utils import JSONRes, ResType
-from services import Universal, Logger, Encryption
+from services import Universal, Logger, Encryption, FileOps
 from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
 from sessionManagement import checkSession
+from fm import File, FileManager
 from models import User, AuditLog
 
 profileBP = Blueprint('profile', __name__, url_prefix='/profile')
@@ -47,17 +48,17 @@ def getInfo(user: User):
 @enforceSchema(
     Param(
         "username",
-        lambda x: isinstance(x, str) and len(x) > 3 and x.isalpha() and (not re.search(r'[^a-zA-Z0-9]', x)), None,
+        lambda x: isinstance(x, str) and len(x) > 3 and x.isalpha(), None,
         invalidRes=JSONRes.new(400, "Username must be at least 3 characters, without any spaces or special characters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "fname",
-        lambda x: isinstance(x, str) and len(x) > 2 and x.isalpha(), None,
+        lambda x: isinstance(x, str) and len(x) > 2 and x.replace(' ', '').isalpha(), None,
         invalidRes=JSONRes.new(400, "First name must be at least 2 characters and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "lname",
-        lambda x: isinstance(x, str) and len(x) > 1 and x.isalpha(), None,
+        lambda x: isinstance(x, str) and len(x) > 1 and x.replace(' ', '').isalpha(), None,
         invalidRes=JSONRes.new(400, "Last name must be at least 1 character and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
@@ -159,3 +160,58 @@ def changePassword(user: User):
     user.newLog("Password Change", "Password changed successfully.")
     
     return JSONRes.new(200, "Password changed successfully.")
+
+@profileBP.route('/uploadPicture', methods=['POST'])
+@checkAPIKey
+@checkSession(strict=True, provideUser=True)
+def uploadPicture(user: User):
+    file = request.files.get('file')
+    if not file:
+        return JSONRes.new(400, "No file part in the request.")
+    if file.filename == '':
+        return JSONRes.new(400, "No image selected.", ResType.USERERROR)
+    
+    # Check if file is a valid image
+    filename = file.filename
+    if not FileOps.allowedFileExtension(filename):
+        return JSONRes.new(400, "Only valid image files are allowed (png, jpg, jpeg).", ResType.USERERROR)
+    
+    # Check file size (optional, e.g., max 5MB)
+    MAX_FILE_SIZE = 5 * 1024 * 1024
+    if FileOps.getFileStorageSize(file) > MAX_FILE_SIZE:
+        return JSONRes.new(400, "File size exceeds 5MB limit.", ResType.USERERROR)
+    
+    # Delete existing profile picture if it exists
+    if user.pfp:
+        try:
+            prevFile = File(user.pfp, 'FileStore')
+            
+            res = FileManager.delete(file=prevFile)
+            if res != True:
+                raise Exception(res)
+        except Exception as e:
+            Logger.log("USERPROFILE UPLOADPICTURE ERROR: Failed to delete existing profile picture for user '{}'; error: {}".format(user.id, e))
+    
+    user.pfp = None
+    
+    # Save new profile picture
+    try:
+        newFilename = '{}.{}'.format(user.id, FileOps.getFileExtension(filename))
+        newFile = File(newFilename, 'FileStore')
+        
+        file.save(newFile.path())
+        
+        res = FileManager.save(file=newFile)
+        if isinstance(res, str):
+            raise Exception(res)
+    except Exception as e:
+        Logger.log("USERPROFILE UPLOADPICTURE ERROR: Failed to save new profile picture for user '{}'; error: {}".format(user.id, e))
+        user.save() # Save user without profile picture
+        return JSONRes.ambiguousError()
+    
+    # Save the new profile picture filename to the user
+    user.pfp = newFilename
+    user.save()
+    user.newLog("Profile Picture Updated", "Profile picture updated successfully.")
+    
+    return JSONRes.new(200, "Profile picture updated successfully.")

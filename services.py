@@ -527,6 +527,8 @@ Commands:
         return
 
 class FileOps:
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+    
     @staticmethod
     def exists(path: str, type: str="folder"):
         '''Check the existence of a file/folder. Provide 'path' and 'type'.
@@ -587,3 +589,30 @@ class FileOps:
     @staticmethod
     def getFileExtension(path: str):
         return os.path.splitext(path)[1].replace(".", "")
+    
+    @staticmethod
+    def allowedFileExtension(filename: str) -> bool:
+        """
+        Check if the file has an allowed extension.
+        """
+        return FileOps.getFileExtension(filename).lower() in FileOps.ALLOWED_EXTENSIONS
+
+    @staticmethod
+    def getFileStorageSize(file) -> int | None:
+        """
+        Returns the size of the uploaded file in bytes.
+
+        Args:
+            file: The file object from Flask request.
+
+        Returns:
+            File size in bytes (int), or None if failed.
+        """
+        try:
+            file.seek(0, os.SEEK_END)
+            fileLength = file.tell()
+            file.seek(0)  # Reset file pointer for future reads
+            return fileLength
+
+        except:
+            return None
