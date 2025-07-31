@@ -47,7 +47,7 @@ def login(user: User | None=None):
     session['sessionStart'] = user.lastLogin
     session['superuser'] = user.superuser
     
-    return JSONRes.new(200, "Login successful.")
+    return JSONRes.new(200, "Login successful.", fname=user.fname, lname=user.lname)
 
 @identityBP.route("/logout", methods=["GET"])
 @checkSession(strict=True, provideUser=True)
