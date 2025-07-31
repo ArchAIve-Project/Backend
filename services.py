@@ -309,6 +309,7 @@ class Universal:
     copyright = "© 2025 The ArchAIve Team. All Rights Reserved."
     version = None
     store = {}
+    MAX_FILE_SIZE = 10 * 1024 * 1024
     device = os.environ.get(
         "DEVICE",
         "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
