@@ -183,6 +183,28 @@ def getAllBatches():
             # Remove userID completely
             rep.pop("userID", None)
 
+            artefactIDs = rep.get("artefacts", {}).keys()
+            mmCount = 0
+            hfCount = 0
+
+             # Only count for processing batches (not completed)
+            if rep.get("job", {}).get("status") != "completed":
+                for artefactID in artefactIDs:
+                    try:
+                        artefact = Artefact.load(id=artefactID)
+                        if artefact.artType == "mm":
+                            mmCount += 1
+                        elif artefact.artType == "hf":
+                            hfCount += 1
+                    except Exception as e:
+                        Logger.log("Failed to load artefact '{}': {}".format(artefactID, e))
+                        continue
+
+                rep["artefactTypeSummary"] = {
+                    "mm": mmCount,
+                    "hf": hfCount
+                }
+
             # Remove processingError from each artefact
             for artefactData in rep.get("artefacts", {}).values():
                 artefactData.pop("processingError", None)
