@@ -1,7 +1,8 @@
 import time, pprint, datetime, os, sys, shutil, json, random
+from PIL import Image
 from services import Universal, ThreadManager, Encryption, Trigger
 from firebase import FireConn
-from models import DI, User, Artefact, Metadata, Category, Book, CategoryArtefact
+from models import DI, User, Artefact, Metadata, Category, Book, CategoryArtefact, HFData
 from fm import File, FileManager, FileOps
 from ai import LLMInterface, InteractionContext, Interaction
 from addons import ModelStore, ArchSmith
@@ -9,6 +10,7 @@ from ccrPipeline import CCRPipeline
 from NERPipeline import NERPipeline
 from captioner import ImageCaptioning, Vocabulary
 from cnnclassifier import ImageClassifier
+from HFProcessor import HFProcessor
 from metagen import MetadataGenerator
 
 class SetupStates:
@@ -783,6 +785,97 @@ def populateHFCat():
     print("\nHF-only population complete with enriched metadata.\n")
     return True
 
+def dummyFaceMatching():
+    requireDI()
+    requireFM()
+    requireMS()
+    
+    HFProcessor.setup()
+    
+    print("Executing face matching algorithm on all artefacts... this will take a while")
+    print()
+    
+    arts: list[Artefact] = None
+    try:
+        arts = Artefact.load()
+        if not isinstance(arts, list):
+            raise Exception("Artefact.load() did not return a list.")
+    except Exception as e:
+        print("Error loading artefacts:", e)
+        return False
+    
+    t = ArchSmith.newTracer("DBTools DummyFaceMatching")
+    successCount = 0
+    
+    for art in arts:
+        print()
+        print("Starting face matching on '{}'...".format(art.name))
+        artFile = art.getFMFile()
+        
+        # Prepare file
+        res = FileManager.prepFile(file=artFile)
+        if isinstance(res, str):
+            print("Failed to prepare file '{}' for artefact '{}' for facial recognition (will be skipped); response: {}".format(artFile.identifierPath(), art.name, res))
+            continue
+        
+        print("Determining if artefact '{}' is suitable for face matching...".format(art.name))
+        if art.artType == None:
+            print("Artefact type not known. Executing image classification...")
+            output = ImageClassifier.predict(artFile.path(), t)
+            if not isinstance(output, list):
+                print("ImageClassifier.predict did not return a list (will be skipped); response: '{}'.".format(output))
+                continue
+            if len(output) == 0:
+                print("ImageClassifier returned no results for artefact '{}' (will be skipped).".format(art.name))
+                continue
+            if output[0][1] != 'hf':
+                print("ImageClassifier returned '{}' for artefact '{}'; skipping.".format(output[0], art.name))
+                continue
+        elif art.artType != 'hf':
+            print("Artefact '{}' is not of type 'hf'; skipping.".format(art.name))
+            continue
+        
+        print("Running face matching on artefact '{}'...".format(art.name))
+        output = None
+        try:
+            output = HFProcessor.identifyFaces(artFile.path(), t)
+            if not isinstance(output, list):
+                raise Exception("HFProcessor.identifyFaces did not return a list.")
+        except Exception as e:
+            print("Error processing artefact '{}' (will be skipped): {}".format(art.name, e))
+            continue
+        
+        print("Saving results for artefact '{}'...".format(art.name))
+        if not art.metadata:
+            art.metadata = Metadata(artefactID=art.id, dataObject=HFData(artefactID=art.id, figureIDs=output, caption='Unavailable'))
+        else:
+            if not isinstance(art.metadata.raw, HFData):
+                print("Artefact '{}' metadata is not of type HFData; resetting metadata.".format(art.name))
+                art.metadata = Metadata(artefactID=art.id, dataObject=HFData(artefactID=art.id, figureIDs=output, caption='Unavailable'))
+            else:
+                art.metadata.raw.figureIDs = output
+        
+        art.metadata.save()
+        print("Artefact '{}' processed and metadata saved.".format(art.name))
+        
+        successCount += 1
+    
+    print()
+    print("Face matching completed for {}/{} artefacts.".format(successCount, len(arts)))
+
+def overwriteHFImages():
+    requireFM()
+    
+    img = Image.open(input("Enter path to custom image for overwite: ").strip())
+    img.load()
+    
+    for i in range(1, 51):
+        img.save('artefacts/hf{}.png'.format(i))
+        FileManager.save('artefacts', 'hf{}.png'.format(i))
+        print("Overwrote artefacts/hf{}.png with custom image.".format(i))
+    
+    print("Overwrite complete.")
+
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
     print("This is a debug script to quickly carry out common tasks.")
@@ -808,11 +901,13 @@ def main(choices: list[int] | None=None):
             print("10. Remove categories")
             print("11. Populate more data (after 1)")
             print("12: Populate 50 HF and 3 Cat (20 ungrouped HF, 1 empty Cat)")
+            print("13: Run face matching algorithm on all artefacts")
+            print("14: Overwrite all HF images with custom image")
             print("0: Exit")
         
         try:
             choice = int(input("Enter choice: ")) if choice is None else choice
-            if choice not in range(13):
+            if choice not in range(15):
                 raise Exception()
         except KeyboardInterrupt:
             print("\nExiting...")
@@ -855,6 +950,10 @@ def main(choices: list[int] | None=None):
             populateMoreArtefacts()
         elif choice == 12:
             populateHFCat()
+        elif choice == 13:
+            dummyFaceMatching()
+        elif choice == 14:
+            overwriteHFImages()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)
