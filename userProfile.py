@@ -209,6 +209,11 @@ def uploadPicture(user: User):
         user.save() # Save user without profile picture
         return JSONRes.ambiguousError()
     
+    # Offload new profile picture
+    res = FileManager.offload(file=newFile)
+    if isinstance(res, str):
+        Logger.log("USERPROFILE UPLOADPICTURE WARNING: Failed to offload new profile picture for user '{}'; error: {}".format(user.id, res))
+    
     # Save the new profile picture filename to the user
     user.pfp = newFilename
     user.save()
