@@ -78,7 +78,7 @@ def populateDB():
     created: list[User] = []
     su = User.getSuperuser()
     if not su:
-        su = User("johndoe", "john@example.com", Encryption.encodeToSHA256(pwd), superuser=True)
+        su = User("johndoe", "john@example.com", Encryption.encodeToSHA256(pwd), "John", "Doe", "Boss", superuser=True)
         su.save()
         created.append(su)
     
@@ -87,22 +87,22 @@ def populateDB():
         return any(user.username == username for user in users)
     
     if not userExists("sammyhopkins"):
-        user2 = User("sammyhopkins", "sammy@example.com", Encryption.encodeToSHA256(pwd))
+        user2 = User("sammyhopkins", "sammy@example.com", Encryption.encodeToSHA256(pwd), "Sammy", "Hopkins", "Researcher")
         user2.save()
         created.append(user2)
 
     if not userExists("jamieoliver"):    
-        user3 = User("jamieoliver", "jamie@example.com", Encryption.encodeToSHA256(pwd))
+        user3 = User("jamieoliver", "jamie@example.com", Encryption.encodeToSHA256(pwd), "Jamie", "Oliver", "Chef")
         user3.save()
         created.append(user3)
 
     if not userExists("maryjane"):
-        user4 = User("maryjane", "mary@example.com", Encryption.encodeToSHA256(pwd))
+        user4 = User("maryjane", "mary@example.com", Encryption.encodeToSHA256(pwd), "Mary", "Jane", "Artist")
         user4.save()
         created.append(user4)
 
     if not userExists("peterparker"):
-        user5 = User("peterparker", "peter@example.com", Encryption.encodeToSHA256(pwd))
+        user5 = User("peterparker", "peter@example.com", Encryption.encodeToSHA256(pwd), "Peter", "Parker", "Photographer")
         user5.save()
         created.append(user5)
     
@@ -152,7 +152,12 @@ def createUser():
         username=input("Enter username: ").strip(),
         email=input("Enter email: ").strip(),
         pwd=Encryption.encodeToSHA256(input("Enter password: ").strip()),
-        superuser=input("Is this a superuser? (yes/no): ").strip().lower() == "yes"
+        fname=input("Enter first name: ").strip(),
+        lname=input("Enter last name: ").strip(),
+        role=input("Enter role (e.g., Admin, User): ").strip(),
+        superuser=input("Is this a superuser? (yes/no): ").strip().lower() == "yes",
+        contact=input("Enter contact number (optional, enter to skip): ").strip() or None,
+        resetKey=input("Enter reset key (optional, enter to skip): ").strip() or None
     )
     if input("Start a login session? (yes/no): ").strip().lower() == "yes":
         user.authToken = Universal.generateUniqueID(customLength=12)

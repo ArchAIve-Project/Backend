@@ -529,7 +529,7 @@ Commands:
 
 class FileOps:
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
-
+    
     @staticmethod
     def exists(path: str, type: str="folder"):
         '''Check the existence of a file/folder. Provide 'path' and 'type'.
