@@ -4,7 +4,7 @@ from utils import JSONRes, ResType
 import datetime
 from typing import Dict, List
 from services import Logger
-from models import Category, Book, Artefact
+from models import Category, Book, Artefact, Figure
 from decorators import cache, timeit
 from sessionManagement import checkSession
 import json
@@ -58,19 +58,33 @@ def getArtefactImage(artefactId):
         Logger.log("CDN GETARTEFACT ERROR: Failed to construct response for artefact '{}': {}".format(artefactId, e))
         return JSONRes.ambiguousError()
 
-@cdnBP.route('/people/<filename>')
+@cdnBP.route('/people/<figureID>')
 @checkSession(strict=True)
-def getFaceImage(filename):
+def getFaceImage(figureID):
     """
     Serve a face image from the 'people' store.
     """
-    file = File(filename, "people")
+    fig = None
+    try:
+        fig = Figure.load(figureID)
+        if fig is None:
+            return JSONRes.new(404, "Requested file not found.")
+        if not isinstance(fig, Figure):
+            raise Exception("Unexpected response in load: {}".format(fig))
+    except Exception as e:
+        Logger.log("CDN GETFACEIMAGE ERROR: Unexpected error in loading Figure object with ID '{}'; error: {}".format(figureID, e))
+        return JSONRes.ambiguousError()
+    
+    file = File(fig.headshot, "people")
 
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
         if url.startswith("ERROR"):
-            return JSONRes.new(404, "Requested file not found.")
+            if url == "ERROR: File does not exist.":
+                return JSONRes.new(404, "Requested file not found.")
+            else:
+                raise Exception(url)
         
         res = make_response(redirect(url))
 
@@ -81,8 +95,8 @@ def getFaceImage(filename):
         
         return res
     except Exception as e:
-        Logger.log(f"CDN GETFACE ERROR: {e}")
-        return JSONRes.new(500, "Error sending file.")
+        Logger.log("CDN GETFACEIMAGE ERROR: {}".format(e))
+        return JSONRes.ambiguousError()
 
 @cdnBP.route('/asset/<filename>')
 @checkSession(strict=True)

@@ -456,40 +456,65 @@ def populateMoreArtefacts():
                 description = None
 
                 metadata = {
-                    'traditional_chinese': (
-                        "本文件為名為 {} 的會議記錄檔案，內容詳實地記載了整場會議的重點討論與決策結果。"
-                        "本次會議涵蓋多個重要議題，包括跨部門專案協作進度更新、預算調整審議、時間表重新規劃、以及下一季度的業務策略方向。"
-                        "會議期間亦針對人力資源調配、風險管理措施與品質保證流程進行了深入探討與共識建構。"
-                        "所有與會者，包括執行長、副總經理、各專案主管與主要利害關係人，皆積極參與並提供關鍵意見，形成最終決策依據。"
+                    "traditional_chinese": (
+                        "本文件為名為 {} 的會議記錄檔案，內容詳實地記載了整場會議的重點討論與決策結果。\n"
+                        "本次會議涵蓋多個重要議題，包括跨部門專案協作進度更新、預算調整審議、時間表重新規劃、以及下一季度的業務策略方向。\n"
+                        "會議期間亦針對人力資源調配、風險管理措施與品質保證流程進行了深入探討與共識建構。\n"
+                        "所有與會者，包括執行長、副總經理、各專案主管與主要利害關係人，皆積極參與並提供關鍵意見，形成最終決策依據。\n"
                         "此記錄將作為後續追蹤與專案審查的依據，亦利於透明化溝通與跨部門協同運作。"
                     ).format(filename),
-                    
-                    'simplified_chinese': (
-                        "本文件为名为 {} 的会议纪要文件，详细记录了会议期间的关键讨论内容与决策成果。"
-                        "会议主题涵盖跨部门项目协作的最新进展、预算调整的审批流程、整体时间线的优化建议，以及下一季度业务战略的方向规划。"
-                        "此外，参会人员还对人力资源配置、风险控制策略及质量管理体系进行了充分讨论，并形成初步共识。"
-                        "本次会议由公司高管层、项目主管、财务负责人及关键利益相关方共同参与，确保所有观点均被纳入考量。"
+
+                    "simplified_chinese": (
+                        "本文件为名为 {} 的会议纪要文件，详细记录了会议期间的关键讨论内容与决策成果。\n"
+                        "会议主题涵盖跨部门项目协作的最新进展、预算调整的审批流程、整体时间线的优化建议，以及下一季度业务战略的方向规划。\n"
+                        "此外，参会人员还对人力资源配置、风险控制策略及质量管理体系进行了充分讨论，并形成初步共识。\n"
+                        "本次会议由公司高管层、项目主管、财务负责人及关键利益相关方共同参与，确保所有观点均被纳入考量。\n"
                         "会议纪要不仅有助于后续的工作执行与评估，还将作为战略决策档案予以保存与回溯。"
                     ).format(filename),
-                    
-                    'english_translation': (
-                        "This document contains the meeting minutes titled '{}', meticulously capturing the core discussions, strategic decisions, and action-oriented outcomes of the session. "
-                        "Topics addressed in the meeting spanned across cross-departmental project updates, fiscal budget revisions, timeline rescheduling, and long-term strategic direction for the upcoming quarter. "
-                        "In-depth dialogues were held on issues such as workforce allocation, risk mitigation planning, and quality assurance protocols. "
-                        "All participants—including the CEO, senior executives, project leaders, and key stakeholders—contributed actively to the decision-making process. "
-                        "This record serves as a critical reference for follow-up actions, audit compliance, and interdepartmental communication continuity."
+
+                    "english_translation": (
+                        "This document contains the meeting minutes titled 'Board Quarterly Strategy Meeting', meticulously capturing the core discussions, strategic decisions, and action-oriented outcomes of the session held on March 15th, 2024. "
+                        "Topics addressed include cross-departmental project updates, fiscal budget revisions, timeline rescheduling, and strategic planning for the next quarter starting April 1st, 2024. "
+                        "Participants such as the CEO, Deputy General Manager, Project Directors, and Finance Department actively contributed to discussions around workforce allocation, risk management, and quality assurance protocols. "
+                        "The meeting took place at the New York headquarters, bringing together key stakeholders from various locations including Chicago, San Francisco, and Boston. "
+                        "Additionally, the Global Partnership Summit in Washington D.C., scheduled for June 2024, was referenced multiple times as an important upcoming event involving representatives from international organizations and government agencies. "
+                        "The team also discussed plans to attend the Annual Tech Expo in Las Vegas and the Environmental Forum in Seattle, both recognized as major events shaping industry trends. "
+                        "This record serves as a comprehensive reference for project follow-up, audits, strategic decision-making, and interdepartmental coordination."
                     ).format(filename),
-                    
-                    'summary': (
-                        "A comprehensive summary of meeting minutes titled '{}', encapsulating multi-departmental collaboration updates, executive-level decisions, and forward-looking strategic planning. "
-                        "Key agenda items included budgetary approvals, timeline shifts, human resources allocation, and stakeholder alignment."
+
+                    "summary": (
+                        "The meeting minutes titled 'Board Quarterly Strategy Meeting' detail cross-functional collaboration updates, strategic decision-making by executives, and future-oriented planning. "
+                        "Key agenda items include budget approvals, timeline realignments, human resource adjustments, and stakeholder coordination."
                     ).format(filename),
-                    
-                    'ner_labels': ["ORG", "PERSON", "DATE", "MONEY", "LOCATION", "GPE", "EVENT"],
-                    'pre_correction_accuracy': "94.73%",
-                    'post_correction_accuracy': "99.14%",
-                    'correction_applied': True
+
+                    "ner_labels": [
+                        ["Board Quarterly Strategy Meeting", "ORGANIZATION"],
+                        ["March 15th, 2024", "DATE"],
+                        ["next quarter", "DATE"],
+                        ["April 1st, 2024", "DATE"],
+                        ["June 2024", "DATE"],
+                        ["CEO", "PERSON"],
+                        ["Deputy General Manager", "PERSON"],
+                        ["Project Directors", "PERSON"],
+                        ["Finance Department", "ORGANIZATION"],
+                        ["New York", "GPE"],
+                        ["Chicago", "GPE"],
+                        ["San Francisco", "GPE"],
+                        ["Boston", "GPE"],
+                        ["Washington D.C.", "LOCATION"],
+                        ["Global Partnership Summit", "EVENT"],
+                        ["Annual Tech Expo", "EVENT"],
+                        ["Environmental Forum", "EVENT"],
+                        ["key stakeholders", "PERSON"],
+                        ["international organizations", "ORGANIZATION"],
+                        ["government agencies", "ORGANIZATION"]
+                    ],
+
+                    "correction_applied": True,
+                    "pre_correction_accuracy": "94.73%",
+                    "post_correction_accuracy": "99.14%"
                 }
+            
             else:
                 # Longer, realistic descriptions for human figures (HF)
                 description = None
