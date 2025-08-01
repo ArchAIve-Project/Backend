@@ -205,7 +205,6 @@ def getAllBatches():
             mmCount = 0
             hfCount = 0
 
-             # Only count for processing batches (not completed)
             for artefactID in artefactIDs:
                 try:
                     artefact = Artefact.load(id=artefactID)
