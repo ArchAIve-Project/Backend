@@ -9,6 +9,11 @@ from schemas import User, AuditLog
 
 profileBP = Blueprint('profile', __name__, url_prefix='/profile')
 
+@profileBP.route('/info', methods=['GET'])
+@checkSession(strict=True, provideUser=True)
+def info(user: User):
+    return redirect(url_for('cdn.getProfileInfo', userID=user.id))
+
 @profileBP.route('/update', methods=['POST'])
 @checkAPIKey
 @jsonOnly
@@ -47,7 +52,7 @@ profileBP = Blueprint('profile', __name__, url_prefix='/profile')
 @checkSession(strict=True, provideUser=True)
 def update(user: User):
     # Carry out authorisation check. Superusers can update any user, others can only update their own profile.
-    userID: str = request.json.get('userID', None).strip()
+    userID: str = request.json.get('userID', None)
     if userID and userID != user.id:
         if not user.superuser:
             # User is not the same as the requested user and is not a superuser
