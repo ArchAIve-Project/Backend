@@ -4,7 +4,7 @@ from flask import Blueprint, send_file, make_response, redirect, request
 from utils import JSONRes, ResType
 from services import Logger
 from fm import FileManager, File
-from models import Category, Book, Artefact, User
+from schemas import Category, Book, Artefact, User
 from decorators import cache, timeit
 from sessionManagement import checkSession
 

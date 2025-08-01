@@ -21,7 +21,7 @@ from ccrPipeline import CCRPipeline
 from NERPipeline import NERPipeline
 from cnnclassifier import ImageClassifier
 from captioner import ImageCaptioning, Vocabulary
-from models import User
+from schemas import User
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, origins="*", supports_credentials=True, allow_private_network=True)

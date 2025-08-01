@@ -1,4 +1,4 @@
-from models import User
+from schemas import User
 from .baseTemplate import EmailTemplate
 from .jinjaEnv import env as TemplatesEnv
 

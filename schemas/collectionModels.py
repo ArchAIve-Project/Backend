@@ -3,8 +3,8 @@ from database import DI, DIRepresentable, DIError
 from utils import Ref
 from services import Universal, Logger
 from typing import List, Dict, Any, Literal
-from userModels import User
-from artefactModels import Artefact
+from .userModels import User
+from .artefactModels import Artefact
 
 class Book(DIRepresentable):
     def __init__(self, title: str, subtitle: str, mmIDs: List[str], id: str=None):
@@ -163,7 +163,7 @@ class Batch(DIRepresentable):
     
     Example usage:
     ```python
-    from models import DI, Batch, BatchArtefact, BatchProcessingJob, User, Artefact
+    from schemas import DI, Batch, BatchArtefact, BatchProcessingJob, User, Artefact
     DI.setup()
     
     user = User.load()[0] # Load the first user available
@@ -688,7 +688,7 @@ class BatchProcessingJob(DIRepresentable):
     Example usage:
     ```python
     import time
-    from models import DI, Batch, BatchProcessingJob
+    from schemas import DI, Batch, BatchProcessingJob
     DI.setup()
     
     job = BatchProcessingJob.load(batchID='some_batch_id')
@@ -1001,7 +1001,7 @@ class BatchArtefact(DIRepresentable):
     Example usage:
     ```python
     from services import Universal
-    from models import DI, Batch, Artefact, BatchArtefact
+    from schemas import DI, Batch, Artefact, BatchArtefact
     DI.setup()
     
     batch = Batch.load(id='some_batch_id')
@@ -1220,7 +1220,7 @@ class Category(DIRepresentable):
 
     Sample usage:
     ```python
-    from models import DI, Category, Artefact
+    from schemas import DI, Category, Artefact
     DI.setup()
 
     # Create a new category
@@ -1626,7 +1626,7 @@ class CategoryArtefact(DIRepresentable):
 
     Sample usage:
     ```python
-    from models import DI, Category, CategoryArtefact, Artefact
+    from schemas import DI, Category, CategoryArtefact, Artefact
     DI.setup()
 
     # Load a category and its artefact relationship

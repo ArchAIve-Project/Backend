@@ -3,7 +3,7 @@ from utils import JSONRes, ResType
 from services import Logger, Encryption, Universal
 from decorators import jsonOnly, enforceSchema
 from sessionManagement import checkSession
-from models import User
+from schemas import User
 
 authBP = Blueprint('identity', __name__, url_prefix="/auth")
 

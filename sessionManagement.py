@@ -3,7 +3,7 @@ from decorators import debug
 from utils import JSONRes
 from services import Logger, Universal
 from flask import session
-from models import User
+from schemas import User
 
 class CheckSessionOutput:
     def __init__(self, reason: str, outputValue) -> None:
