@@ -20,17 +20,17 @@ def info(user: User):
 @enforceSchema(
     Param(
         "username",
-        lambda x: isinstance(x, str) and len(x) > 3 and x.isalpha(), None,
+        lambda x: isinstance(x, str) and len(x) >= 3 and x.isalpha(), None,
         invalidRes=JSONRes.new(400, "Username must be at least 3 characters, without any spaces or special characters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "fname",
-        lambda x: isinstance(x, str) and len(x) > 2 and x.replace(' ', '').isalpha(), None,
+        lambda x: isinstance(x, str) and len(x) >= 2 and x.replace(' ', '').isalpha(), None,
         invalidRes=JSONRes.new(400, "First name must be at least 2 characters and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "lname",
-        lambda x: isinstance(x, str) and len(x) > 1 and x.replace(' ', '').isalpha(), None,
+        lambda x: isinstance(x, str) and len(x) >= 1 and x.replace(' ', '').isalpha(), None,
         invalidRes=JSONRes.new(400, "Last name must be at least 1 character and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
@@ -99,7 +99,7 @@ def update(user: User):
         except Exception as e:
             # Possible key violation
             e = str(e)
-            if e.startswith("USER SAVE ERROR"):
+            if e.startswith("USER SAVE ERROR: Integrity violation: "):
                 violation = e[len("USER SAVE ERROR: Integrity violation: "):]
                 if violation == "Username":
                     return JSONRes.new(400, "Username already exists.", ResType.USERERROR)
