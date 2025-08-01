@@ -68,6 +68,12 @@ class DataImportProcessor:
             time.sleep(1)
         
         Logger.log("DATAIMPORT PROCESSBATCH: Finished processing batch '{}' with {} target artefacts.".format(batch.id, len(targetBatchArtefacts)))
+        
+        # After all artefacts are processed:
+        if all(x.stage == BatchArtefact.Status.PROCESSED for x in targetBatchArtefacts):
+            batch.stage = Batch.Stage.PROCESSED
+            batch.save() 
+
         job.end()
         job.save()
         return
