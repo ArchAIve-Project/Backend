@@ -11,6 +11,48 @@ class Memory:
 class Extensions:
     @staticmethod
     def sanitiseData(data: dict, allowedKeys: List[str]=None, disallowedKeys: List[str]=None, allowedTopLevelKeys: List[str]=None):
+        """Sanitises the input data by filtering keys based on allowed and disallowed lists.
+        
+        Do not mix the `allowedKeys` (whitelist) and `disallowedKeys` (blacklist) parameters - this will lead to unexpected results.
+        
+        `allowedKeys` and `disallowedKeys` are effective no matter how nested the data is, but `allowedTopLevelKeys` only applies to the top level of the data.
+
+        Args:
+            data (dict): The input data to sanitise.
+            allowedKeys (List[str], optional): Keys that are allowed. Defaults to None.
+            disallowedKeys (List[str], optional): Keys that are disallowed. Defaults to None.
+            allowedTopLevelKeys (List[str], optional): Keys that are allowed at the top level. Defaults to None.
+
+        Returns:
+            dict: The sanitised data.
+        
+        Sample usage:
+        ```python
+        from utils import Extensions
+        
+        data = {
+            "name": "John",
+            "age": 30,
+            "address": {
+                "street": "123 Main St",
+                "city": "Anytown",
+                "country": "USA"
+        }
+        
+        output1 = Extensions.sanitiseData(
+            data,
+            allowedKeys=["name", "age", "city"], # whitelisted keys. all other keys are not allowed. do note that `city` does not need to be included here, as `address` is allowed at the top level
+            disallowedKeys=[], # you can also set it to None. remember that this is a blacklist, do not use at the same time as allowedKeys
+            allowedTopLevelKeys=["address"]
+        )
+        
+        output2 = Extensions.sanitiseData(
+            data,
+            allowedKeys=[], # this example does not use whitelisting, so all keys are allowed
+            disallowedKeys=["country"], # `country` is filtered out, so the output will only contain `name`, `age`, and `address` with `street` and `city`
+        )
+        ```
+        """
         if allowedKeys is None:
             allowedKeys = []
         if disallowedKeys is None:
