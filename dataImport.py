@@ -206,22 +206,21 @@ def getAllBatches():
             hfCount = 0
 
              # Only count for processing batches (not completed)
-            if rep.get("job", {}).get("status") != "completed":
-                for artefactID in artefactIDs:
-                    try:
-                        artefact = Artefact.load(id=artefactID)
-                        if artefact.artType == "mm":
-                            mmCount += 1
-                        elif artefact.artType == "hf":
-                            hfCount += 1
-                    except Exception as e:
-                        Logger.log("Failed to load artefact '{}': {}".format(artefactID, e))
-                        continue
+            for artefactID in artefactIDs:
+                try:
+                    artefact = Artefact.load(id=artefactID)
+                    if artefact.artType == "mm":
+                        mmCount += 1
+                    elif artefact.artType == "hf":
+                        hfCount += 1
+                except Exception as e:
+                    Logger.log("Failed to load artefact '{}': {}".format(artefactID, e))
+                    continue
 
-                rep["artefactTypeSummary"] = {
-                    "mm": mmCount,
-                    "hf": hfCount
-                }
+            rep["artefactTypeSummary"] = {
+                "mm": mmCount,
+                "hf": hfCount
+            }
 
             # Remove processingError from each artefact
             for artefactData in rep.get("artefacts", {}).values():
@@ -439,5 +438,5 @@ def completeBatch():
         return JSONRes.new(200, "Batch marked as complete.", batchID=batchID)
 
     except Exception as e:
-        Logger.log("DATAIMPORT COMPLETEBATCH ERROR: Batch {} failed to complete; error {}".format(batchID, e))
+        Logger.log("DATAIMPORT COMPLETEBATCH ERROR: Batch '{}' failed to complete; error {}".format(batchID, e))
         return JSONRes.ambiguousError()
