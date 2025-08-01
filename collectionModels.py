@@ -128,7 +128,8 @@ class Batch(DIRepresentable):
     - `Batch` is a larger model that has a collection of `BatchArtefact` objects, which are references to `Artefact` objects.
     - Processing job data associated with a batch is stored as `BatchProcessingJob` under the `job` attribute.
     - The memory size of this model can get quite extensive if all sub-units of data are loaded and there are many artefacts.
-    - Each `BatchArtefact` has a `stage` attribute that indicates its processing stage, among other parameters to store processing information.
+    - Each `BatchArtefact` has a `stage` attribute that indicates its processing status, among other parameters to store processing information.
+    - Do note that `Batch.Stage` (at `Batch().stage`), `BatchArtefact.Status` (at `BatchArtefact().stage`) and `BatchProcessingJob.Status` (at `BatchProcessingJob().status`) are three semantically different status indicators.
     - Each `job: BatchProcessingJob` has a `status` attribute that indicates the status of the processing job. It also contains a `jobID`, which is meant to be the `ThreadManager` job ID.
     - Methods below are excluding those already defined in `DIRepresentable`.
     
@@ -137,6 +138,7 @@ class Batch(DIRepresentable):
         userID (str): ID of the user who created the batch.
         artefacts (Dict[str, BatchArtefact]): Dictionary of `BatchArtefact` objects keyed by artefact ID.
         job (BatchProcessingJob | None): The processing job associated with the batch, if any.
+        stage (Batch.Stage): The stage that the batch is in.
         user (User | None): The user object associated with the batch, if loaded.
         created (str): Timestamp of when the batch was created.
         originRef (Ref): Reference to the batch in the database.
@@ -193,14 +195,43 @@ class Batch(DIRepresentable):
     print(batch) # outputs the string representation of the batch with all artefacts and job information
     ```
     """
+    
+    class Stage(str, Enum):
+        UPLOAD_PENDING = "upload_pending"
+        UNPROCESSED = "unprocessed"
+        PROCESSED = "processed"
+        VETTING = "vetting"
+        INTEGRATION = "integration"
+        COMPLETED = "completed"
 
-    def __init__(self, userID: str, batchArtefacts: 'List[BatchArtefact | Artefact]'=None, job: 'BatchProcessingJob | None'=None, created: str=None, id: str=None):
+        @staticmethod
+        def validateAndReturn(stage: 'Batch.Stage | str') -> 'Batch.Stage | Literal[False]':
+            """Validates the given stage and returns it if valid, or False if invalid.
+
+            Args:
+                stage (str | Batch.Stage): The stage to validate.
+
+            Returns: `Batch.Stage | Literal[False]`: The validated stage or False if invalid.
+            """
+            
+            if isinstance(stage, Batch.Stage):
+                return stage
+            elif isinstance(stage, str):
+                try:
+                    return Batch.Stage(stage.lower())
+                except ValueError:
+                    return False
+            else:
+                return False
+
+    def __init__(self, userID: str, batchArtefacts: 'List[BatchArtefact | Artefact]'=None, job: 'BatchProcessingJob | None'=None, stage: 'Batch.Stage'=None, created: str=None, id: str=None):
         """Initializes a new Batch instance.
 
         Args:
             userID (str): The ID of the user associated with the batch.
             batchArtefacts (List[BatchArtefact | Artefact], optional): The artefacts to include in the batch. Both `BatchArtefact` and `Artefact` objects are accepted. `Artefact` objects are converted into 'unprocessed' `BatchArtefact` objects. Defaults to None.
             job (BatchProcessingJob | None, optional): The processing job associated with the batch. Defaults to None.
+            stage (Batch.Stage, optional): The stage of the batch. Defaults to `Batch.Stage.UPLOAD_PENDING`.
             created (str, optional): The creation timestamp of the batch. Defaults to None.
             id (str, optional): The unique ID of the batch. Defaults to None.
 
@@ -214,6 +245,8 @@ class Batch(DIRepresentable):
             created = Universal.utcNowString()
         if batchArtefacts is None:
             batchArtefacts = {}
+        if stage is None:
+            stage = Batch.Stage.UPLOAD_PENDING
         
         batchArts = {}
         for item in batchArtefacts:
@@ -228,6 +261,7 @@ class Batch(DIRepresentable):
         self.userID: str = userID
         self.artefacts: Dict[str, BatchArtefact] = batchArts
         self.job: BatchProcessingJob | None = job
+        self.stage: Batch.Stage = stage
         self.user: User | None = None
         self.created: str = created
         self.originRef = Batch.ref(self.id)
@@ -279,6 +313,7 @@ class Batch(DIRepresentable):
             "userID": self.userID,
             "artefacts": {id: batchArt.represent() for id, batchArt in self.artefacts.items()},
             'job': self.job.represent() if self.job != None else None,
+            'stage': self.stage.value,
             "created": self.created
         }
     
@@ -301,6 +336,7 @@ User ID: {}
 User Object:{}
 Artefact References:{}
 Job:{}
+Stage: {}
 Created: {} />
         """.format(
             self.id,
@@ -308,6 +344,7 @@ Created: {} />
             self.user.represent() if isinstance(self.user, User) else " None",
             ("\n---\n- " + ("\n- ".join(str(batchArt) if isinstance(batchArt, BatchArtefact) else "CORRUPTED BATCHARTEFACT AT '{}'".format(artID) for artID, batchArt in self.artefacts.items())) + "\n---") if isinstance(self.artefacts, dict) else " None",
             self.job if isinstance(self.job, BatchProcessingJob) else " None",
+            self.stage.value,
             self.created
         )
     
@@ -535,7 +572,7 @@ Created: {} />
             Batch: The loaded batch object.
         """
         
-        requiredParams = ['userID', 'artefacts', 'job', 'created']
+        requiredParams = ['userID', 'artefacts', 'job', 'stage', 'created']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam == 'artefacts':
@@ -555,10 +592,17 @@ Created: {} />
         if isinstance(data['job'], dict):
             job = BatchProcessingJob.rawLoad(batchID, data['job'])
         
+        stage: Batch.Stage | None = None
+        if data['stage']:
+            stage = Batch.Stage.validateAndReturn(data['stage'])
+            if stage == False:
+                stage = None
+        
         batch = Batch(
             userID=data.get('userID'),
             batchArtefacts=arts,
             job=job,
+            stage=stage,
             created=data.get('created'),
             id=batchID
         )
@@ -998,7 +1042,7 @@ class BatchArtefact(DIRepresentable):
         CONFIRMED = "confirmed"
         
         @staticmethod
-        def validateAndReturn(stage: 'BatchArtefact.Status | str') -> 'BatchArtefact.Status | Literal[False]':
+        def validateAndReturn(status: 'BatchArtefact.Status | str') -> 'BatchArtefact.Status | Literal[False]':
             """Validates the given stage and returns it if valid, or False if invalid.
 
             Args:
@@ -1007,11 +1051,11 @@ class BatchArtefact(DIRepresentable):
             Returns: `BatchArtefact.Status | Literal[False]`: The validated stage or False if invalid.
             """
             
-            if isinstance(stage, BatchArtefact.Status):
-                return stage
-            elif isinstance(stage, str):
+            if isinstance(status, BatchArtefact.Status):
+                return status
+            elif isinstance(status, str):
                 try:
-                    return BatchArtefact.Status(stage.lower())
+                    return BatchArtefact.Status(status.lower())
                 except ValueError:
                     return False
             else:
