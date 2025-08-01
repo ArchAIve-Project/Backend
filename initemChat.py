@@ -1,5 +1,5 @@
 from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant
-from models import Artefact
+from schemas import Artefact
 import sys
 
 class InItemChatbot:

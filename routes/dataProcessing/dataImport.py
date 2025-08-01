@@ -3,7 +3,7 @@ from flask import Blueprint, request
 from utils import JSONRes, ResType
 from services import Logger, Universal, FileOps
 from sessionManagement import checkSession
-from models import Artefact, User, Batch, BatchProcessingJob
+from schemas import Artefact, User, Batch, BatchProcessingJob
 from fm import FileManager, File
 from services import ThreadManager
 from ingestion import DataImportProcessor

@@ -5,7 +5,7 @@ from services import Universal, Logger, Encryption, FileOps
 from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
 from sessionManagement import checkSession
 from fm import File, FileManager
-from models import User, AuditLog
+from schemas import User, AuditLog
 
 profileBP = Blueprint('profile', __name__, url_prefix='/profile')
 

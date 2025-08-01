@@ -1,7 +1,7 @@
 import time, pprint, datetime, os, sys, shutil, json
 from services import Universal, ThreadManager, Encryption, Trigger
 from firebase import FireConn
-from models import DI, User, Artefact, Metadata, Category, Book, CategoryArtefact
+from schemas import DI, User, Artefact, Metadata, Category, Book, CategoryArtefact
 from fm import File, FileManager, FileOps
 from ai import LLMInterface, InteractionContext, Interaction
 from addons import ModelStore, ArchSmith

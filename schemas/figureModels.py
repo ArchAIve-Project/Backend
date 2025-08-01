@@ -82,7 +82,7 @@ class Face(DIRepresentable):
     Sample usage:
     ```python
     from fm import FileManager
-    from models import DI, Face, FaceEmbedding
+    from schemas import DI, Face, FaceEmbedding
     
     DI.setup()
     FileManager.setup() # required as Face uses FileManager for embeddings storage
@@ -738,7 +738,7 @@ class Figure(DIRepresentable):
     ```python
     import torch
     from fm import FileManager
-    from models import DI, Figure, Face
+    from schemas import DI, Figure, Face
     
     DI.setup()
     FileManager.setup() # required as FileManager is used by the Face model

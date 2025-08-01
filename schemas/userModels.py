@@ -16,7 +16,7 @@ class AuditLog(DIRepresentable):
     
     Sample usage:
     ```python
-    from models import DI, User, AuditLog
+    from schemas import DI, User, AuditLog
     DI.setup()
     
     user = User.load(username="johndoe")
@@ -164,7 +164,7 @@ class User(DIRepresentable):
     
     Sample usage:
     ```python
-    from models import DI, User
+    from schemas import DI, User
     DI.setup()
     
     user = User("johndoe", "john@doe.com", "securepwd", "John", "Doe", "Admin", superuser=True)
@@ -481,8 +481,7 @@ Reset Key: {} />""".format(
             Exception: If more than one superuser exists.
             Exception: If an error occurs during loading.
 
-        Returns:
-            User | None: The superuser if found, otherwise None.
+        Returns: `User | None`: The superuser if found, otherwise None.
         """
         
         allUsers = User.load()
