@@ -75,29 +75,6 @@ def update(user: User):
     contact = request.json.get('contact', user.contact).replace(' ', '').strip()
     email = request.json.get('email', user.email).strip()
     
-    # Check username uniqueness
-    if username != user.username:
-        conflictingUser = None
-        try:
-            conflictingUser = User.load(username=username)
-            print(conflictingUser)
-            if isinstance(conflictingUser, User):
-                return JSONRes.new(400, "Username already exists.", ResType.USERERROR)
-        except Exception as e:
-            Logger.log("USERPROFILE UPDATE ERROR: Failed to load user with username '{}' for uniqueness check; error: {}".format(username, e))
-            return JSONRes.ambiguousError()
-    
-    # Check email uniqueness
-    if email != user.email:
-        conflictingUser = None
-        try:
-            conflictingUser = User.load(email=email)
-            if isinstance(conflictingUser, User):
-                return JSONRes.new(400, "Email already exists.", ResType.USERERROR)
-        except Exception as e:
-            Logger.log("USERPROFILE UPDATE ERROR: Failed to load user with email '{}' for uniqueness check; error: {}".format(email, e))
-            return JSONRes.ambiguousError()
-    
     # Update user details
     changes = []
     if username != user.username:
@@ -117,7 +94,21 @@ def update(user: User):
         changes.append("Email")
     
     if changes:
-        user.save()
+        try:
+            user.save()
+        except Exception as e:
+            # Possible key violation
+            e = str(e)
+            if e.startswith("USER SAVE ERROR"):
+                violation = e[len("USER SAVE ERROR: Integrity violation: "):]
+                if violation == "Username":
+                    return JSONRes.new(400, "Username already exists.", ResType.USERERROR)
+                elif violation == "Email":
+                    return JSONRes.new(400, "Email already exists.", ResType.USERERROR)
+            
+            Logger.log("USERPROFILE UPDATE ERROR: Failed to save user '{}' after updating details; error: {}".format(user.id, e))
+            return JSONRes.ambiguousError()
+        
         user.newLog("Profile Update", "{} details updated.".format(", ".join(changes)))
     else:
         return JSONRes.new(200, "No changes made to the profile.")
@@ -151,7 +142,13 @@ def changePassword(user: User):
         return JSONRes.new(401, "Current password is incorrect.", ResType.USERERROR)
     
     user.pwd = Encryption.encodeToSHA256(newPassword)
-    user.save()
+    
+    try:
+        user.save()
+    except Exception as e:
+        Logger.log("USERPROFILE CHANGEPASSWORD ERROR: Failed to save user '{}' after changing password; error: {}".format(user.id, e))
+        return JSONRes.ambiguousError()
+    
     user.newLog("Password Change", "Password changed successfully.")
     
     return JSONRes.new(200, "Password changed successfully.")
@@ -211,7 +208,13 @@ def uploadPicture(user: User):
     
     # Save the new profile picture filename to the user
     user.pfp = newFilename
-    user.save()
+    
+    try:
+        user.save()
+    except Exception as e:
+        Logger.log("USERPROFILE UPLOADPICTURE ERROR: Failed to save user '{}' after uploading profile picture; error: {}".format(user.id, e))
+        return JSONRes.ambiguousError()
+    
     user.newLog("Profile Picture Updated", "Profile picture updated successfully.")
     
     return JSONRes.new(200, "Profile picture updated successfully.")
