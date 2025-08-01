@@ -103,29 +103,32 @@ if __name__ == "__main__":
     print("LLMINTERFACE: Default clients initialised successfully.")
     
     # Import and register API blueprints
-    from api import apiBP
+    
+    ## Top-level routes
+    from routes.api import apiBP
     app.register_blueprint(apiBP)
     
-    from identity import identityBP
-    app.register_blueprint(identityBP)
-
-    from dataImport import dataImportBP
-    app.register_blueprint(dataImportBP)
-    
-    from cdn import cdnBP
+    from routes.cdn import cdnBP
     app.register_blueprint(cdnBP)
     
-    from userProfile import profileBP
+    # User management routes
+    from routes.userManagement.auth import authBP
+    app.register_blueprint(authBP)
+    
+    from routes.userManagement.userProfile import profileBP
     app.register_blueprint(profileBP)
     
-    # Debug execution
-    if os.environ.get("DEBUG_MODE", "False") == "True":
-        superuser = User.getSuperuser()
-        if superuser == None:
-            pwd = "123456"
-            debugSuperuser = User("johndoe", "john@example.com", Encryption.encodeToSHA256(pwd), "John", "Doe", "Boss", superuser=True)
-            debugSuperuser.save()
-            print("MAIN BOOT DEBUG: Superuser created with username '{}' and password '{}'.".format(debugSuperuser.username, pwd))
+    # Data Processing Routes
+    from routes.dataProcessing.dataImport import dataImportBP
+    app.register_blueprint(dataImportBP)
+    
+    # Superuser creation
+    superuser = User.getSuperuser()
+    if superuser == None:
+        pwd = os.environ.get("SECRET_KEY", "123456")
+        debugSuperuser = User("adminuser", "admin@email.com", Encryption.encodeToSHA256(pwd), "ArchAIve", "Admin", "Platform Superuser", superuser=True)
+        debugSuperuser.save()
+        print("MAIN BOOT: Superuser created with username '{}' and password '{}'.".format(debugSuperuser.username, pwd))
 
     print()
     print("MAIN BOOT: Pre-processing complete. Starting server...")

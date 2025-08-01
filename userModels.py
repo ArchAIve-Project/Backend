@@ -481,8 +481,7 @@ Reset Key: {} />""".format(
             Exception: If more than one superuser exists.
             Exception: If an error occurs during loading.
 
-        Returns:
-            User | None: The superuser if found, otherwise None.
+        Returns: `User | None`: The superuser if found, otherwise None.
         """
         
         allUsers = User.load()
