@@ -12,7 +12,7 @@ profileBP = Blueprint('profile', __name__, url_prefix='/profile')
 @profileBP.route('/info', methods=['GET'])
 @checkSession(strict=True, provideUser=True)
 def info(user: User):
-    return redirect(url_for('cdn.getProfileInfo', userID=user.id))
+    return redirect(url_for('cdn.getProfileInfo', userID=user.id, includeLogs=request.args.get('includeLogs', 'false')))
 
 @profileBP.route('/update', methods=['POST'])
 @checkAPIKey
