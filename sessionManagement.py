@@ -95,3 +95,19 @@ def checkSession(_func=None, *, strict=False, provideUser=False):
         return decorator_checkSession
     else:
         return decorator_checkSession(_func)
+
+def requireSuperuser(func):
+    """Examine how the session was checked."""
+    @functools.wraps(func)
+    @debug
+    def wrapper_requireSuperuser(user: User, *args, **kwargs):
+        if not isinstance(user, User):
+            Logger.log("REQUIRESUPERUSER WARNING: 'user' is not a valid User object. Returning unauthorised response as contingency.")
+            return JSONRes.unauthorised()
+        
+        if not user.superuser:
+            return JSONRes.unauthorised()
+        
+        return func(user, *args, **kwargs)
+    
+    return wrapper_requireSuperuser
