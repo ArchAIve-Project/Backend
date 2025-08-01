@@ -1,5 +1,5 @@
 import re
-from flask import Blueprint, url_for, request
+from flask import Blueprint, url_for, request, redirect
 from utils import JSONRes, ResType
 from services import Universal, Logger, Encryption, FileOps
 from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
@@ -8,39 +8,6 @@ from fm import File, FileManager
 from schemas import User, AuditLog
 
 profileBP = Blueprint('profile', __name__, url_prefix='/profile')
-
-@profileBP.route('/info', methods=['GET'])
-@checkAPIKey
-@checkSession(strict=True, provideUser=True)
-def getInfo(user: User):
-    if request.args.get('includeLogs', 'false').lower() == 'true':
-        try:
-            user.getAuditLogs()
-        except Exception as e:
-            Logger.log("USERPROFILE INFO ERROR: Failed to retrieve audit logs for user '{}' (will skip); error: {}".format(user.username, e))
-            user.logs = None
-    
-    info = {
-        'username': user.username,
-        'email': user.email,
-        'fname': user.fname,
-        'lname': user.lname,
-        'role': user.role,
-        'contact': user.contact,
-        'lastLogin': user.lastLogin,
-        'created': user.created
-    }
-    
-    if isinstance(user.logs, list):
-        info['logs'] = [log.represent() for log in user.logs]
-    else:
-        info['logs'] = None
-    
-    return JSONRes.new(
-        code=200,
-        msg="Information retrieved successfully.",
-        info=info
-    )
 
 @profileBP.route('/update', methods=['POST'])
 @checkAPIKey
@@ -70,10 +37,33 @@ def getInfo(user: User):
         "email",
         lambda x: isinstance(x, str) and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', x.strip()), None,
         invalidRes=JSONRes.new(400, "Invalid email.", ResType.USERERROR, serialise=False)
+    ),
+    Param(
+        "userID",
+        str, None,
+        invalidRes=JSONRes.new(400, "User ID must be a valid string if provided.", ResType.ERROR, serialise=False)
     )
 )
 @checkSession(strict=True, provideUser=True)
 def update(user: User):
+    # Carry out authorisation check. Superusers can update any user, others can only update their own profile.
+    userID: str = request.json.get('userID', None).strip()
+    if userID and userID != user.id:
+        if not user.superuser:
+            # User is not the same as the requested user and is not a superuser
+            return JSONRes.unauthorised()
+        else:
+            # User is a superuser, so we can load the requested user
+            try:
+                user = User.load(id=userID)
+                if user is None:
+                    return JSONRes.new(404, "User not found.")
+                if not isinstance(user, User):
+                    raise Exception("Unexpected load response: {}".format(user))
+            except Exception as e:
+                Logger.log("USERPROFILE UPDATE ERROR: Failed to load user '{}' for superuser request: {}".format(userID, e))
+                return JSONRes.ambiguousError()
+    
     username = request.json.get('username', user.username).strip()
     fname = request.json.get('fname', user.fname).strip()
     lname = request.json.get('lname', user.lname).strip()

@@ -10,6 +10,55 @@ from sessionManagement import checkSession
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
+@cdnBP.route('/profileInfo/<userID>', methods=['GET'])
+@checkSession(strict=True, provideUser=True)
+def getProfileInfo(user: User, userID: str=None):
+    # Carry out authorisation checks
+    if userID != user.id:
+        if not user.superuser:
+            # User is not the same as the requested user and is not a superuser
+            return JSONRes.unauthorised()
+        else:
+            # User is a superuser, so we can load the requested user
+            try:
+                user = User.load(id=userID)
+                if user is None:
+                    return JSONRes.new(404, "User not found.")
+                if not isinstance(user, User):
+                    raise Exception("Unexpected load response: {}".format(user))
+            except Exception as e:
+                Logger.log("CDN GETPROFILEINFO ERROR: Failed to load user '{}' for superuser request: {}".format(userID, e))
+                return JSONRes.ambiguousError()
+    
+    if request.args.get('includeLogs', 'false').lower() == 'true':
+        try:
+            user.getAuditLogs()
+        except Exception as e:
+            Logger.log("USERPROFILE INFO ERROR: Failed to retrieve audit logs for user '{}' (will skip); error: {}".format(user.username, e))
+            user.logs = None
+    
+    info = {
+        'username': user.username,
+        'email': user.email,
+        'fname': user.fname,
+        'lname': user.lname,
+        'role': user.role,
+        'contact': user.contact,
+        'lastLogin': user.lastLogin,
+        'created': user.created
+    }
+    
+    if isinstance(user.logs, list):
+        info['logs'] = [log.represent() for log in user.logs]
+    else:
+        info['logs'] = None
+    
+    return JSONRes.new(
+        code=200,
+        msg="Information retrieved successfully.",
+        info=info
+    )
+
 @cdnBP.route('/pfp/<userID>')
 @checkSession(strict=True, provideUser=True)
 def getProfilePicture(user: User, userID: str=None):
@@ -27,7 +76,7 @@ def getProfilePicture(user: User, userID: str=None):
                 if not isinstance(user, User):
                     raise Exception("Unexpected load response: {}".format(user))
             except Exception as e:
-                Logger.log("CDN GETPFP ERROR: Failed to load user '{}': {}".format(userID, e))
+                Logger.log("CDN GETPFP ERROR: Failed to load user '{}' for superuser request: {}".format(userID, e))
                 return JSONRes.ambiguousError()
     
     if not user.pfp:
