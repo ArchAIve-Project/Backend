@@ -8,6 +8,39 @@ class Memory:
     def getSize(anyObject):
         return sizeOf(anyObject)
 
+class Extensions:
+    @staticmethod
+    def sanitiseData(data: dict, allowedKeys: List[str]=None, disallowedKeys: List[str]=None, allowedTopLevelKeys: List[str]=None):
+        if allowedKeys is None:
+            allowedKeys = []
+        if disallowedKeys is None:
+            disallowedKeys = []
+        if allowedTopLevelKeys is None:
+            allowedTopLevelKeys = []
+        
+        if not isinstance(data, dict):
+            return data
+
+        outputDict = {}
+        for key, value in data.items():
+            if key in allowedTopLevelKeys:
+                outputDict[key] = value
+                continue
+            
+            if len(allowedKeys) > 0 and key not in allowedKeys:
+                continue
+            if len(disallowedKeys) > 0 and key in disallowedKeys:
+                continue
+            
+            if isinstance(value, dict):
+                outputDict[key] = Extensions.sanitiseData(value, allowedKeys, disallowedKeys)
+            elif isinstance(value, list):
+                outputDict[key] = [Extensions.sanitiseData(item, allowedKeys, disallowedKeys) for item in value]
+            else:
+                outputDict[key] = value
+        
+        return outputDict
+
 class Ref:
     illegalChars = ['.', '#', '$', '[', ']', '/']
     
