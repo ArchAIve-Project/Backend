@@ -34,7 +34,7 @@ def getArtefactImage(artefactId):
     # Attempt to create file object
     file = File(filename, "artefacts")
     
-    if os.environ.get("DEBUG_MODE", "False") == "True" and False:
+    if os.environ.get("DEBUG_MODE", "False") == "True":
         # In debug mode, serve the file directly from the filesystem
         res = FileManager.prepFile(file=file)
         if isinstance(res, str):
@@ -52,7 +52,7 @@ def getArtefactImage(artefactId):
     
     # Attempt to generate signed URL
     try:
-        url = file.getSignedURL(expiration=datetime.timedelta(minutes=10))
+        url = file.getSignedURL(expiration=datetime.timedelta(minutes=10)) # note: useCache=True
         if url.startswith("ERROR"):
             if url == "ERROR: File does not exist.":
                 return JSONRes.new(404, "Requested file not found.")
