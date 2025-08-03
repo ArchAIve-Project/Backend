@@ -12,6 +12,8 @@ load_dotenv()
 class LiteStore:
     dataFile = 'liteStore.json'
     data: dict | None = None
+    dataFileLock = threading.Lock()
+    inMemoryStateLock = threading.Lock()
 
     @staticmethod
     def setup():
@@ -27,37 +29,41 @@ class LiteStore:
     
     @staticmethod
     def write():
-        try:
-            with open(LiteStore.dataFile, 'w') as f:
-                json.dump(LiteStore.data, f, indent=4 if os.environ.get("DEBUG_MODE", "False") == "True" else None)
-            return True
-        except Exception as e:
-            return "ERROR: Failed to write LiteStore data; error: {}".format(e)
+        with LiteStore.dataFileLock:
+            try:
+                with open(LiteStore.dataFile, 'w') as f:
+                    json.dump(LiteStore.data, f, indent=4 if os.environ.get("DEBUG_MODE", "False") == "True" else None)
+                return True
+            except Exception as e:
+                return "ERROR: Failed to write LiteStore data; error: {}".format(e)
     
     @staticmethod
     def load():
-        try:
-            with open(LiteStore.dataFile, 'r') as f:
-                LiteStore.data = json.load(f)
-            return True
-        except Exception as e:
-            return "ERROR: Failed to read LiteStore data; error: {}".format(e)
+        with LiteStore.dataFileLock:
+            try:
+                with open(LiteStore.dataFile, 'r') as f:
+                    LiteStore.data = json.load(f)
+                return True
+            except Exception as e:
+                return "ERROR: Failed to read LiteStore data; error: {}".format(e)
 
     @staticmethod
     def set(keyName, value):
-        try:
-            if not LiteStore.data:
-                LiteStore.data = {}
-            
-            LiteStore.data[keyName] = value
-            return LiteStore.write()
-        except Exception as e:
-            return "ERROR: Failed to set key '{}'; error: {}".format(keyName, e)
+        with LiteStore.inMemoryStateLock:
+            try:
+                if not LiteStore.data:
+                    LiteStore.data = {}
+                
+                LiteStore.data[keyName] = value
+                return LiteStore.write()
+            except Exception as e:
+                return "ERROR: Failed to set key '{}'; error: {}".format(keyName, e)
 
     @staticmethod
     def read(keyName):
-        return LiteStore.data.get(keyName, None) if LiteStore.data else None
-    
+        with LiteStore.inMemoryStateLock:
+            return LiteStore.data.get(keyName, None) if LiteStore.data else None
+
     @staticmethod
     def delete(keyName):
         try:

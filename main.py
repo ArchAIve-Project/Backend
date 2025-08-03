@@ -45,6 +45,8 @@ if __name__ == "__main__":
     if res != True:
         print("MAIN BOOT: Failed to setup LiteStore; response: {}".format(res))
         sys.exit(1)
+    else:
+        print("LITESTORE: Setup complete.")
     
     # Initialise database system
     if FireConn.checkPermissions():
