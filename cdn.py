@@ -1,13 +1,12 @@
+import os, datetime
 from flask import Blueprint, send_file, make_response, redirect
 from fm import FileManager, File
 from utils import JSONRes, ResType
-import datetime
 from typing import Dict, List
 from services import Logger
 from models import Category, Book, Artefact, Figure
 from decorators import cache, timeit
 from sessionManagement import checkSession
-import json
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
@@ -31,10 +30,26 @@ def getArtefactImage(artefactId):
     filename = art.image
     if not filename:
         return JSONRes.new(404, "Artefact has no associated image.")
-
+    
     # Attempt to create file object
     file = File(filename, "artefacts")
-
+    
+    if os.environ.get("DEBUG_MODE", "False") == "True":
+        # In debug mode, serve the file directly from the filesystem
+        res = FileManager.prepFile(file=file)
+        if isinstance(res, str):
+            if res == "ERROR: File does not exist.":
+                return JSONRes.new(404, "Requested file not found.")
+            else:
+                Logger.log("CDN GETARTEFACT ERROR: Failed to prepare file for delivery; response: {}".format(res))
+                return JSONRes.ambiguousError()
+        
+        try:
+            return send_file(file.path())
+        except Exception as e:
+            Logger.log("CDN GETARTEFACT ERROR: Failed to send file '{}' for artefact '{}'; error: {}".format(filename, artefactId, e))
+            return JSONRes.ambiguousError()
+    
     # Attempt to generate signed URL
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
