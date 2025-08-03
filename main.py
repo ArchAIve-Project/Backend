@@ -13,7 +13,7 @@ from emailer import Emailer
 from fm import FileManager, File
 from ai import LLMInterface
 from addons import ModelStore, ArchSmith
-from services import Universal, Logger, ThreadManager, Encryption
+from services import Universal, Logger, ThreadManager, Encryption, LiteStore
 from firebase import FireConn
 from database import DI, DIError
 from fm import FileManager
@@ -40,6 +40,11 @@ if __name__ == "__main__":
         sys.exit(1)
     
     print(f"MAIN BOOT: Starting ArchAIve v{ver}...")
+    
+    res = LiteStore.setup()
+    if res != True:
+        print("MAIN BOOT: Failed to setup LiteStore; response: {}".format(res))
+        sys.exit(1)
     
     # Initialise database system
     if FireConn.checkPermissions():
