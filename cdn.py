@@ -79,19 +79,24 @@ def getFaceImage(figureID):
     """
     Serve a face image from the 'people' store.
     """
-    fig = None
-    try:
-        fig = Figure.load(figureID)
-        if fig is None:
-            return JSONRes.new(404, "Requested file not found.")
-        if not isinstance(fig, Figure):
-            raise Exception("Unexpected response in load: {}".format(fig))
-    except Exception as e:
-        Logger.log("CDN GETFACEIMAGE ERROR: Unexpected error in loading Figure object with ID '{}'; error: {}".format(figureID, e))
-        return JSONRes.ambiguousError()
+    file = File('{}.jpg'.format(figureID), "people")
     
-    file = File(fig.headshot, "people")
-
+    if os.environ.get("DEBUG_MODE", "False") == "True":
+        # In debug mode, serve the file directly from the filesystem
+        res = FileManager.prepFile(file=file)
+        if isinstance(res, str):
+            if res == "ERROR: File does not exist.":
+                return JSONRes.new(404, "Requested file not found.")
+            else:
+                Logger.log("CDN GETFACEIMAGE ERROR: Failed to prepare file for delivery; response: {}".format(res))
+                return JSONRes.ambiguousError()
+        
+        try:
+            return send_file(file.path())
+        except Exception as e:
+            Logger.log("CDN GETFACEIMAGE ERROR: Failed to send headshot for figure '{}'; error: {}".format(figureID, e))
+            return JSONRes.ambiguousError()
+    
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
@@ -110,7 +115,7 @@ def getFaceImage(figureID):
         
         return res
     except Exception as e:
-        Logger.log("CDN GETFACEIMAGE ERROR: {}".format(e))
+        Logger.log("CDN GETFACEIMAGE ERROR: Unexpected error in redirecting to a signed URL for figure '{}'; error: {}".format(figureID, e))
         return JSONRes.ambiguousError()
 
 @cdnBP.route('/asset/<filename>')
@@ -120,6 +125,22 @@ def getAsset(filename):
     Serve a public file from the 'FileStore' store (via /FileStore).
     """    
     file = File(filename, "FileStore")
+    
+    if os.environ.get("DEBUG_MODE", "False") == "True":
+        # In debug mode, serve the file directly from the filesystem
+        res = FileManager.prepFile(file=file)
+        if isinstance(res, str):
+            if res == "ERROR: File does not exist.":
+                return JSONRes.new(404, "Requested file not found.")
+            else:
+                Logger.log("CDN GETASSET ERROR: Failed to prepare file for delivery; response: {}".format(res))
+                return JSONRes.ambiguousError()
+        
+        try:
+            return send_file(file.path())
+        except Exception as e:
+            Logger.log("CDN GETASSET ERROR: Failed to send asset '{}'; error: {}".format(filename, e))
+            return JSONRes.ambiguousError()
     
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
@@ -136,12 +157,12 @@ def getAsset(filename):
         
         return res
     except Exception as e:
-        Logger.log("CDN GETASSET ERROR: {}".format(e))
+        Logger.log("CDN GETASSET ERROR: Unexpected error in redirecting to a signed URL for asset '{}'; error: {}".format(filename, e))
         return JSONRes.ambiguousError()
 
 @cdnBP.route('/catalogue')
 @checkSession(strict=True)
-@cache
+@cache(ttl=60, lsInvalidator='cdnCatalogueInvalidator')
 def getAllCategoriesWithArtefacts():
     """
     Returns all human-figure artefacts grouped by category and all books with their associated
