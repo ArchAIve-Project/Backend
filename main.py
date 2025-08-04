@@ -125,6 +125,9 @@ if __name__ == "__main__":
     from routes.userManagement.userProfile import profileBP
     app.register_blueprint(profileBP)
     
+    from routes.userManagement.admin import adminBP
+    app.register_blueprint(adminBP)
+    
     # Data Processing Routes
     from routes.dataProcessing.dataImport import dataImportBP
     app.register_blueprint(dataImportBP)

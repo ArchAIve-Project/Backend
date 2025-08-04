@@ -1,5 +1,5 @@
 import re
-from flask import Blueprint, url_for, request
+from flask import Blueprint, url_for, request, redirect
 from utils import JSONRes, ResType
 from services import Universal, Logger, Encryption, FileOps
 from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
@@ -10,37 +10,9 @@ from schemas import User, AuditLog
 profileBP = Blueprint('profile', __name__, url_prefix='/profile')
 
 @profileBP.route('/info', methods=['GET'])
-@checkAPIKey
 @checkSession(strict=True, provideUser=True)
-def getInfo(user: User):
-    if request.args.get('includeLogs', 'false').lower() == 'true':
-        try:
-            user.getAuditLogs()
-        except Exception as e:
-            Logger.log("USERPROFILE INFO ERROR: Failed to retrieve audit logs for user '{}' (will skip); error: {}".format(user.username, e))
-            user.logs = None
-    
-    info = {
-        'username': user.username,
-        'email': user.email,
-        'fname': user.fname,
-        'lname': user.lname,
-        'role': user.role,
-        'contact': user.contact,
-        'lastLogin': user.lastLogin,
-        'created': user.created
-    }
-    
-    if isinstance(user.logs, list):
-        info['logs'] = [log.represent() for log in user.logs]
-    else:
-        info['logs'] = None
-    
-    return JSONRes.new(
-        code=200,
-        msg="Information retrieved successfully.",
-        info=info
-    )
+def info(user: User):
+    return redirect(url_for('cdn.getProfileInfo', userID=user.id, includeLogs=request.args.get('includeLogs', 'false')))
 
 @profileBP.route('/update', methods=['POST'])
 @checkAPIKey
@@ -48,17 +20,17 @@ def getInfo(user: User):
 @enforceSchema(
     Param(
         "username",
-        lambda x: isinstance(x, str) and len(x) > 3 and x.isalpha(), None,
+        lambda x: isinstance(x, str) and len(x) >= 3 and x.isalpha(), None,
         invalidRes=JSONRes.new(400, "Username must be at least 3 characters, without any spaces or special characters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "fname",
-        lambda x: isinstance(x, str) and len(x) > 2 and x.replace(' ', '').isalpha(), None,
+        lambda x: isinstance(x, str) and len(x) >= 2 and x.replace(' ', '').isalpha(), None,
         invalidRes=JSONRes.new(400, "First name must be at least 2 characters and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "lname",
-        lambda x: isinstance(x, str) and len(x) > 1 and x.replace(' ', '').isalpha(), None,
+        lambda x: isinstance(x, str) and len(x) >= 1 and x.replace(' ', '').isalpha(), None,
         invalidRes=JSONRes.new(400, "Last name must be at least 1 character and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
@@ -70,38 +42,38 @@ def getInfo(user: User):
         "email",
         lambda x: isinstance(x, str) and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', x.strip()), None,
         invalidRes=JSONRes.new(400, "Invalid email.", ResType.USERERROR, serialise=False)
+    ),
+    Param(
+        "userID",
+        str, None,
+        invalidRes=JSONRes.new(400, "User ID must be a valid string if provided.", ResType.ERROR, serialise=False)
     )
 )
 @checkSession(strict=True, provideUser=True)
 def update(user: User):
+    # Carry out authorisation check. Superusers can update any user, others can only update their own profile.
+    userID: str = request.json.get('userID', None)
+    if userID and userID != user.id:
+        if not user.superuser:
+            # User is not the same as the requested user and is not a superuser
+            return JSONRes.unauthorised()
+        else:
+            # User is a superuser, so we can load the requested user
+            try:
+                user = User.load(id=userID)
+                if user is None:
+                    return JSONRes.new(404, "User not found.")
+                if not isinstance(user, User):
+                    raise Exception("Unexpected load response: {}".format(user))
+            except Exception as e:
+                Logger.log("USERPROFILE UPDATE ERROR: Failed to load user '{}' for superuser request: {}".format(userID, e))
+                return JSONRes.ambiguousError()
+    
     username = request.json.get('username', user.username).strip()
     fname = request.json.get('fname', user.fname).strip()
     lname = request.json.get('lname', user.lname).strip()
     contact = request.json.get('contact', user.contact).replace(' ', '').strip()
     email = request.json.get('email', user.email).strip()
-    
-    # Check username uniqueness
-    if username != user.username:
-        conflictingUser = None
-        try:
-            conflictingUser = User.load(username=username)
-            print(conflictingUser)
-            if isinstance(conflictingUser, User):
-                return JSONRes.new(400, "Username already exists.", ResType.USERERROR)
-        except Exception as e:
-            Logger.log("USERPROFILE UPDATE ERROR: Failed to load user with username '{}' for uniqueness check; error: {}".format(username, e))
-            return JSONRes.ambiguousError()
-    
-    # Check email uniqueness
-    if email != user.email:
-        conflictingUser = None
-        try:
-            conflictingUser = User.load(email=email)
-            if isinstance(conflictingUser, User):
-                return JSONRes.new(400, "Email already exists.", ResType.USERERROR)
-        except Exception as e:
-            Logger.log("USERPROFILE UPDATE ERROR: Failed to load user with email '{}' for uniqueness check; error: {}".format(email, e))
-            return JSONRes.ambiguousError()
     
     # Update user details
     changes = []
@@ -122,7 +94,21 @@ def update(user: User):
         changes.append("Email")
     
     if changes:
-        user.save()
+        try:
+            user.save()
+        except Exception as e:
+            # Possible key violation
+            e = str(e)
+            if e.startswith("USER SAVE ERROR: Integrity violation: "):
+                violation = e[len("USER SAVE ERROR: Integrity violation: "):]
+                if violation == "Username":
+                    return JSONRes.new(400, "Username already exists.", ResType.USERERROR)
+                elif violation == "Email":
+                    return JSONRes.new(400, "Email already exists.", ResType.USERERROR)
+            
+            Logger.log("USERPROFILE UPDATE ERROR: Failed to save user '{}' after updating details; error: {}".format(user.id, e))
+            return JSONRes.ambiguousError()
+        
         user.newLog("Profile Update", "{} details updated.".format(", ".join(changes)))
     else:
         return JSONRes.new(200, "No changes made to the profile.")
@@ -156,7 +142,13 @@ def changePassword(user: User):
         return JSONRes.new(401, "Current password is incorrect.", ResType.USERERROR)
     
     user.pwd = Encryption.encodeToSHA256(newPassword)
-    user.save()
+    
+    try:
+        user.save()
+    except Exception as e:
+        Logger.log("USERPROFILE CHANGEPASSWORD ERROR: Failed to save user '{}' after changing password; error: {}".format(user.id, e))
+        return JSONRes.ambiguousError()
+    
     user.newLog("Password Change", "Password changed successfully.")
     
     return JSONRes.new(200, "Password changed successfully.")
@@ -216,7 +208,13 @@ def uploadPicture(user: User):
     
     # Save the new profile picture filename to the user
     user.pfp = newFilename
-    user.save()
+    
+    try:
+        user.save()
+    except Exception as e:
+        Logger.log("USERPROFILE UPLOADPICTURE ERROR: Failed to save user '{}' after uploading profile picture; error: {}".format(user.id, e))
+        return JSONRes.ambiguousError()
+    
     user.newLog("Profile Picture Updated", "Profile picture updated successfully.")
     
     return JSONRes.new(200, "Profile picture updated successfully.")
