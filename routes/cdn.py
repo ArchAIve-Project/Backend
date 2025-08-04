@@ -3,12 +3,73 @@ from flask import Blueprint, send_file, make_response, redirect
 from fm import FileManager, File
 from utils import JSONRes, ResType
 from typing import Dict, List
+from flask import Blueprint, send_file, make_response, redirect, request
+from utils import JSONRes, ResType
 from services import Logger
-from models import Category, Book, Artefact, Figure
+from schemas import Category, Book, Artefact, Figure, User
+from fm import FileManager, File
 from decorators import cache, timeit
 from sessionManagement import checkSession
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
+
+@cdnBP.route('/pfp/<userID>')
+@checkSession(strict=True, provideUser=True)
+def getProfilePicture(user: User, userID: str=None):
+    # Carry out authorisation checks
+    if userID != user.id:
+        if not user.superuser:
+            # User is not the same as the requested user and is not a superuser
+            return JSONRes.unauthorised()
+        else:
+            # User is a superuser, so we can load the requested user
+            try:
+                user = User.load(id=userID)
+                if user is None:
+                    return JSONRes.new(404, "User not found.")
+                if not isinstance(user, User):
+                    raise Exception("Unexpected load response: {}".format(user))
+            except Exception as e:
+                Logger.log("CDN GETPFP ERROR: Failed to load user '{}': {}".format(userID, e))
+                return JSONRes.ambiguousError()
+    
+    if not user.pfp:
+        return JSONRes.new(404, "No profile picture found for this user.")
+    
+    file = File(user.pfp, "FileStore")
+    res = None
+    if request.args.get('raw', 'false').lower() == 'true':
+        res = FileManager.prepFile(file=file)
+        if isinstance(res, str):
+            if res == "ERROR: File does not exist.":
+                user.pfp = None
+                user.save()
+                return JSONRes.new(404, "No profile picture found for this user.")
+            else:
+                Logger.log("CDN GETPFP ERROR: Failed to prepare file for user '{}': {}".format(user.id, res))
+                return JSONRes.ambiguousError()
+        
+        res = make_response(send_file(file.path()))
+    else:
+        try:
+            url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
+            if url.startswith("ERROR"):
+                if url == "ERROR: File does not exist.":
+                    user.pfp = None
+                    user.save()
+                    return JSONRes.new(404, "No profile picture found for this user.")
+                else:
+                    raise Exception(url)
+            
+            res = make_response(redirect(url))
+        except Exception as e:
+            Logger.log("CDN GETPFP ERROR: Failed to generate signed URL for user '{}': {}".format(user.id, e))
+            return JSONRes.ambiguousError()
+    
+    res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+    res.headers["Pragma"] = "no-cache"
+    res.headers["Expires"] = "0"
+    return res
 
 @cdnBP.route('/artefacts/<artefactId>')
 @checkSession(strict=True)
@@ -271,7 +332,6 @@ def getAllCategoriesWithArtefacts():
         "categories": result,
         "books": bookList
     })
-
 
 @cdnBP.route('/artefactMetadata/<artID>')
 @checkSession(strict=True)

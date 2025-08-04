@@ -3,11 +3,11 @@ from utils import JSONRes, ResType
 from services import Logger, Encryption, Universal
 from decorators import jsonOnly, enforceSchema
 from sessionManagement import checkSession
-from models import User
+from schemas import User
 
-identityBP = Blueprint('identity', __name__, url_prefix="/auth")
+authBP = Blueprint('identity', __name__, url_prefix="/auth")
 
-@identityBP.route('/login', methods=['POST'])
+@authBP.route('/login', methods=['POST'])
 @jsonOnly
 @enforceSchema(
     ("usernameOrEmail", str),
@@ -47,9 +47,9 @@ def login(user: User | None=None):
     session['sessionStart'] = user.lastLogin
     session['superuser'] = user.superuser
     
-    return JSONRes.new(200, "Login successful.")
+    return JSONRes.new(200, "Login successful.", fname=user.fname, lname=user.lname)
 
-@identityBP.route("/logout", methods=["GET"])
+@authBP.route("/logout", methods=["GET"])
 @checkSession(strict=True, provideUser=True)
 def logout(user: User):
     user.authToken = None
@@ -59,7 +59,7 @@ def logout(user: User):
     
     return JSONRes.new(200, "Logged out successfully.")
 
-@identityBP.route('/session', methods=['GET'])
+@authBP.route('/session', methods=['GET'])
 @checkSession(strict=True)
 def getSession():
     return JSONRes.new(

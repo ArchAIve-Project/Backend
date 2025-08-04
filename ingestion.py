@@ -1,5 +1,5 @@
 import time, functools, copy
-from models import Batch, BatchProcessingJob, BatchArtefact, Artefact, Metadata
+from schemas import Batch, BatchProcessingJob, BatchArtefact, Artefact, Metadata
 from services import ThreadManager, Universal
 from fm import FileManager, File
 from metagen import MetadataGenerator
