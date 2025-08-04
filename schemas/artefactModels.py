@@ -11,7 +11,7 @@ class Artefact(DIRepresentable):
     Artefacts contain metadata and are associated with stored files. This class handles the creation,
     persistence, file management, and metadata binding of artefact objects.
     """
-    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', description: str=None, public: bool = False, created: str=None, metadataLoaded: bool=True, id: str = None):
+    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', description: str=None, public: bool = False, created: str=None, artType: str | None = None, metadataLoaded: bool=True, id: str = None):
         """
         Initializes a new Artefact instance.
 
@@ -37,9 +37,15 @@ class Artefact(DIRepresentable):
             metadata = None
         
         if description is None:
-            if metadata.isMM():
-                summary = metadata.raw.summary
-                artDescription = summary[:30] + "..." if len(summary) > 30 else summary
+            if metadata is not None:
+                if metadata.isMM():
+                    summary = metadata.raw.summary
+                    artDescription = summary[:30] + "..." if len(summary) > 30 else summary
+                elif metadata.isHF():
+                    caption = metadata.raw.caption
+                    artDescription = caption[:30] + "..." if len(caption) > 30 else caption
+                else:
+                    artDescription = None
             else:
                 artDescription = None
         else:
@@ -52,6 +58,7 @@ class Artefact(DIRepresentable):
         self.public = public
         self.created = created
         self.metadata: Metadata | None = metadata
+        self.artType: str | None = artType
         self.metadataLoaded: bool = metadataLoaded
         self.originRef = Artefact.ref(self.id)
     
@@ -161,8 +168,11 @@ class Artefact(DIRepresentable):
                     data[param] = None
 
         metadata = None
-        if includeMetadata and isinstance(data['metadata'], dict) and isinstance(artefactID, str):
-            metadata = Metadata.rawLoad(artefactID, data['metadata'])
+        artType: str | None = None
+        if isinstance(data['metadata'], dict) and isinstance(artefactID, str):
+            if includeMetadata:
+                metadata = Metadata.rawLoad(artefactID, data['metadata'])
+            artType = 'mm' if data['metadata'].get('tradCN', None) != None else 'hf'
 
         output = Artefact(
             name=data['name'], 
@@ -171,6 +181,7 @@ class Artefact(DIRepresentable):
             description=data['description'],
             public=data['public'],
             created=data['created'],
+            artType=artType,
             metadataLoaded=includeMetadata,
             id=artefactID
         )
