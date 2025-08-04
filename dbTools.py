@@ -860,6 +860,9 @@ def dummyFaceMatching():
         
         successCount += 1
     
+    t.end()
+    ArchSmith.persist()
+    
     print()
     print("Face matching completed for {}/{} artefacts.".format(successCount, len(arts)))
 
