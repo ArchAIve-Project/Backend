@@ -1,10 +1,13 @@
-import datetime
+import os, datetime
+from flask import Blueprint, send_file, make_response, redirect
+from fm import FileManager, File
+from utils import JSONRes, ResType
 from typing import Dict, List
 from flask import Blueprint, send_file, make_response, redirect, request
 from utils import JSONRes, ResType
 from services import Logger
+from schemas import Category, Book, Artefact, Figure, User
 from fm import FileManager, File
-from schemas import Category, Book, Artefact, User
 from decorators import cache, timeit
 from sessionManagement import checkSession
 
@@ -88,13 +91,29 @@ def getArtefactImage(artefactId):
     filename = art.image
     if not filename:
         return JSONRes.new(404, "Artefact has no associated image.")
-
+    
     # Attempt to create file object
     file = File(filename, "artefacts")
-
+    
+    if os.environ.get("DEBUG_MODE", "False") == "True":
+        # In debug mode, serve the file directly from the filesystem
+        res = FileManager.prepFile(file=file)
+        if isinstance(res, str):
+            if res == "ERROR: File does not exist.":
+                return JSONRes.new(404, "Requested file not found.")
+            else:
+                Logger.log("CDN GETARTEFACT ERROR: Failed to prepare file for delivery; response: {}".format(res))
+                return JSONRes.ambiguousError()
+        
+        try:
+            return send_file(file.path())
+        except Exception as e:
+            Logger.log("CDN GETARTEFACT ERROR: Failed to send file '{}' for artefact '{}'; error: {}".format(filename, artefactId, e))
+            return JSONRes.ambiguousError()
+    
     # Attempt to generate signed URL
     try:
-        url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
+        url = file.getSignedURL(expiration=datetime.timedelta(minutes=10)) # note: useCache=True
         if url.startswith("ERROR"):
             if url == "ERROR: File does not exist.":
                 return JSONRes.new(404, "Requested file not found.")
@@ -115,19 +134,38 @@ def getArtefactImage(artefactId):
         Logger.log("CDN GETARTEFACT ERROR: Failed to construct response for artefact '{}': {}".format(artefactId, e))
         return JSONRes.ambiguousError()
 
-@cdnBP.route('/people/<filename>')
+@cdnBP.route('/people/<figureID>')
 @checkSession(strict=True)
-def getFaceImage(filename):
+def getFaceImage(figureID):
     """
     Serve a face image from the 'people' store.
     """
-    file = File(filename, "people")
-
+    file = File('{}.jpg'.format(figureID), "people")
+    
+    if os.environ.get("DEBUG_MODE", "False") == "True":
+        # In debug mode, serve the file directly from the filesystem
+        res = FileManager.prepFile(file=file)
+        if isinstance(res, str):
+            if res == "ERROR: File does not exist.":
+                return JSONRes.new(404, "Requested file not found.")
+            else:
+                Logger.log("CDN GETFACEIMAGE ERROR: Failed to prepare file for delivery; response: {}".format(res))
+                return JSONRes.ambiguousError()
+        
+        try:
+            return send_file(file.path())
+        except Exception as e:
+            Logger.log("CDN GETFACEIMAGE ERROR: Failed to send headshot for figure '{}'; error: {}".format(figureID, e))
+            return JSONRes.ambiguousError()
+    
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
         if url.startswith("ERROR"):
-            return JSONRes.new(404, "Requested file not found.")
+            if url == "ERROR: File does not exist.":
+                return JSONRes.new(404, "Requested file not found.")
+            else:
+                raise Exception(url)
         
         res = make_response(redirect(url))
 
@@ -138,8 +176,8 @@ def getFaceImage(filename):
         
         return res
     except Exception as e:
-        Logger.log(f"CDN GETFACE ERROR: {e}")
-        return JSONRes.new(500, "Error sending file.")
+        Logger.log("CDN GETFACEIMAGE ERROR: Unexpected error in redirecting to a signed URL for figure '{}'; error: {}".format(figureID, e))
+        return JSONRes.ambiguousError()
 
 @cdnBP.route('/asset/<filename>')
 @checkSession(strict=True)
@@ -149,6 +187,22 @@ def getAsset(filename):
     """    
     file = File(filename, "FileStore")
     
+    if os.environ.get("DEBUG_MODE", "False") == "True":
+        # In debug mode, serve the file directly from the filesystem
+        res = FileManager.prepFile(file=file)
+        if isinstance(res, str):
+            if res == "ERROR: File does not exist.":
+                return JSONRes.new(404, "Requested file not found.")
+            else:
+                Logger.log("CDN GETASSET ERROR: Failed to prepare file for delivery; response: {}".format(res))
+                return JSONRes.ambiguousError()
+        
+        try:
+            return send_file(file.path())
+        except Exception as e:
+            Logger.log("CDN GETASSET ERROR: Failed to send asset '{}'; error: {}".format(filename, e))
+            return JSONRes.ambiguousError()
+    
     try:
         url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
         
@@ -164,25 +218,26 @@ def getAsset(filename):
         
         return res
     except Exception as e:
-        Logger.log("CDN GETASSET ERROR: {}".format(e))
+        Logger.log("CDN GETASSET ERROR: Unexpected error in redirecting to a signed URL for asset '{}'; error: {}".format(filename, e))
         return JSONRes.ambiguousError()
 
 @cdnBP.route('/catalogue')
 @checkSession(strict=True)
-@cache
+@cache(ttl=60, lsInvalidator='cdnCatalogueInvalidator')
 def getAllCategoriesWithArtefacts():
     """
-    Returns all artefacts grouped by category and a list of books with their associated artefacts.
+    Returns all human-figure artefacts grouped by category and all books with their associated
+    meeting-minute artefacts.
 
     This endpoint:
-    - Loads all artefacts into a lookup map.
-    - Loads all categories and links each category to its artefacts using the map.
-    - Loads all books and links each book to its listed artefact IDs (mmIDs).
-    - Handles exceptions at a granular level (load calls and lookup failures).
+    - Loads all artefacts (without metadata) into a lookup map, with `artType` used to differentiate types.
+    - Loads all categories and links each to its human-figure artefacts (artType = 'hf').
+    - Loads all books and links each to its meeting-minute artefacts (artType = 'mm') via mmIDs.
+    - Handles exceptions at each loading or lookup stage.
     - Caches the output and requires session authentication.
-    
+
     Response Format:
-    ```
+    ```json
     {
         "categories": {
             "CategoryName1": [
@@ -227,14 +282,13 @@ def getAllCategoriesWithArtefacts():
 
     result = {}
 
-    # Build category -> artefact mapping
     for cat in categories:
         artefactsList = []
         if cat.members:
             for artefact_id, _ in cat.members.items():
                 try:
                     art = artefactMap.get(artefact_id)
-                    if art:
+                    if art and art.artType == "hf":
                         artefactsList.append({
                             "id": art.id,
                             "name": art.name,
@@ -259,7 +313,7 @@ def getAllCategoriesWithArtefacts():
         for mmID in book.mmIDs:
             try:
                 art = artefactMap.get(mmID)
-                if art:
+                if art and art.artType == "mm":
                     mmDetails.append({
                         "id": art.id,
                         "name": art.name,
@@ -278,3 +332,21 @@ def getAllCategoriesWithArtefacts():
         "categories": result,
         "books": bookList
     })
+
+@cdnBP.route('/artefactMetadata/<artID>')
+@checkSession(strict=True)
+@cache
+def getArtefactMetedata(artID):
+    """
+    Returns the metadata of an artefact.
+    """
+    try:
+        art = Artefact.load(id=artID, includeMetadata=True)
+        if not isinstance(art, Artefact):
+            return JSONRes.new(404, "Artefact not found.")
+        
+        return JSONRes.new(200, "Retrieval success.", data=art.metadata.represent())
+
+    except Exception as e:
+        Logger.log("CDN GETARTEFACTMETADATA ERROR: Failed to load artefact metadata - {}".format(e))
+        return JSONRes.ambiguousError()

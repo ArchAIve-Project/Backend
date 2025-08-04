@@ -2,6 +2,7 @@ import os, functools, time
 from types import FunctionType
 from flask import request
 from utils import JSONRes
+from services import LiteStore
 
 def debug(func):
     """Print the function signature and return value"""
@@ -60,16 +61,38 @@ def slow_down(_func=None, *, rate=1):
     else:
         return decorator_slow_down(_func)
 
-def cache(func):
-    """Keep a cache of previous function calls"""
-    @functools.wraps(func)
-    def wrapper_cache(*args, **kwargs):
-        cache_key = args + tuple(kwargs.items())
-        if cache_key not in wrapper_cache.cache:
-            wrapper_cache.cache[cache_key] = func(*args, **kwargs)
-        return wrapper_cache.cache[cache_key]
-    wrapper_cache.cache = {}
-    return wrapper_cache
+def cache(_func=None, *, ttl=60, lsInvalidator=None):
+    """Cache the function's return value for a given time-to-live (TTL) or until it is invalidated by a `LiteStore` value being set to `True`."""
+    def decorator_cache(func):
+        @functools.wraps(func)
+        @debug
+        def wrapper_cache(*args, **kwargs):
+            cache_key = args + tuple(kwargs.items())
+            if cache_key in wrapper_cache.cache:
+                _, timestamp = wrapper_cache.cache[cache_key]
+                if (lsInvalidator and LiteStore.read(lsInvalidator) == True):
+                    wrapper_cache.cache[cache_key] = (func(*args, **kwargs), time.time())
+                    LiteStore.set(lsInvalidator, False)
+                    
+                    if os.environ.get("DECORATOR_DEBUG_MODE", "False") == "True":
+                        print("CACHE DEBUG {}: Cache expired due to LS Invalidation for key: {}".format(func.__name__, cache_key))
+                elif ttl and (time.time() - timestamp) > ttl:
+                    wrapper_cache.cache[cache_key] = (func(*args, **kwargs), time.time())
+                    
+                    if os.environ.get("DECORATOR_DEBUG_MODE", "False") == "True":
+                        print("CACHE DEBUG {}: Cache expired for key: {}".format(func.__name__, cache_key))
+            else:
+                wrapper_cache.cache[cache_key] = (func(*args, **kwargs), time.time())
+            
+            return wrapper_cache.cache[cache_key][0]
+        
+        wrapper_cache.cache = {}
+        return wrapper_cache
+    
+    if _func is None:
+        return decorator_cache
+    else:
+        return decorator_cache(_func)
 
 def jsonOnly(func):
     """Enforce the request to be in JSON format. 400 error if otherwise."""

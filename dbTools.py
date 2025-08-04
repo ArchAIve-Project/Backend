@@ -1,7 +1,8 @@
-import time, pprint, datetime, os, sys, shutil, json
+import time, pprint, datetime, os, sys, shutil, json, random
+from PIL import Image
 from services import Universal, ThreadManager, Encryption, Trigger
 from firebase import FireConn
-from schemas import DI, User, Artefact, Metadata, Category, Book, CategoryArtefact
+from schemas import DI, User, Artefact, Metadata, Category, Book, CategoryArtefact, HFData
 from fm import File, FileManager, FileOps
 from ai import LLMInterface, InteractionContext, Interaction
 from addons import ModelStore, ArchSmith
@@ -9,6 +10,7 @@ from ccrPipeline import CCRPipeline
 from NERPipeline import NERPipeline
 from captioner import ImageCaptioning, Vocabulary
 from cnnclassifier import ImageClassifier
+from HFProcessor import HFProcessor
 from metagen import MetadataGenerator
 
 class SetupStates:
@@ -63,6 +65,7 @@ def requireLLM():
 # 9. Reset local data files
 # 10. Remove categories
 # 11. Populate more data (after 1)
+# 12. Populate 50 HF and 3 Cat (20 ungrouped HF, 1 empty Cat)
 # 0: Exit
 
 def populateDB():
@@ -423,7 +426,6 @@ def populateMoreArtefacts():
     if not os.path.exists(moreDummyPath):
         os.makedirs(moreDummyPath)
 
-    # Check if 50 hf and 50 mm images are present
     hf_files = ["hf{}.png".format(i) for i in range(1, 51)]
     mm_files = ["mm{}.jpg".format(i) for i in range(1, 51)]
     existing_files = set(os.listdir(moreDummyPath))
@@ -440,7 +442,6 @@ def populateMoreArtefacts():
     currentArtefacts = Artefact.load()
     currentArtefactImages = {art.image for art in currentArtefacts}
 
-    # Create artefacts
     more_mm = ["mm{}.jpg".format(i) for i in range(4, 51)]
     more_hf = ["hf{}.png".format(i) for i in range(3, 51)]
     allFiles = more_mm + more_hf
@@ -454,62 +455,168 @@ def populateMoreArtefacts():
         if not os.path.isfile(target_path):
             shutil.copy(source_path, target_path)
             FileManager.save(file.store, file.filename)
-            print("Copied '{}' to artefacts.".format(filename))
+            print(f"Copied '{filename}' to artefacts.")
 
         if filename not in currentArtefactImages:
-            description = "Description for artefact {}".format(filename)
-            art = Artefact(filename, filename, description=description, metadata=None)
+            # Longer, realistic descriptions for meeting minutes (MM)
+            if filename.startswith('mm'):
+                description = None
+
+                metadata = {
+                    "traditional_chinese": (
+                        "本文件為名為 {} 的會議記錄檔案，內容詳實地記載了整場會議的重點討論與決策結果。\n"
+                        "本次會議涵蓋多個重要議題，包括跨部門專案協作進度更新、預算調整審議、時間表重新規劃、以及下一季度的業務策略方向。\n"
+                        "會議期間亦針對人力資源調配、風險管理措施與品質保證流程進行了深入探討與共識建構。\n"
+                        "所有與會者，包括執行長、副總經理、各專案主管與主要利害關係人，皆積極參與並提供關鍵意見，形成最終決策依據。\n"
+                        "此記錄將作為後續追蹤與專案審查的依據，亦利於透明化溝通與跨部門協同運作。"
+                    ).format(filename),
+
+                    "simplified_chinese": (
+                        "本文件为名为 {} 的会议纪要文件，详细记录了会议期间的关键讨论内容与决策成果。\n"
+                        "会议主题涵盖跨部门项目协作的最新进展、预算调整的审批流程、整体时间线的优化建议，以及下一季度业务战略的方向规划。\n"
+                        "此外，参会人员还对人力资源配置、风险控制策略及质量管理体系进行了充分讨论，并形成初步共识。\n"
+                        "本次会议由公司高管层、项目主管、财务负责人及关键利益相关方共同参与，确保所有观点均被纳入考量。\n"
+                        "会议纪要不仅有助于后续的工作执行与评估，还将作为战略决策档案予以保存与回溯。"
+                    ).format(filename),
+
+                    "english_translation": (
+                        "This document contains the meeting minutes titled 'Board Quarterly Strategy Meeting', meticulously capturing the core discussions, strategic decisions, and action-oriented outcomes of the session held on March 15th, 2024. "
+                        "Topics addressed include cross-departmental project updates, fiscal budget revisions, timeline rescheduling, and strategic planning for the next quarter starting April 1st, 2024. "
+                        "Participants such as the CEO, Deputy General Manager, Project Directors, and Finance Department actively contributed to discussions around workforce allocation, risk management, and quality assurance protocols. "
+                        "The meeting took place at the New York headquarters, bringing together key stakeholders from various locations including Chicago, San Francisco, and Boston. "
+                        "Additionally, the Global Partnership Summit in Washington D.C., scheduled for June 2024, was referenced multiple times as an important upcoming event involving representatives from international organizations and government agencies. "
+                        "The team also discussed plans to attend the Annual Tech Expo in Las Vegas and the Environmental Forum in Seattle, both recognized as major events shaping industry trends. "
+                        "This record serves as a comprehensive reference for project follow-up, audits, strategic decision-making, and interdepartmental coordination."
+                    ).format(filename),
+
+                    "summary": (
+                        "The meeting minutes titled 'Board Quarterly Strategy Meeting' detail cross-functional collaboration updates, strategic decision-making by executives, and future-oriented planning. "
+                        "Key agenda items include budget approvals, timeline realignments, human resource adjustments, and stakeholder coordination."
+                    ).format(filename),
+
+                    "ner_labels": [
+                        ["Board Quarterly Strategy Meeting", "ORGANIZATION"],
+                        ["March 15th, 2024", "DATE"],
+                        ["next quarter", "DATE"],
+                        ["April 1st, 2024", "DATE"],
+                        ["June 2024", "DATE"],
+                        ["CEO", "PERSON"],
+                        ["Deputy General Manager", "PERSON"],
+                        ["Project Directors", "PERSON"],
+                        ["Finance Department", "ORGANIZATION"],
+                        ["New York", "GPE"],
+                        ["Chicago", "GPE"],
+                        ["San Francisco", "GPE"],
+                        ["Boston", "GPE"],
+                        ["Washington D.C.", "LOCATION"],
+                        ["Global Partnership Summit", "EVENT"],
+                        ["Annual Tech Expo", "EVENT"],
+                        ["Environmental Forum", "EVENT"],
+                        ["key stakeholders", "PERSON"],
+                        ["international organizations", "ORGANIZATION"],
+                        ["government agencies", "ORGANIZATION"]
+                    ],
+
+                    "correction_applied": True,
+                    "pre_correction_accuracy": "94.73%",
+                    "post_correction_accuracy": "99.14%"
+                }
+            
+            else:
+                # Longer, realistic descriptions for human figures (HF)
+                description = None
+
+                metadata = {
+                    'figureIDs': ["fig-{}-{}".format(filename, i) for i in range(1, random.randint(3, 6))],
+                    
+                    'caption': (
+                        "A high-resolution group photograph titled '{}', portraying a natural and dynamic interaction among multiple individuals. "
+                        "The subjects are captured in various candid poses, contributing to the realism and diversity of the scene. "
+                        "Environmental factors such as lighting, background elements, and occlusions add complexity to the image, making it suitable for training advanced vision systems."
+                    ).format(filename),
+                    
+                    'addInfo': (
+                        "This image belongs to an extensive dataset curated specifically for developing and benchmarking human figure detection, recognition, and tracking algorithms. "
+                        "Each individual in the scene exhibits varied gestures, apparel styles, and positioning to simulate real-world variability. "
+                        "The dataset emphasizes diversity across demographic groups and scene contexts—indoor, outdoor, formal, and casual settings. "
+                        "Captured using high-quality sensors under fluctuating environmental conditions, this image aids in robust model generalization. "
+                        "Annotations associated with the image include bounding boxes, body keypoints, and instance-level IDs, facilitating multi-task training pipelines. "
+                        "The photo also serves secondary purposes such as pose estimation, social interaction modeling, and occlusion-resilient recognition tasks."
+                    )
+                }
+                
+            art = Artefact(
+                name=filename,
+                image=filename,
+                metadata=metadata,
+                description=description
+            )
             art.save()
             newlyAdded.append(filename)
-            print("Saved artefact to DB: {}".format(filename))
+            print(f"Saved artefact to DB with metadata: {filename}")
 
-    print("\n{} artefacts populated: {}\n".format(len(newlyAdded), ", ".join(newlyAdded)))
+    print(f"\n{len(newlyAdded)} artefacts populated: {', '.join(newlyAdded)}\n")
 
-    # Create categories for human figures
+    # Create categories for human figures (unchanged)
     print("Adding categories for human figures...")
     all_artefacts = Artefact.load()
     image_to_id = {art.image: art.id for art in all_artefacts}
     hf_all = ["hf{}.png".format(i) for i in range(1, 51)]
 
     categories = [
-        ("Human Group 1", hf_all[:30]),
-        ("Human Group 2", hf_all[30:45]),
-        ("Human Group 3", hf_all[45:])
+        (
+            "Human Group 1",
+            hf_all[:30],
+            "This collection comprises images of diverse human groups captured in various settings, focusing on interactions, body language, and group dynamics. "
+            "The photos showcase people engaged in collaborative activities, casual conversations, and everyday social scenarios, providing a rich dataset for analyzing interpersonal behavior and group composition."
+        ),
+        (
+            "Human Group 2",
+            hf_all[30:45],
+            "Featuring a varied set of images, this category emphasizes mid-sized groups of individuals in both indoor and outdoor environments. "
+            "The subjects display a range of emotions and postures, contributing to the dataset’s diversity in social contexts and physical arrangements, essential for training robust human detection and recognition models."
+        ),
+        (
+            "Human Group 3",
+            hf_all[45:],
+            "A specialized collection capturing larger human assemblies in dynamic environments such as events, gatherings, and public spaces. "
+            "These images present challenges such as occlusion, varied lighting, and complex spatial relationships among individuals, making them valuable for advanced research in crowd analysis, pose estimation, and multi-person tracking."
+        )
     ]
 
-    for cat_name, artefact_filenames in categories:
+    for cat_name, artefact_filenames, cat_description in categories:
         cat = Category.load(name=cat_name)
         if not cat:
-            cat = Category(name=cat_name, description="Category for {}".format(cat_name.lower()))
+            cat = Category(name=cat_name, description=cat_description)
 
         added = 0
         for filename in artefact_filenames:
             artefact_id = image_to_id.get(filename)
             if not artefact_id:
-                print("Artefact with image '{}' not found in DB. Skipping.".format(filename))
+                print(f"Artefact with image '{filename}' not found in DB. Skipping.")
                 continue
 
             try:
                 cat.add(artefact_id, reason="Auto-assigned to {}".format(cat_name))
                 added += 1
             except Exception as e:
-                print("Failed to add '{}' to '{}': {}".format(filename, cat_name, e))
+                print(f"Failed to add '{filename}' to '{cat_name}': {e}")
 
         cat.save()
-        print("Category '{}' saved with {}/{} artefacts.".format(cat.name, added, len(artefact_filenames)))
+        print(f"Category '{cat.name}' saved with {added}/{len(artefact_filenames)} artefacts.")
         
-    # Create an empty category
+    # Create an empty category (unchanged)
     print("\nCreating an empty category...\n")
     empty_cat_name = "Empty Category"
     empty_category = Category.load(name=empty_cat_name)
     if not empty_category:
         empty_category = Category(name=empty_cat_name, description="This is an empty category with no artefacts.")
         empty_category.save()
-        print("Empty category '{}' created.".format(empty_cat_name))
+        print(f"Empty category '{empty_cat_name}' created.")
     else:
-        print("Empty category '{}' already exists.".format(empty_cat_name))
+        print(f"Empty category '{empty_cat_name}' already exists.")
 
-    # Create 10 books using mm1.jpg to mm50.jpg, but store artefact IDs, not filenames
+    # Create 10 books (unchanged)
     print("\nPopulating database with 10 books using mm1.jpg to mm50.jpg...\n")
     mm_all = ["mm{}.jpg".format(i) for i in range(1, 51)]
     mm_counts = [15, 10, 5, 5, 5, 5, 4, 3, 1, 0]
@@ -522,26 +629,260 @@ def populateMoreArtefacts():
         mm_filenames = mm_all[offset: offset + count]
         offset += count
 
-        # Convert mm filenames to artefact IDs
         mmIDs = []
         for mm_file in mm_filenames:
             artefact_id = image_to_id.get(mm_file)
             if artefact_id:
                 mmIDs.append(artefact_id)
             else:
-                print("Warning: Artefact ID for '{}' not found, skipping in book '{}'.".format(mm_file, title))
+                print(f"Warning: Artefact ID for '{mm_file}' not found, skipping in book '{title}'.")
 
         existing_book = Book.load(title=title)
         if not existing_book:
             book = Book(title=title, subtitle=subtitle, mmIDs=mmIDs)
             book.save()
             created.append(book)
-            print("Created Book: '{}' with {} MMIDs".format(book.title, len(mmIDs)))
+            print(f"Created Book: '{book.title}' with {len(mmIDs)} MMIDs")
         else:
-            print("Book already exists: '{}'".format(existing_book.title))
+            print(f"Book already exists: '{existing_book.title}'")
 
-    print("\n{} book(s) created.\n".format(len(created)))
+    print(f"\n{len(created)} book(s) created.\n")
     return True
+
+def populateHFCat():
+    requireDI()
+    requireFM()
+
+    def duplicateHFImages(folder, out_folder, prefix="hf", ext=".png", count=50):
+        if not os.path.exists(out_folder):
+            os.makedirs(out_folder)
+
+        source_files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
+        if not source_files:
+            print(f"No source images found in '{folder}' to duplicate.")
+            return
+
+        for i in range(count):
+            src_file = random.choice(source_files)
+            src_path = os.path.join(folder, src_file)
+            dst_filename = f"{prefix}{i + 1}{ext}"
+            dst_path = os.path.join(out_folder, dst_filename)
+            shutil.copy(src_path, dst_path)
+            print(f"Created {dst_path} from {src_file}")
+
+    print("\nPreparing hfDummy folder...\n")
+    hfDummyPath = os.path.join(os.getcwd(), "hfDummy")
+    if not os.path.exists(hfDummyPath):
+        os.makedirs(hfDummyPath)
+
+    hf_files = [f"hf{i}.png" for i in range(1, 51)]
+    existing_files = set(os.listdir(hfDummyPath))
+    hf_count = sum(1 for f in hf_files if f in existing_files)
+
+    if hf_count < 50:
+        print("Not enough HF images found in 'hfDummy'. Generating from './dummy'...")
+        duplicateHFImages(folder="./dummy", out_folder=hfDummyPath)
+    else:
+        print("Found 50 HF images in hfDummy.")
+
+    currentArtefacts = Artefact.load()
+    currentArtefactImages = {art.image for art in currentArtefacts}
+
+    newlyAdded = []
+    for filename in hf_files:
+        file = File(filename, "artefacts")
+        target_path = file.path()
+        source_path = os.path.join(hfDummyPath, filename)
+
+        if not os.path.isfile(source_path):
+            print(f"Source file missing: {source_path}. Skipping.")
+            continue
+
+        if not os.path.isfile(target_path):
+            shutil.copy(source_path, target_path)
+            FileManager.save(file.store, file.filename)
+            print(f"Copied '{filename}' to artefacts.")
+
+        if filename not in currentArtefactImages:
+            description = None
+            
+            metadata = {
+                'figureIDs': ["fig-{}-{}".format(filename, i) for i in range(1, random.randint(3, 6))],
+                
+                'caption': (
+                    "A high-resolution group photograph titled '{}', portraying a natural and dynamic interaction among multiple individuals. "
+                    "The subjects are captured in various candid poses, contributing to the realism and diversity of the scene. "
+                    "Environmental factors such as lighting, background elements, and occlusions add complexity to the image, making it suitable for training advanced vision systems."
+                ).format(filename),
+                
+                'addInfo': (
+                    "This image belongs to an extensive dataset curated specifically for developing and benchmarking human figure detection, recognition, and tracking algorithms. "
+                    "Each individual in the scene exhibits varied gestures, apparel styles, and positioning to simulate real-world variability. "
+                    "The dataset emphasizes diversity across demographic groups and scene contexts—indoor, outdoor, formal, and casual settings. "
+                    "Captured using high-quality sensors under fluctuating environmental conditions, this image aids in robust model generalization. "
+                    "Annotations associated with the image include bounding boxes, body keypoints, and instance-level IDs, facilitating multi-task training pipelines. "
+                    "The photo also serves secondary purposes such as pose estimation, social interaction modeling, and occlusion-resilient recognition tasks."
+                )
+            }
+            
+            art = Artefact(
+                name=filename,
+                image=filename,
+                metadata=metadata,
+                description=description
+            )
+            art.save()
+            newlyAdded.append(filename)
+            print(f"Saved artefact to DB with metadata: {filename}")
+
+    print(f"\n{len(newlyAdded)} HF artefacts populated.\n")
+
+    # Assign categories with enhanced descriptions
+    all_artefacts = Artefact.load()
+    image_to_id = {art.image: art.id for art in all_artefacts}
+    hf_all = [f"hf{i}.png" for i in range(1, 51)]
+
+    categories = [
+        (
+            "Business Meetings",
+            hf_all[:20],
+            "A curated selection of high-quality images capturing formal business meetings, corporate conferences, and professional events. "
+            "These photos highlight various aspects such as executive discussions, boardroom interactions, presentations, and strategic planning sessions. "
+            "The collection emphasizes professional attire, focused expressions, and collaborative environments, providing valuable visual context for training models related to workplace behavior and formal group dynamics."
+        ),
+        (
+            "Social Gatherings",
+            hf_all[20:30],
+            "This collection showcases candid and spontaneous moments from informal social gatherings, networking events, and casual meet-ups among friends and colleagues. "
+            "Images portray a wide range of social interactions, including conversations, laughter, and group activities in diverse settings such as cafes, outdoor parks, and private parties. "
+            "The variety in lighting, poses, and group compositions offers rich material for training systems focused on social behavior analysis and interpersonal dynamics."
+        ),
+        (
+            "Special Events",
+            [],
+            "An exclusive category reserved for upcoming collections of special occasions including award ceremonies, celebrations, gala dinners, and cultural festivals. "
+            "These images are expected to feature a blend of formal and festive atmospheres, capturing both the grandeur of event settings and the emotional moments of participants. "
+            "Once populated, this category will serve as a resource for models requiring contextual understanding of ceremonial events and large-scale social functions."
+        )
+    ]
+
+    for cat_name, artefact_filenames, cat_desc in categories:
+        cat = Category.load(name=cat_name)
+        if not cat:
+            cat = Category(name=cat_name, description=cat_desc)
+
+        added = 0
+        for filename in artefact_filenames:
+            artefact_id = image_to_id.get(filename)
+            if not artefact_id:
+                print(f"Artefact with image '{filename}' not found. Skipping.")
+                continue
+
+            try:
+                cat.add(artefact_id, reason=f"Auto-assigned to {cat_name}")
+                added += 1
+            except Exception as e:
+                print(f"Failed to add '{filename}' to '{cat_name}': {e}")
+
+        cat.save()
+        print(f"Category '{cat.name}' saved with {added}/{len(artefact_filenames)} artefacts.")
+
+    print("\nHF-only population complete with enriched metadata.\n")
+    return True
+
+def dummyFaceMatching():
+    requireDI()
+    requireFM()
+    requireMS()
+    
+    HFProcessor.setup()
+    
+    print("Executing face matching algorithm on all artefacts... this will take a while")
+    print()
+    
+    arts: list[Artefact] = None
+    try:
+        arts = Artefact.load()
+        if not isinstance(arts, list):
+            raise Exception("Artefact.load() did not return a list.")
+    except Exception as e:
+        print("Error loading artefacts:", e)
+        return False
+    
+    t = ArchSmith.newTracer("DBTools DummyFaceMatching")
+    successCount = 0
+    
+    for art in arts:
+        print()
+        print("Starting face matching on '{}'...".format(art.name))
+        artFile = art.getFMFile()
+        
+        # Prepare file
+        res = FileManager.prepFile(file=artFile)
+        if isinstance(res, str):
+            print("Failed to prepare file '{}' for artefact '{}' for facial recognition (will be skipped); response: {}".format(artFile.identifierPath(), art.name, res))
+            continue
+        
+        print("Determining if artefact '{}' is suitable for face matching...".format(art.name))
+        if art.artType == None:
+            print("Artefact type not known. Executing image classification...")
+            output = ImageClassifier.predict(artFile.path(), t)
+            if not isinstance(output, list):
+                print("ImageClassifier.predict did not return a list (will be skipped); response: '{}'.".format(output))
+                continue
+            if len(output) == 0:
+                print("ImageClassifier returned no results for artefact '{}' (will be skipped).".format(art.name))
+                continue
+            if output[0][1] != 'hf':
+                print("ImageClassifier returned '{}' for artefact '{}'; skipping.".format(output[0], art.name))
+                continue
+        elif art.artType != 'hf':
+            print("Artefact '{}' is not of type 'hf'; skipping.".format(art.name))
+            continue
+        
+        print("Running face matching on artefact '{}'...".format(art.name))
+        output = None
+        try:
+            output = HFProcessor.identifyFaces(artFile.path(), t)
+            if not isinstance(output, list):
+                raise Exception("HFProcessor.identifyFaces did not return a list.")
+        except Exception as e:
+            print("Error processing artefact '{}' (will be skipped): {}".format(art.name, e))
+            continue
+        
+        print("Saving results for artefact '{}'...".format(art.name))
+        if not art.metadata:
+            art.metadata = Metadata(artefactID=art.id, dataObject=HFData(artefactID=art.id, figureIDs=output, caption='Unavailable'))
+        else:
+            if not isinstance(art.metadata.raw, HFData):
+                print("Artefact '{}' metadata is not of type HFData; resetting metadata.".format(art.name))
+                art.metadata = Metadata(artefactID=art.id, dataObject=HFData(artefactID=art.id, figureIDs=output, caption='Unavailable'))
+            else:
+                art.metadata.raw.figureIDs = output
+        
+        art.metadata.save()
+        print("Artefact '{}' processed and metadata saved.".format(art.name))
+        
+        successCount += 1
+    
+    t.end()
+    ArchSmith.persist()
+    
+    print()
+    print("Face matching completed for {}/{} artefacts.".format(successCount, len(arts)))
+
+def overwriteHFImages():
+    requireFM()
+    
+    img = Image.open(input("Enter path to custom image for overwite: ").strip())
+    img.load()
+    
+    for i in range(1, 51):
+        img.save('artefacts/hf{}.png'.format(i))
+        FileManager.save('artefacts', 'hf{}.png'.format(i))
+        print("Overwrote artefacts/hf{}.png with custom image.".format(i))
+    
+    print("Overwrite complete.")
 
 def main(choices: list[int] | None=None):
     print("Welcome to ArchAIve DB Tools!")
@@ -567,11 +908,14 @@ def main(choices: list[int] | None=None):
             print("9. Reset local data files")
             print("10. Remove categories")
             print("11. Populate more data (after 1)")
+            print("12: Populate 50 HF and 3 Cat (20 ungrouped HF, 1 empty Cat)")
+            print("13: Run face matching algorithm on all artefacts")
+            print("14: Overwrite all HF images with custom image")
             print("0: Exit")
         
         try:
             choice = int(input("Enter choice: ")) if choice is None else choice
-            if choice not in range(12):
+            if choice not in range(15):
                 raise Exception()
         except KeyboardInterrupt:
             print("\nExiting...")
@@ -612,6 +956,12 @@ def main(choices: list[int] | None=None):
             removeCategories(name)
         elif choice == 11:
             populateMoreArtefacts()
+        elif choice == 12:
+            populateHFCat()
+        elif choice == 13:
+            dummyFaceMatching()
+        elif choice == 14:
+            overwriteHFImages()
         
         if isinstance(choices, list) and len(choices) > 0:
             choice = choices.pop(0)

@@ -9,6 +9,127 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 load_dotenv()
 
+class LiteStore:
+    """Lightweight key-value thread safe store for storing lightweight persistent data.
+
+    Sample usage:
+    ```python
+    from services import LiteStore
+    
+    LiteStore.setup() # Setup LiteStore safely and loads data into memory. Will create `LiteStore.dataFile` if it does not exist. Used for persistent storage.
+    
+    LiteStore.set("someKey", "value") # Set a key-value pair in the store. The update will persist instantly, provided no other `set` operation is in progress.
+    value = LiteStore.read("someKey") # Read a value from the store. Returns `None` if the key does not exist. Awaits any ongoing `set` operations.
+    
+    LiteStore.delete("someKey") # Deletes a key-value pair from the store.
+    ```
+    """
+    
+    dataFile = 'liteStore.json'
+    data: dict | None = None
+    dataFileLock = threading.Lock()
+    inMemoryStateLock = threading.Lock()
+
+    @staticmethod
+    def setup():
+        """Setup LiteStore and load data into memory.
+
+        Returns: `bool | str`: True if setup is successful, error string otherwise.
+        """
+        
+        try:
+            if not os.path.isfile(os.path.join(os.getcwd(), LiteStore.dataFile)):
+                LiteStore.data = {}
+                LiteStore.write()
+            else:
+                LiteStore.load()
+            return True
+        except Exception as e:
+            return "ERROR: Failed to setup LiteStore; error: {}".format(e)
+    
+    @staticmethod
+    def write():
+        """Writes `LiteStore.data` (in-memory state) to `LiteStore.dataFile` (persistent storage).
+        
+        Thread-safe operation.
+
+        Returns: `bool | str`: True if write is successful, error string otherwise.
+        """
+        
+        with LiteStore.dataFileLock:
+            try:
+                with open(LiteStore.dataFile, 'w') as f:
+                    json.dump(LiteStore.data, f, indent=4 if os.environ.get("DEBUG_MODE", "False") == "True" else None)
+                return True
+            except Exception as e:
+                return "ERROR: Failed to write LiteStore data; error: {}".format(e)
+    
+    @staticmethod
+    def load():
+        """Loads `LiteStore.dataFile` (persistent storage) to `LiteStore.data` (in-memory state).
+
+        Thread-safe operation.
+
+        Returns: `bool | str`: True if load is successful, error string otherwise.
+        """
+        
+        with LiteStore.dataFileLock:
+            try:
+                with open(LiteStore.dataFile, 'r') as f:
+                    LiteStore.data = json.load(f)
+                return True
+            except Exception as e:
+                return "ERROR: Failed to read LiteStore data; error: {}".format(e)
+
+    @staticmethod
+    def set(keyName, value):
+        """Sets a key-value pair in the store.
+        
+        Thread-safe operation. The update will persist instantly, provided no other `set` operation is in progress.
+
+        Returns: `bool | str`: True if set is successful, error string otherwise.
+        """
+
+        with LiteStore.inMemoryStateLock:
+            try:
+                if not LiteStore.data:
+                    LiteStore.data = {}
+                
+                LiteStore.data[keyName] = value
+                return LiteStore.write()
+            except Exception as e:
+                return "ERROR: Failed to set key '{}'; error: {}".format(keyName, e)
+
+    @staticmethod
+    def read(keyName):
+        """Reads a value from the store.
+        
+        Thread-safe operation. Returns `None` if the key does not exist. Awaits any ongoing `set` operations.
+        
+        Returns: `Any | None`: The value associated with the key, or `None` if the key does not exist.
+        """
+        
+        with LiteStore.inMemoryStateLock:
+            return LiteStore.data.get(keyName, None) if LiteStore.data else None
+
+    @staticmethod
+    def delete(keyName):
+        """Deletes a key-value pair from the store.
+        
+        Thread-safe operation.
+        
+        Returns: `bool | str`: True if delete is successful, error string otherwise.
+        """
+        
+        try:
+            if keyName in LiteStore.data:
+                del LiteStore.data[keyName]
+                return LiteStore.write()
+            
+            return True  # Key does not exist, nothing to delete
+        except Exception as e:
+            return "ERROR: Failed to delete key '{}'; error: {}".format(keyName, e)
+
 class Trigger:
     '''
     A class to define triggers for `APScheduler` based jobs.
