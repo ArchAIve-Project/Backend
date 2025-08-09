@@ -24,6 +24,9 @@ def upload(user : User):
     - Uploads to Firebase
     - Creates DB record
     
+    If 'batchID' is provided, uploads files to that batch.
+    or
+    If 'batchID' is not provided, creates a new batch.
     Creates a Batch containing all successfully uploaded Artefacts.
     If no files were successfully uploaded, no batch is created.
 
@@ -31,6 +34,8 @@ def upload(user : User):
 
     Returns a summary of upload results per file and batchid.
     """
+    batchID = request.form.get('batchID')
+
     if 'file' not in request.files:
         return JSONRes.new(400, "No file part in request.")
 
@@ -104,10 +109,26 @@ def upload(user : User):
         return JSONRes.new(400, "No artefacts were processed successfully.", updates=fileSaveUpdates)
 
     try:
-        batch = Batch(user.id, batchArtefacts=successfulFiles)
-        batch.save()
+        if batchID:
+            batch = Batch.load(id=batchID)
+            if not batch:
+                return JSONRes.new(404, "Batch {} not found.".format(batchID))
+            
+            if batch.userID != user.id:
+                return JSONRes.new(403, "You do not have permission to modify this batch.")
+            
+            if batch.stage != Batch.Stage.UPLOAD_PENDING:
+                return JSONRes.new(400, "Cannot add files to batch in stage '{}'.".format(batch.stage))
+
+            for artefact in successfulFiles:
+                batch.add(artefact,BatchArtefact.Status.UNPROCESSED)
+            batch.save()
+        else:
+            batch = Batch(user.id, batchArtefacts=successfulFiles)
+            batch.save()
     except Exception as e:
         Logger.log("DATAIMPORT UPLOAD ERROR: Failed to create batch for user '{}' with '{}' artefacts; error: {}".format(user.id, len(successfulFiles), e))
+        return JSONRes.new(500, "Failed to create or update batch.")
 
     return JSONRes.new(200, "Upload results.", updates=fileSaveUpdates, batchID=batch.id)
 
