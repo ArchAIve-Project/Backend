@@ -221,7 +221,7 @@ def getUserBatches(user: User):
 @jsonOnly
 @enforceSchema(('batchID', str))
 @checkSession(strict=True, provideUser=True)
-def cancelBatch(user: User):
+def cancelBatch():
 
     batchID: str = request.json.get('batchID')
 
@@ -414,4 +414,40 @@ def completeBatch():
 
     except Exception as e:
         Logger.log("DATAIMPORT COMPLETEBATCH ERROR: Batch '{}' failed to complete; error {}".format(batchID, e))
+        return JSONRes.ambiguousError()
+    
+@dataImportBP.route('/batches/resume', methods=['POST'])
+@jsonOnly
+@enforceSchema(('batchID', str))
+@checkSession(strict=True)
+def resumeBatch():
+    batchID: str = request.json.get('batchID')
+
+    try:
+        batch = Batch.load(batchID)
+        if not batch:
+            return JSONRes.new(404, "Batch not found.")
+
+        if batch.stage != Batch.Stage.UNPROCESSED:
+            return JSONRes.new(400, "Batch stage must be UNPROCESSED to resume.")
+
+        batchJob = batch.job
+        if not batchJob:
+            return JSONRes.new(400, "No processing job associated with this batch.")
+
+        if batchJob.status != BatchProcessingJob.Status.CANCELLED:
+            return JSONRes.new(400, "Cannot resume batch with status '{}'.".format(batchJob.status))
+
+        # Restart job
+        batchJob.status = BatchProcessingJob.Status.PROCESSING
+        batchJob.save()
+
+        # Add the processing job back to the ThreadManager queue
+        batchJob.jobID = ThreadManager.defaultProcessor.addJob(DataImportProcessor.processBatch, batch)
+        batchJob.save()
+
+        return JSONRes.new(200, "Batch processing resumed.", batchID=batch.id)
+
+    except Exception as e:
+        Logger.log("DATAIMPORT RESUMEBATCH ERROR: Failed to resume batch '{}'; error: {}".format(batchID, e))
         return JSONRes.ambiguousError()
