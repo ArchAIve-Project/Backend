@@ -105,7 +105,6 @@ def upload(user : User):
 
     try:
         batch = Batch(user.id, batchArtefacts=successfulFiles)
-        batch.Stage.UPLOAD_PENDING
         batch.save()
     except Exception as e:
         Logger.log("DATAIMPORT UPLOAD ERROR: Failed to create batch for user '{}' with '{}' artefacts; error: {}".format(user.id, len(successfulFiles), e))
@@ -142,11 +141,6 @@ def confirmBatch(user: User):
         if batch.stage != Batch.Stage.UPLOAD_PENDING:
             return JSONRes.new(400, "Batch stage is not upload pending.")
         
-        batch.stage = Batch.Stage.UNPROCESSED
-        batch.save()
-
-        if batch is None:
-            return JSONRes.new(404, "Batch not found.")
         if not isinstance(batch, Batch):
             raise Exception("Unexpected response in loading batch; error: {}".format(batch))
 
@@ -158,6 +152,9 @@ def confirmBatch(user: User):
     if batch.userID != user.id:
         return JSONRes.new(403, "You don't have permission to start this batch's processing.", ResType.USERERROR)
 
+    batch.stage = Batch.Stage.UNPROCESSED
+    batch.save()
+    
     try:
         batch.initJob()
         batch.job.jobID = ThreadManager.defaultProcessor.addJob(DataImportProcessor.processBatch, batch)
@@ -172,22 +169,12 @@ def confirmBatch(user: User):
 @dataImportBP.route('/batches', methods=['GET'])
 @checkSession(strict=True)
 def getAllBatches():
-
-    requested_stage = request.args.get("stage")
-    if requested_stage:
-        requested_stage = Batch.Stage.validateAndReturn(requested_stage)
-        if not requested_stage:
-            return JSONRes.new(400, "Invalid stage filter.", ResType.USERERROR)
-
     try:
         batches = Batch.load()
         if not batches:
             return JSONRes.new(200, "No batches found.", batches={})
         if not isinstance(batches, list):
             raise Exception("Expected list of batches, got {}".format(type(batches)))
-        if requested_stage:
-            batches = [b for b in batches if b.stage == requested_stage]
-
     except Exception as e:
         Logger.log("DATAIMPORT GETALLBATCHES ERROR: Failed to load batches; error: {}".format(e))
         return JSONRes.ambiguousError()
@@ -200,26 +187,6 @@ def getAllBatches():
 
             # Remove userID completely
             rep.pop("userID", None)
-
-            artefactIDs = rep.get("artefacts", {}).keys()
-            mmCount = 0
-            hfCount = 0
-
-            for artefactID in artefactIDs:
-                try:
-                    artefact = Artefact.load(id=artefactID)
-                    if artefact.artType == "mm":
-                        mmCount += 1
-                    elif artefact.artType == "hf":
-                        hfCount += 1
-                except Exception as e:
-                    Logger.log("Failed to load artefact '{}': {}".format(artefactID, e))
-                    continue
-
-            rep["artefactTypeSummary"] = {
-                "mm": mmCount,
-                "hf": hfCount
-            }
 
             # Remove processingError from each artefact
             for artefactData in rep.get("artefacts", {}).values():
@@ -353,6 +320,9 @@ def startVetting():
     try:
         batch = Batch.load(batchID)
 
+        if batch is None:
+            return JSONRes.new(404, "Batch not found.")
+
         if batch.stage != Batch.Stage.PROCESSED:
             return JSONRes.new(400, "Batch must be in 'processed' stage to begin vetting.")
 
@@ -378,20 +348,23 @@ def confirmArtefact():
     try:
         batch = Batch.load(batchID)
 
+        if batch is None:
+            return JSONRes.new(404, "Batch not found.")
+
         if batch.stage != Batch.Stage.VETTING:
             return JSONRes.new(400, "Batch not in vetting stage.")
 
-        artefact = batch.get(artefactID)
-        if not artefact:
+        batchArtefact = batch.get(artefactID)
+        if not batchArtefact:
             Logger.log("DATAIMPORT VETTING CONFIRM ERROR: Artefact '{}' not found in batch {}".format(artefactID, batchID))
             return JSONRes.new(404, "Artefact not found in batch.")
 
-        artefact.stage = BatchArtefact.Status.CONFIRMED
-        artefact.save()
+        batchArtefact.stage = BatchArtefact.Status.CONFIRMED
+        batchArtefact.save()
 
         return JSONRes.new(200, "Artefact confirmed.")
     except Exception as e:
-        Logger.log("DATAIMPORT CONFIRM VETTING ERROR: Batch '{}' failed to confirm artefact; error {}".format(batchID, e))
+        Logger.log("DATAIMPORT CONFIRMARTEFACT ERROR: Batch '{}' failed to confirm artefact; error {}".format(batchID, e))
         return JSONRes.ambiguousError()
 
 @dataImportBP.route('/integration', methods=['POST'])
@@ -402,6 +375,9 @@ def startIntegration():
     batchID = request.json.get('batchID')
     try:
         batch = Batch.load(batchID)
+
+        if batch is None:
+            return JSONRes.new(404, "Batch not found.")
        
         if batch.stage != Batch.Stage.VETTING:
             return JSONRes.new(400, "Batch must be in 'vetting' stage to start integration.")
