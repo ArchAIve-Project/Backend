@@ -47,6 +47,7 @@ def getProfileInfo(user: User, userID: str=None):
         'lname': user.lname,
         'role': user.role,
         'contact': user.contact,
+        'pfp': True if user.pfp else False,
         'lastLogin': user.lastLogin,
         'created': user.created
     }
