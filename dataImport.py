@@ -36,6 +36,9 @@ def upload(user : User):
     """
     batchID = request.form.get('batchID')
 
+    if batchID != None and (not isinstance(batchID, str) or len(batchID.strip()) == 0):
+        return JSONRes.new(400, "Invalid batch ID.")
+
     if 'file' not in request.files:
         return JSONRes.new(400, "No file part in request.")
 
@@ -357,7 +360,7 @@ def startVetting():
 
         return JSONRes.new(200, "Batch moved to vetting stage.", batchID=batchID)
     except Exception as e:
-        Logger.log("DATAIMPORT VETTING START ERROR: Batch '{}' failed to start vetting; error {}".format(batchID, e))
+        Logger.log("DATAIMPORT STARTVETTING ERROR: Batch '{}' failed to start vetting; error {}".format(batchID, e))
         return JSONRes.ambiguousError()
     
 @dataImportBP.route('/vetting/confirm', methods=['POST'])
@@ -375,7 +378,7 @@ def confirmArtefact():
         batchArtefact = BatchArtefact.load(batchID, artefactID)
 
         if not batchArtefact:
-            Logger.log("DATAIMPORT VETTING CONFIRM ERROR: Artefact '{}' not found in batch {}".format(artefactID, batchID))
+            Logger.log("DATAIMPORT CONFIRMARTEFACT ERROR: Artefact '{}' not found in batch {}".format(artefactID, batchID))
             return JSONRes.new(404, "Artefact not found in batch.")
 
         batchArtefact.stage = BatchArtefact.Status.CONFIRMED
