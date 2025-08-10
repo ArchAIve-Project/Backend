@@ -3,8 +3,9 @@ from typing import List, Dict, Tuple
 from flask import Blueprint, request, redirect, url_for
 from utils import JSONRes, ResType, Extensions
 from services import Universal, Logger, Encryption
+from fm import File, FileManager
 from decorators import jsonOnly, checkAPIKey, enforceSchema, Param
-from schemas import User
+from schemas import User, AuditLog
 from sessionManagement import checkSession, requireSuperuser
 
 adminBP = Blueprint("admin", __name__, url_prefix="/admin")
@@ -109,3 +110,48 @@ def createUser(user: User):
     Logger.log("ADMIN CREATEUSER: New user created with username '{}' and ID '{}'.".format(username, u.id))
     
     return JSONRes.new(200, "User created successfully.", ResType.SUCCESS, newUserID=u.id)
+
+@adminBP.route("/deleteUser", methods=['POST'])
+@checkAPIKey
+@jsonOnly
+@enforceSchema(
+    Param(
+        "userID",
+        lambda x: isinstance(x, str) and len(x) > 0,
+        invalidRes=JSONRes.new(400, "Target user ID required.", serialise=False)
+    )
+)
+@checkSession(strict=True, provideUser=True)
+@requireSuperuser
+def deleteUser(user: User):
+    userID: str = request.json.get("userID").strip()
+    if userID == user.id:
+        return JSONRes.new(400, "Cannot delete your own account.", ResType.USERERROR)
+    
+    try:
+        targetUser: User = User.load(userID, withLogs=True)
+        if not isinstance(targetUser, User):
+            return JSONRes.new(404, "User not found.", ResType.USERERROR)
+    except Exception as e:
+        Logger.log("ADMIN DELETEUSER ERROR: Failed to load user with ID '{}'; error: {}".format(userID, e))
+        return JSONRes.ambiguousError()
+    
+    try:
+        if targetUser.pfp:
+            file = File(targetUser.pfp, 'FileStore')
+            res = FileManager.delete(file=file)
+            if isinstance(res, str):
+                Logger.log("ADMIN DELETEUSER ERROR: Failed to delete profile picture for user '{}' (ID: {}); error: {}".format(targetUser.username, targetUser.id, res))
+        
+        if isinstance(targetUser.logs, list):
+            for log in targetUser.logs:
+                if isinstance(log, AuditLog):
+                    log.destroy()
+        
+        targetUser.destroy()
+        Logger.log("ADMIN DELETEUSER: User with ID '{}' and username '{}' deleted successfully.".format(userID, targetUser.username))
+    except Exception as e:
+        Logger.log("ADMIN DELETEUSER ERROR: Failed to delete user with ID '{}'; error: {}".format(userID, e))
+        return JSONRes.ambiguousError()
+    
+    return JSONRes.new(200, "User deleted successfully.", ResType.SUCCESS)
