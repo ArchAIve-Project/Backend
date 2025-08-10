@@ -20,5 +20,7 @@ UpscaledOutput/
 outputs/
 testing/
 moreDummy/
+hfDummy/
 actualKey.json
 test2.py
+liteStore.json

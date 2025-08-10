@@ -88,7 +88,7 @@ class FaceRecognition:
         return faces
 
     @staticmethod
-    def detect_face_crops(img_path, min_size: tuple[int, int]=(60, 60), min_conf=0.9) -> list[Image.Image] | str:
+    def detect_face_crops(img_path, min_size: tuple[int, int]=(60, 60), min_conf=0.8) -> list[Image.Image] | str:
         if not FileOps.exists(os.path.join(os.getcwd(), img_path), 'file'):
             return "ERROR: File does not exist: {}".format(img_path)
         

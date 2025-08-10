@@ -4,7 +4,7 @@ from addons import ASReport, ASTracer
 from captioner import ImageCaptioning
 from faceRecog import FaceRecognition, FaceDetection, FaceEmbedding
 from fm import FileManager, File
-from models import Figure, Face
+from schemas import Figure, Face
 from dotenv import load_dotenv
 load_dotenv()
 

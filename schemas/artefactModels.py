@@ -37,9 +37,15 @@ class Artefact(DIRepresentable):
             metadata = None
         
         if description is None:
-            if metadata is not None and metadata.isMM():
-                summary = metadata.raw.summary
-                artDescription = summary[:30] + "..." if len(summary) > 30 else summary
+            if metadata is not None:
+                if metadata.isMM():
+                    summary = metadata.raw.summary
+                    artDescription = summary[:30] + "..." if len(summary) > 30 else summary
+                elif metadata.isHF():
+                    caption = metadata.raw.caption
+                    artDescription = caption[:30] + "..." if len(caption) > 30 else caption
+                else:
+                    artDescription = None
             else:
                 artDescription = None
         else:

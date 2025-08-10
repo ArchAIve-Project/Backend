@@ -82,7 +82,7 @@ class Face(DIRepresentable):
     Sample usage:
     ```python
     from fm import FileManager
-    from models import DI, Face, FaceEmbedding
+    from schemas import DI, Face, FaceEmbedding
     
     DI.setup()
     FileManager.setup() # required as Face uses FileManager for embeddings storage
@@ -711,7 +711,7 @@ class Figure(DIRepresentable):
     Attributes:
         id (str): Unique identifier for the figure.
         label (str): Name or label of the figure.
-        headshot (str): Name of the headshot image file in the `people` File
+        headshot (str): Name of the headshot image file in the `people` FileManager store
         face (Face): Face object containing embeddings and numerical data about the figure's face.
         profile (None): Placeholder for a profile object, if applicable.
         originRef (Ref): Reference object for database operations, pointing to the figure's data in DI.
@@ -738,7 +738,7 @@ class Figure(DIRepresentable):
     ```python
     import torch
     from fm import FileManager
-    from models import DI, Figure, Face
+    from schemas import DI, Figure, Face
     
     DI.setup()
     FileManager.setup() # required as FileManager is used by the Face model

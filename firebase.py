@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Union
 from firebase_admin import db, storage, credentials, initialize_app
 from google.cloud.storage.blob import Blob
 from google.api_core.page_iterator import HTTPIterator
+from services import LiteStore, Logger
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -244,7 +245,7 @@ class FireStorage:
     NOTE: This class is not meant to be instantiated. `FireConn.connect()` method must be executed before executing any other methods in this class.
     '''
     
-    signedURLCache: Dict[str, Dict[str, Any]] = {}
+    # signedURLCache: Dict[str, Dict[str, Any]] = {}
 
     @staticmethod
     def checkPermissions():
@@ -332,12 +333,18 @@ class FireStorage:
         if expiration is None:
             expiration = datetime.timedelta(hours=1)
         
-        if FireStorage.signedURLCache.get(filename) != None and allowCache:
-            cachedData = FireStorage.signedURLCache[filename]
-            if datetime.datetime.fromisoformat(cachedData['expiration']) > datetime.datetime.now(datetime.timezone.utc):
-                return cachedData['url']
-            else:
-                del FireStorage.signedURLCache[filename]  # Remove expired cache entry
+        cacheData: dict | None = None
+        if allowCache:
+            cacheData = LiteStore.read("signedURLCache") or {}
+            urlData = cacheData.get(filename, None)
+            if urlData is not None:
+                if datetime.datetime.fromisoformat(urlData['expiration']) > datetime.datetime.now(datetime.timezone.utc):
+                    return urlData['url']
+                else:
+                    del cacheData[filename]
+                    res = LiteStore.set("signedURLCache", cacheData)
+                    if res != True:
+                        Logger.log("FIRESTORAGE GETFILESIGNEDURL WARNING: Failed to update signedURLCache; response: {}".format(res))
         
         try:
             bucket = storage.bucket()
@@ -352,11 +359,17 @@ class FireStorage:
             )
             
             if updateCache:
-                FireStorage.signedURLCache[filename] = {
+                if cacheData is None:
+                    cacheData = LiteStore.read("signedURLCache") or {}
+
+                cacheData[filename] = {
                     "url": url,
                     "expiration": expirationDatetime.isoformat()
                 }
-            
+                
+                res = LiteStore.set("signedURLCache", cacheData)
+                if res != True:
+                    Logger.log("FIRESTORAGE GETFILESIGNEDURL WARNING: Failed to update signedURLCache; response: {}".format(res))
             return url
         except Exception as e:
             return "ERROR: Error in generating signed URL for file in cloud storage; error: {}".format(e)

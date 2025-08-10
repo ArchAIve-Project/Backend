@@ -16,7 +16,7 @@ class AuditLog(DIRepresentable):
     
     Sample usage:
     ```python
-    from models import DI, User, AuditLog
+    from schemas import DI, User, AuditLog
     DI.setup()
     
     user = User.load(username="johndoe")
@@ -149,18 +149,25 @@ class User(DIRepresentable):
         username (str): The username of the user.
         email (str): The email of the user.
         pwd (str): The password of the user.
+        fname (str): The first name of the user.
+        lname (str): The last name of the user.
+        role (str): The role of the user in the context of the organisation.
+        contact (str, optional): The contact number for the user.
+        pfp (str | None, optional): The profile picture URL of the user.
         authToken (str, optional): The auth token of the user. Defaults to None.
         superuser (bool, optional): Whether the user is a superuser. Defaults to False
         lastLogin (str, optional): The last login timestamp of the user. Defaults to None.
         created (str, optional): The creation timestamp of the user. Defaults to None.
+        resetKey (str | None, optional): The reset key for the user. Defaults to None.
         logs (List[AuditLog] | None): A convenience attribute optionally storing the audit logs associated with the user. Populated by `getAuditLogs()`.
+        originRef (Ref): The reference to the user in the database.
     
     Sample usage:
     ```python
-    from models import DI, User
+    from schemas import DI, User
     DI.setup()
     
-    user = User("johndoe", "john@doe.com", "securepwd")
+    user = User("johndoe", "john@doe.com", "securepwd", "John", "Doe", "Admin", superuser=True)
     user.authToken = "123456"
     user.save()
     
@@ -173,17 +180,23 @@ class User(DIRepresentable):
     ```
     """
     
-    def __init__(self, username: str, email: str, pwd: str, authToken: str=None, superuser: bool=False, lastLogin: str=None, created: str=None, id: str=None):
+    def __init__(self, username: str, email: str, pwd: str, fname: str, lname: str, role: str, contact: str='', pfp: str | None=None, authToken: str=None, superuser: bool=False, lastLogin: str=None, created: str=None, resetKey: str | None=None, id: str=None):
         """User model representation.
 
         Args:
             username (str): The username of the user.
             email (str): The email of the user.
             pwd (str): The password of the user.
+            fname (str): The first name of the user.
+            lname (str): The last name of the user.
+            role (str): The role of the user in the context of the organisation.
+            contact (str, optional): The contact number for the user. Defaults to an empty string.
+            pfp (str | None, optional): The profile picture image filename string for the user. The image name should be in `<userID>.<ext>` format. Defaults to None.
             authToken (str, optional): The auth token of the user. Defaults to None.
             superuser (bool, optional): Whether the user is a superuser. Defaults to False.
             lastLogin (str, optional): The last login timestamp of the user. Defaults to None.
             created (str, optional): The creation timestamp of the user. Defaults to None. If not provided, it will be set to the current UTC time in ISO format.
+            resetKey (str | None, optional): The reset key for the user. Defaults to None.
             id (str, optional): The unique identifier of the user. Defaults to None. Auto-generated if not provided.
         """
         if id is None:
@@ -195,10 +208,16 @@ class User(DIRepresentable):
         self.username = username
         self.email = email
         self.pwd = pwd
+        self.fname = fname
+        self.lname = lname
+        self.role = role
+        self.contact = contact or ""
+        self.pfp = pfp
         self.authToken = authToken
         self.superuser = superuser
         self.lastLogin = lastLogin
         self.created = created
+        self.resetKey = resetKey
         self.logs: 'List[AuditLog] | None' = None
         self.originRef = User.ref(id)
     
@@ -207,39 +226,57 @@ class User(DIRepresentable):
             "username": self.username,
             "email": self.email,
             "pwd": self.pwd,
+            "fname": self.fname,
+            "lname": self.lname,
+            "role": self.role,
+            "contact": self.contact if len(self.contact) > 0 else None,
+            "pfp": self.pfp,
             "authToken": self.authToken,
             "superuser": self.superuser,
             "lastLogin": self.lastLogin,
-            "created": self.created
+            "created": self.created,
+            "resetKey": self.resetKey
         }
     
     def __str__(self):
         return """<User instance
 ID: {}
+First Name: {}
+Last Name: {}
 Username: {}
 Email: {}
 Password: {}
+Role: {}
+Contact: {}
+Profile Picture: {}
 Audit Logs:{}
 Auth Token: {}
 Superuser: {}
 Last Login: {}
-Created: {} />""".format(
+Created: {}
+Reset Key: {} />""".format(
             self.id,
+            self.fname or "None or Empty",
+            self.lname or "None or Empty",
             self.username,
             self.email,
             self.pwd,
+            self.role or "None or Empty",
+            self.contact or "None or Empty",
+            self.pfp or "None or Empty",
             ("\n---\n- " + ("\n- ".join((str(log) if isinstance(log, AuditLog) else "CORRUPTED AUDITLOG AT INDEX '{}'".format(i)) for i, log in enumerate(self.logs))) + "\n---") if isinstance(self.logs, list) and len(self.logs) > 0 else " None or Empty",
             self.authToken,
             self.superuser,
             self.lastLogin,
-            self.created
+            self.created,
+            self.resetKey
         )
 
-    def save(self, checkSuperuserIntegrity: bool=True):
+    def save(self, checkIntegrity: bool=True):
         """Saves the user to the database.
 
         Args:
-            checkSuperuserIntegrity (bool, optional): Whether to check for superuser integrity. Defaults to True.
+            checkIntegrity (bool, optional): Whether to check for user integrity. Defaults to True.
 
         Raises:
             Exception: If an error occurs during saving.
@@ -249,14 +286,21 @@ Created: {} />""".format(
             bool: Almost exclusively returns `True`.
         """
         
-        if self.superuser == True and checkSuperuserIntegrity:
-            allUsers = User.load()
-            if not isinstance(allUsers, list):
-                raise Exception("USER SAVE ERROR: Unexpected User load response format; response: {}".format(allUsers))
-            
-            for user in allUsers:
-                if user.id != self.id and user.superuser == True:
-                    raise Exception("USER SAVE ERROR: Cannot save superuser user when another superuser already exists.")
+        if checkIntegrity:
+            conflictingUser: None | User = User.load(username=self.username, email=self.email, authToken=self.authToken, superuser=self.superuser)
+            if isinstance(conflictingUser, User) and conflictingUser.id != self.id:
+                violation = None
+                if conflictingUser.username == self.username:
+                    violation = "Username"
+                elif conflictingUser.email == self.email:
+                    violation = "Email"
+                elif conflictingUser.authToken == self.authToken:
+                    violation = "Auth Token"
+                elif conflictingUser.superuser and self.superuser:
+                    violation = "Superuser Status"
+                
+                if violation:
+                    raise Exception("USER SAVE ERROR: Integrity violation: {}".format(violation))
         
         convertedData = self.represent()
         return DI.save(convertedData, self.originRef)
@@ -318,13 +362,15 @@ Created: {} />""".format(
     
     @staticmethod
     def rawLoad(data: dict, userID: str | None=None, withLogs: bool=False) -> 'User':
-        requiredParams = ['username', 'email', 'pwd', 'authToken', 'superuser', 'lastLogin', 'created']
+        requiredParams = ['username', 'email', 'pwd', 'fname', 'lname', 'role', 'contact', 'pfp', 'authToken', 'superuser', 'lastLogin', 'created', 'resetKey']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam in []: # add any required params that should be empty dictionaries
                     data[reqParam] = {}
                 elif reqParam in []: # add any required params that should be empty lists
                     data[reqParam] = []
+                elif reqParam in ['fname', 'lname', 'role', 'contact']: # add any required params that should be empty strings
+                    data[reqParam] = ''
                 elif reqParam in ['superuser']:
                     data[reqParam] = False
                 else:
@@ -334,13 +380,19 @@ Created: {} />""".format(
             data['superuser'] = False
         
         u = User(
-            username=data['username'],
-            email=data['email'],
-            pwd=data['pwd'],
-            authToken=data['authToken'],
-            superuser=data['superuser'],
-            lastLogin=data['lastLogin'],
-            created=data['created'],
+            username=data.get('username'),
+            email=data.get('email'),
+            pwd=data.get('pwd'),
+            fname=data.get('fname'),
+            lname=data.get('lname'),
+            role=data.get('role'),
+            contact=data.get('contact', ''),
+            pfp=data.get('pfp'),
+            authToken=data.get('authToken'),
+            superuser=data.get('superuser'),
+            lastLogin=data.get('lastLogin'),
+            created=data.get('created'),
+            resetKey=data.get('resetKey'),
             id=userID
         )
         
@@ -350,7 +402,7 @@ Created: {} />""".format(
         return u
     
     @staticmethod
-    def load(id: str=None, username: str=None, email: str=None, authToken: str=None, withLogs: bool=False) -> 'User | List[User] | None':
+    def load(id: str=None, username: str=None, email: str=None, authToken: str=None, superuser: bool | None=None, withLogs: bool=False) -> 'User | List[User] | None':
         """Loads a user from the database.
 
         Args:
@@ -358,6 +410,7 @@ Created: {} />""".format(
             username (str, optional): The username of the user to load. Defaults to None.
             email (str, optional): The email of the user to load. Defaults to None.
             authToken (str, optional): The auth token of the user to load. Defaults to None.
+            superuser (bool | None, optional): To retrieve the first superuser available. Defaults to None.
             withLogs (bool, optional): Optionally load audit logs into a convenient `logs` attribute in the model. Defaults to False. Warning: Might be memory intensive if True.
 
         Raises:
@@ -394,53 +447,41 @@ Created: {} />""".format(
                 if isinstance(data[id], dict):
                     users[id] = User.rawLoad(data[id], id)
 
-            if username == None and email == None and authToken == None:
+            if username == None and email == None and authToken == None and superuser != True:
                 if withLogs:
                     for u in users.values():
                         u.getAuditLogs()
                 
                 return list(users.values())
-
+            
+            target: User | None = None
             for userID in users:
-                targetUser = users[userID]
-                if username != None and targetUser.username == username:
+                user = users[userID]
+                if username != None and user.username == username:
+                    target = user
                     break
-                elif email != None and targetUser.email == email:
+                elif email != None and user.email == email:
+                    target = user
                     break
-                elif authToken != None and targetUser.authToken == authToken:
+                elif authToken != None and user.authToken == authToken:
+                    target = user
                     break
-
-            if targetUser:
+                elif superuser == True and user.superuser == True:
+                    target = user
+                    break
+            
+            if target:
                 if withLogs:
-                    targetUser.getAuditLogs()
-                return targetUser
+                    target.getAuditLogs()
+                return target
             else:
                 return None
     
     @staticmethod
-    def getSuperuser() -> 'User | None':
-        """ Retrieves the superuser from the database.
-
-        Raises:
-            Exception: If more than one superuser exists.
-            Exception: If an error occurs during loading.
-
-        Returns:
-            User | None: The superuser if found, otherwise None.
-        """
+    def getSuperuser():
+        """Same as `load(superuser=True)`."""
         
-        allUsers = User.load()
-        if not isinstance(allUsers, list):
-            raise Exception("USER GETSUPERUSER ERROR: Unexpected User load response format; response: {}".format(allUsers))
-        
-        su = None
-        for user in allUsers:
-            if user.superuser == True:
-                if su is not None:
-                    raise Exception("USER GETSUPERUSER ERROR: More than one superuser found; cannot determine which to return.")
-                su = user
-
-        return su
+        return User.load(superuser=True)
 
     @staticmethod
     def ref(id: str) -> Ref:
