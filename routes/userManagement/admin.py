@@ -155,3 +155,21 @@ def deleteUser(user: User):
         return JSONRes.ambiguousError()
     
     return JSONRes.new(200, "User deleted successfully.", ResType.SUCCESS)
+
+@adminBP.route("/resetPassword", methods=['POST'])
+@checkAPIKey
+@jsonOnly
+@enforceSchema(
+    Param(
+        "userID",
+        lambda x: isinstance(x, str) and len(x) > 0,
+        invalidRes=JSONRes.new(400, "Target user ID required.", serialise=False)
+    )
+)
+@checkSession(strict=True, provideUser=True)
+@requireSuperuser
+def resetPassword(user: User):
+    targetUserID: str = request.json.get("userID").strip()
+    
+    newPassword: str = Universal.generateUniqueID(customLength=6)
+    
