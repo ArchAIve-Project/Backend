@@ -33,6 +33,7 @@ class EnvVariable:
             EnvVariable("ARCHSMITH_ENABLED", True, True),
             EnvVariable("API_KEY", False, True),
             EnvVariable("SECRET_KEY", False, True),
+            EnvVariable("FRONTEND_URL", False, True),
             EnvVariable("EMAILING_ENABLED", True, True, [
                 EnvVariable("SENDER_EMAIL", False, True),
                 EnvVariable("SENDER_EMAIL_APP_PASSWORD", False, True)

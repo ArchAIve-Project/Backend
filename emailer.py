@@ -1,8 +1,8 @@
-from email import message
-import smtplib, ssl, re, os, subprocess, sys, shutil
+import smtplib, ssl, os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+from services import Logger
 load_dotenv()
 
 class Emailer:
@@ -12,6 +12,7 @@ class Emailer:
     sender_email = None
     password = None
     contextChecked = False
+    smtp_timeout = 15
 
     @staticmethod
     def checkContext():
@@ -46,12 +47,12 @@ class Emailer:
             message.attach(part2)
 
             context = ssl._create_unverified_context()
-            with smtplib.SMTP_SSL(Emailer.smtp_server, Emailer.port, context=context) as server:
+            with smtplib.SMTP_SSL(Emailer.smtp_server, Emailer.port, context=context, timeout=Emailer.smtp_timeout) as server:
                 server.login(Emailer.sender_email, Emailer.password)
                 server.sendmail(Emailer.sender_email, destEmail, message.as_string())
 
-            print("EMAILER: Email sent to {}".format(destEmail))
+            Logger.log("EMAILER: Email sent to '{}'.".format(destEmail))
             return True
         except Exception as e:
-            print("EMAILER ERROR: Failed to send email to {} with subject {}. Error: {}".format(destEmail, subject, e))
+            Logger.log("EMAILER ERROR: Failed to send email to '{}' with subject '{}'; error: {}".format(destEmail, subject, e))
             return False

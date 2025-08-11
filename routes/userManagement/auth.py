@@ -1,9 +1,10 @@
 from flask import Blueprint, request, redirect, url_for, session
 from utils import JSONRes, ResType
-from services import Logger, Encryption, Universal
+from services import Logger, Encryption, Universal, ThreadManager
+from schemas import User
 from decorators import jsonOnly, enforceSchema
 from sessionManagement import checkSession
-from schemas import User
+from emailCentre import EmailCentre, LoginAlert
 
 authBP = Blueprint('identity', __name__, url_prefix="/auth")
 
@@ -46,6 +47,8 @@ def login(user: User | None=None):
     session['authToken'] = user.authToken
     session['sessionStart'] = user.lastLogin
     session['superuser'] = user.superuser
+    
+    ThreadManager.defaultProcessor.addJob(EmailCentre.dispatch, LoginAlert(user))
     
     return JSONRes.new(200, "Login successful.", fname=user.fname, lname=user.lname)
 
