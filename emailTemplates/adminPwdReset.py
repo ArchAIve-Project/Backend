@@ -10,6 +10,7 @@ Please login with your new password: {}
 
 System admins typically carry out this action in the event you've forgotten your password, or due to some other security issue.
 Should you require more clarification or assistance, please contact the system administrator.
+
 Thank you for being a valued user of ArchAIve.
 
 This is a system generated email delivered by ArchAIve.
