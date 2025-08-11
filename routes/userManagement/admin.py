@@ -2,11 +2,12 @@ import re
 from typing import List, Dict, Tuple
 from flask import Blueprint, request, redirect, url_for
 from utils import JSONRes, ResType, Extensions
-from services import Universal, Logger, Encryption
+from services import Universal, Logger, Encryption, ThreadManager
 from fm import File, FileManager
 from decorators import jsonOnly, checkAPIKey, enforceSchema, Param
 from schemas import User, AuditLog
 from sessionManagement import checkSession, requireSuperuser
+from emailCentre import EmailCentre, AdminPasswordResetAlert
 
 adminBP = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -169,7 +170,31 @@ def deleteUser(user: User):
 @checkSession(strict=True, provideUser=True)
 @requireSuperuser
 def resetPassword(user: User):
+    del user  # Clear the user variable to free up memory; not needed here
+    
     targetUserID: str = request.json.get("userID").strip()
     
-    newPassword: str = Universal.generateUniqueID(customLength=6)
+    targetUser = None
+    try:
+        targetUser = User.load(targetUserID)
+        if not isinstance(targetUser, User):
+            return JSONRes.new(404, "User not found.", ResType.USERERROR)
+    except Exception as e:
+        Logger.log("ADMIN RESETPASSWORD ERROR: Failed to load user with ID '{}'; error: {}".format(targetUserID, e))
+        return JSONRes.ambiguousError()
     
+    newPassword: str = Universal.generateUniqueID(customLength=6)
+    targetUser.pwd = Encryption.encodeToSHA256(newPassword)
+    targetUser.authToken = None # log the user out if logged in already
+    
+    try:
+        targetUser.save()
+        targetUser.newLog("Admin Password Reset", "Changed to a random new password upon admin request.")
+        Logger.log("ADMIN RESETPASSWORD: Password reset for user with ID '{}' and username '{}'.".format(targetUserID, targetUser.username))
+    except Exception as e:
+        Logger.log("ADMIN RESETPASSWORD ERROR: Failed to reset password for user with ID '{}'; error: {}".format(targetUserID, e))
+        return JSONRes.ambiguousError()
+    
+    ThreadManager.defaultProcessor.addJob(EmailCentre.dispatch, AdminPasswordResetAlert(user=targetUser, newPwd=newPassword))
+    
+    return JSONRes.new(200, "Password reset successfully. An email has been sent to the user with the new password.", ResType.SUCCESS)
