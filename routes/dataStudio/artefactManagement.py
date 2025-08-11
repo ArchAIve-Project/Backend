@@ -40,7 +40,6 @@ def update(user: User):
     
     # Artefact-related changes
     name: str = request.json.get("name")
-    description: str = request.json.get("description")
         
     if art.name != name:
         art.name = name
@@ -78,20 +77,15 @@ def update(user: User):
                 tracer.addReport(ASReport("ARTEFACT UPDATE ERROR", "Exception during NER prediction: {}".format(e)))
                 nerFailed = True
             
-        print(changes)
         if art.metadata.raw.summary != summary:
             art.metadata.raw.summary = summary
             changes.append('Summary')
-            
-            print(changes)
-            
+                        
             # Auto-generated description based on summary
             artDescription = (summary[:30] + "...") if summary and len(summary) > 30 else summary
             art.description = artDescription
             changes.append('Description')
-            
-        print(changes)
-    
+                
     else:
         caption: str | None = request.json.get("caption")
         addInfo: str | None = request.json.get("addInfo")
