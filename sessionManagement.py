@@ -86,7 +86,7 @@ def checkSession(_func=None, *, strict=False, provideUser=False, requireSuperuse
                     Logger.log("CHECKSESSION ERROR: Failed to process session expiration status. Error: {}".format(e))
                     return handleReturn(res=JSONRes.invalidSession(), reason="Exception in session expiration: {}.".format(e))
             
-            if requireSuperuser and user.superuser != True:
+            if user and requireSuperuser and user.superuser != True:
                 return handleReturn(res=JSONRes.unauthorised(), reason="Superuser privileges required.")
             
             # Let handleReturn handle the success case
