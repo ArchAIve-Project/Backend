@@ -218,3 +218,53 @@ def uploadPicture(user: User):
     user.newLog("Profile Picture Updated", "Profile picture updated successfully.")
     
     return JSONRes.new(200, "Profile picture updated successfully.")
+
+@profileBP.route('/deletePicture', methods=['POST'])
+@checkAPIKey
+@jsonOnly
+@enforceSchema(
+    Param(
+        "userID",
+        lambda x: isinstance(x, str) and len(x.strip()) > 0, None,
+        invalidRes=JSONRes.new(400, "User ID must be a valid string, if provided.", serialise=False)
+    )
+)
+@checkSession(strict=True, provideUser=True)
+def deletePicture(user: User):
+    targetUser: User = None
+    targetUserID: str = request.json.get("userID", user.id).strip()
+    
+    # Resolve target user
+    if targetUserID == user.id:
+        targetUser = user
+    elif user.superuser:
+        try:
+            targetUser = User.load(targetUserID)
+            if not isinstance(targetUser, User):
+                return JSONRes.new(404, "User not found.", ResType.USERERROR)
+        except Exception as e:
+            Logger.log("USERPROFILE DELETEPICTURE ERROR: Failed to load user '{}' for superuser request; error: {}".format(targetUserID, e))
+            return JSONRes.ambiguousError()
+    else:
+        return JSONRes.unauthorised()
+    
+    if not targetUser.pfp:
+        return JSONRes.new(200, "No profile picture to delete.")
+    
+    file = File(targetUser.pfp, 'FileStore')
+    res = FileManager.delete(file=file)
+    if isinstance(res, str):
+        Logger.log("USERPROFILE DELETEPICTURE ERROR: Failed to delete profile picture for user '{}' (ID: {}); error: {}".format(targetUser.username, targetUser.id, res))
+        return JSONRes.ambiguousError()
+    
+    targetUser.pfp = None
+    try:
+        targetUser.save()
+        if user.superuser and targetUserID != user.id:
+            targetUser.newLog("Profile Picture Deleted", "An admin deleted this account's profile picture.")
+            Logger.log("USERPROFILE DELETEPICTURE: Admin deleted profile picture for user '{}' (ID: {}).".format(targetUser.username, targetUser.id))
+    except Exception as e:
+        Logger.log("USERPROFILE DELETEPICTURE ERROR: Failed to delete profile picture for user '{}'; error: {}".format(targetUser.id, e))
+        return JSONRes.ambiguousError()
+    
+    return JSONRes.new(200, "Profile picture deleted successfully.")
