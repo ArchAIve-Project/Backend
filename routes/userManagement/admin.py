@@ -7,7 +7,7 @@ from fm import File, FileManager
 from decorators import jsonOnly, checkAPIKey, enforceSchema, Param
 from schemas import User, AuditLog
 from sessionManagement import checkSession
-from emailCentre import EmailCentre, AdminPasswordResetAlert
+from emailCentre import EmailCentre, AdminPasswordResetAlert, AccountConfirmationAlert
 
 adminBP = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -79,10 +79,11 @@ def createUser():
     contact: str = request.json.get('contact').replace(' ', '').strip()
     
     # Create the new user
+    userPass = Universal.generateUniqueID(customLength=6)
     u = User(
         username=username,
         email=email,
-        pwd=Encryption.encodeToSHA256(Universal.generateUniqueID(customLength=6)),
+        pwd=Encryption.encodeToSHA256(userPass),
         fname=fname,
         lname=lname,
         role=role,
@@ -104,9 +105,11 @@ def createUser():
         Logger.log("ADMIN CREATEUSER ERROR: Failed to create new user with username '{}'; error: {}".format(username, e))
         return JSONRes.ambiguousError()
     
+    ThreadManager.defaultProcessor.addJob(EmailCentre.dispatch, AccountConfirmationAlert(u, userPass))
+    
     Logger.log("ADMIN CREATEUSER: New user created with username '{}' and ID '{}'.".format(username, u.id))
     
-    return JSONRes.new(200, "User created successfully.", ResType.SUCCESS, newUserID=u.id)
+    return JSONRes.new(200, "User created successfully. Login instructions have been dispatched to the user.", ResType.SUCCESS, newUserID=u.id)
 
 @adminBP.route("/deleteUser", methods=['POST'])
 @checkAPIKey
