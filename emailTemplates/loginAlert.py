@@ -18,8 +18,8 @@ This is a system generated email delivered by ArchAIve.
         self.destEmail = user.email
         self.subject = "New Login | ArchAIve"
         lastLogin = Universal.fromUTC(user.lastLogin, localisedTo=Universal.localisationOffset).strftime("%d %B, %A, %Y %H:%M:%S%p")
-        self.text = LoginAlert.generateText(user.fname, lastLogin)
-        self.html = TemplatesEnv.get_template('emails/loginAlert.html').render(fname=user.fname, lastLogin=lastLogin, copyright=Universal.copyright)
+        self.text = LoginAlert.generateText(user.fname or user.username, lastLogin)
+        self.html = TemplatesEnv.get_template('emails/loginAlert.html').render(fname=user.fname or user.username, lastLogin=lastLogin, copyright=Universal.copyright)
     
     def generateDispatchParameters(self):
         return self.destEmail, self.subject, self.text, self.html

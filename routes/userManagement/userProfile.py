@@ -1,11 +1,12 @@
 import re
 from flask import Blueprint, url_for, request, redirect
 from utils import JSONRes, ResType
-from services import Universal, Logger, Encryption, FileOps
+from services import Universal, Logger, Encryption, FileOps, ThreadManager
 from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
 from sessionManagement import checkSession
 from fm import File, FileManager
 from schemas import User, AuditLog
+from emailCentre import EmailCentre, PasswordChangedAlert
 
 profileBP = Blueprint('profile', __name__, url_prefix='/profile')
 
@@ -145,11 +146,12 @@ def changePassword(user: User):
     
     try:
         user.save()
+        user.newLog("Password Change", "Password changed successfully.")
     except Exception as e:
         Logger.log("USERPROFILE CHANGEPASSWORD ERROR: Failed to save user '{}' after changing password; error: {}".format(user.id, e))
         return JSONRes.ambiguousError()
     
-    user.newLog("Password Change", "Password changed successfully.")
+    ThreadManager.defaultProcessor.addJob(EmailCentre.dispatch, PasswordChangedAlert(user))
     
     return JSONRes.new(200, "Password changed successfully.")
 

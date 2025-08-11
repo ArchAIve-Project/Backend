@@ -19,8 +19,8 @@ This is a system generated email delivered by ArchAIve.
     def __init__(self, user: User, newPwd: str):
         self.destEmail = user.email
         self.subject = "Admin Password Reset | ArchAIve"
-        self.text = AdminPasswordResetAlert.generateText(user.fname, newPwd)
-        self.html = TemplatesEnv.get_template('emails/adminPwdReset.html').render(fname=user.fname, newPwd=newPwd, copyright=Universal.copyright)
+        self.text = AdminPasswordResetAlert.generateText(user.fname or user.username, newPwd)
+        self.html = TemplatesEnv.get_template('emails/adminPwdReset.html').render(fname=user.fname or user.username, newPwd=newPwd, copyright=Universal.copyright)
     
     def generateDispatchParameters(self):
         return self.destEmail, self.subject, self.text, self.html
