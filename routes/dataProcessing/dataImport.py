@@ -154,27 +154,34 @@ def confirmBatch(user: User):
     """
     batchID: str = request.json.get('batchID')
     
-    # Load batch
-    batch = None
     try:
-        batch = Batch.load(batchID)
-
-        if batch is None:
-            return JSONRes.new(404, "Batch not found.")
-        
-        if not isinstance(batch, Batch):
-            raise Exception("Unexpected response in loading batch; error: {}".format(batch))
-    
-        if batch.stage != Batch.Stage.UPLOAD_PENDING:
-            return JSONRes.new(400, "Batch stage is not upload pending.")
-
+        # Load all batches once
+        batches = Batch.load()
+        if not isinstance(batches, list):
+            raise Exception("Expected list of batches, got {}".format(type(batches)))
     except Exception as e:
-        Logger.log("DATAIMPORT CONFIRMBATCH ERROR: Failed to load batch '{}'; error: {}".format(batchID, e))
+        Logger.log("DATAIMPORT CONFIRMBATCH ERROR: Failed to load batches; error: {}".format(e))
         return JSONRes.ambiguousError()
+
+    # Find the specific batch
+    batch = next((b for b in batches if b.id == batchID), None)
+    if batch is None:
+        return JSONRes.new(404, "Batch not found.")
+
+    if not isinstance(batch, Batch):
+        raise Exception("Unexpected response in loading batch; error: {}".format(batch))
+
+    if batch.stage != Batch.Stage.UPLOAD_PENDING:
+        return JSONRes.new(400, "Batch stage is not upload pending.")
 
     # Ensure user owns the batch
     if batch.userID != user.id:
         return JSONRes.new(403, "You don't have permission to start this batch's processing.", ResType.USERERROR)
+
+    # Check if any batch is currently processing
+    for b in batches:
+        if b.job and b.job.status == BatchProcessingJob.Status.PROCESSING:
+            return JSONRes.new(400, "A batch is currently processing. Please wait until it completes before starting another.", ResType.USERERROR)
 
     batch.stage = Batch.Stage.UNPROCESSED
     batch.save()
