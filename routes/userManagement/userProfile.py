@@ -46,7 +46,7 @@ def info(user: User):
     ),
     Param(
         "role",
-        lambda x: isinstance(x, str) and len(x.strip()) > 2 and len(x.strip()) < 20, None,
+        lambda x: isinstance(x, str) and len(x.strip()) >= 2 and len(x.strip()) <= 20, None,
         invalidRes=JSONRes.new(400, "Role must be between 2 and 20 characters.", ResType.USERERROR, serialise=False)
     ),
     Param(
