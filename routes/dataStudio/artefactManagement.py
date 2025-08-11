@@ -93,7 +93,7 @@ def update(user: User):
             changes.append('English')
             
             # NER Logic
-            tracer = ArchSmith.newTracer(f"NER Labels regeneration for '{artefactID}'")
+            tracer = ArchSmith.newTracer("NER Labels regeneration for '{}'".format(artefactID))
             try:
                 newLabels = NERPipeline.predict(english, tracer)
                 if isinstance(newLabels, str):
@@ -196,4 +196,4 @@ def removeFigure(user: User):
         Logger.log("ARTEFACT REMOVEFIGURE ERROR: Failed to save artefact {} after removing figure ID: {}".format(artefactID, figureID))
         return JSONRes.ambiguousError()
 
-    return JSONRes.new(200, f"Figure removed successfully.")
+    return JSONRes.new(200, "Figure removed successfully.")
