@@ -22,7 +22,7 @@ def sessionCheckDebug(func):
     return wrapper_sessionCheckDebug
 
 
-def checkSession(_func=None, *, strict=False, provideUser=False):
+def checkSession(_func=None, *, strict=False, provideUser=False, requireSuperuser=False):
     def decorator_checkSession(func):
         @functools.wraps(func)
         @debug
@@ -86,6 +86,9 @@ def checkSession(_func=None, *, strict=False, provideUser=False):
                     Logger.log("CHECKSESSION ERROR: Failed to process session expiration status. Error: {}".format(e))
                     return handleReturn(res=JSONRes.invalidSession(), reason="Exception in session expiration: {}.".format(e))
             
+            if user and requireSuperuser and user.superuser != True:
+                return handleReturn(res=JSONRes.unauthorised(), reason="Superuser privileges required.")
+            
             # Let handleReturn handle the success case
             return handleReturn(res=JSONRes.new(200, "Session verified."), reason="Session valid.", user=user)
         
@@ -95,19 +98,3 @@ def checkSession(_func=None, *, strict=False, provideUser=False):
         return decorator_checkSession
     else:
         return decorator_checkSession(_func)
-
-def requireSuperuser(func):
-    """Examine how the session was checked."""
-    @functools.wraps(func)
-    @debug
-    def wrapper_requireSuperuser(user: User, *args, **kwargs):
-        if not isinstance(user, User):
-            Logger.log("REQUIRESUPERUSER WARNING: 'user' is not a valid User object. Returning unauthorised response as contingency.")
-            return JSONRes.unauthorised()
-        
-        if not user.superuser:
-            return JSONRes.unauthorised()
-        
-        return func(user, *args, **kwargs)
-    
-    return wrapper_requireSuperuser

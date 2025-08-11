@@ -431,6 +431,7 @@ class Universal:
     version = None
     store = {}
     MAX_FILE_SIZE = 10 * 1024 * 1024
+    localisationOffset = 480
     device = os.environ.get(
         "DEVICE",
         "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -475,16 +476,25 @@ class Universal:
             return Universal.device
     
     @staticmethod
-    def utcNow():
-        return datetime.datetime.now(datetime.timezone.utc)
+    def utcNow(localisedTo: int=None):
+        if localisedTo != None:
+            return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=localisedTo)
+        else:
+            return datetime.datetime.now(datetime.timezone.utc)
     
     @staticmethod
-    def utcNowString():
-        return datetime.datetime.now(datetime.timezone.utc).isoformat()
+    def utcNowString(localisedTo: int=None):
+        if localisedTo != None:
+            return (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=localisedTo)).isoformat()
+        else:
+            return datetime.datetime.now(datetime.timezone.utc).isoformat()
     
     @staticmethod
-    def fromUTC(utcString):
-        return datetime.datetime.fromisoformat(utcString)
+    def fromUTC(utcString, localisedTo: int=None):
+        if localisedTo != None:
+            return datetime.datetime.fromisoformat(utcString) + datetime.timedelta(minutes=localisedTo)
+        else:
+            return datetime.datetime.fromisoformat(utcString)
         
 class Logger:
     file = "logs.txt"
