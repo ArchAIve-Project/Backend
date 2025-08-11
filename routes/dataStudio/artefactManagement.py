@@ -24,6 +24,34 @@ artBP = Blueprint('artefact', __name__, url_prefix="/artefact")
 )
 @checkSession(strict=True, provideUser=True)
 def update(user: User):
+    """
+    Update artefact metadata and related fields.
+
+    This endpoint updates the artefact's basic info and metadata.  
+    For MM-type metadata, if the English text changes, it triggers NER labelling,  
+    and attempts to update NER labels. If NER labelling fails, the update still succeeds  
+    but returns a partial success status.
+
+    If summary or caption is updated without a provided description,  
+    the artefact description is auto-generated as a truncated preview.
+
+    Args:
+        user (User): The authenticated user making the request.
+
+    Request JSON Parameters:
+        artefactID (str): ID of the artefact to update (required).
+        name (str): New name of the artefact (optional).
+        tradCN (str): Traditional Chinese metadata (optional, MM only).
+        simplifiedCN (str): Simplified Chinese metadata (optional, MM only).
+        english (str): English metadata text (optional, MM only).
+        summary (str): Summary metadata (optional, MM only).
+        caption (str): Caption metadata (optional, HF only).
+        addInfo (str): Additional info metadata (optional, HF only).
+
+    Returns:
+        JSONRes with status code indicating success, partial success (207), or failure.
+    """
+    
     artefactID: str = request.json.get("artefactID")
     
     art = None
@@ -123,6 +151,23 @@ def update(user: User):
 )
 @checkSession(strict=True, provideUser=True)
 def removeFigure(user: User):
+    """
+    Remove a specific figure ID from the human figure artefact's metadata.
+
+    This endpoint removes a figure ID from the `figureIDs` list of a human figure (HF) artefact's metadata.  
+    It verifies the artefact type, ensures the figure ID exists, removes it, and saves the artefact.
+
+    Args:
+        user (User): The authenticated user making the request.
+
+    Request JSON Parameters:
+        artefactID (str): ID of the artefact to modify (required).
+        figureID (str): The figure ID to remove from the artefact's metadata (required).
+
+    Returns:
+        JSONRes indicating success or the nature of any failure.
+    """
+    
     artefactID: str = request.json.get("artefactID")
     figureID: str = request.json.get("figureID")
     
