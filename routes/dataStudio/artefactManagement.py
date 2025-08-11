@@ -113,3 +113,42 @@ def update(user: User):
         return JSONRes.new(207, "Metadata updated successfully, but NER labelling failed.")
     
     return JSONRes.new(200, "Information updated successfully.")
+
+@artBP.route('/removeFigure', methods=['POST'])
+@checkAPIKey
+@jsonOnly
+@enforceSchema(
+    ("artefactID", str),
+    ("figureID", str)
+)
+@checkSession(strict=True, provideUser=True)
+def removeFigure(user: User):
+    artefactID: str = request.json.get("artefactID")
+    figureID: str = request.json.get("figureID")
+    
+    art = None
+    try:
+        art = Artefact.load(artefactID)
+    except Exception as e:
+        Logger.log("ARTEFACT UPDATE ERROR: Failed to load artefact {}: {}".format(artefactID, e))
+        return JSONRes.ambiguousError()
+    
+    if not art.metadata.isHF():
+        return JSONRes.new(400, "Target artefact is not a human figure")
+    
+    if not art.metadata.raw.figureIDs:
+        return JSONRes.new(400, "Target artefact does not have any human figure information to remove.")
+    
+    if figureID not in art.metadata.raw.figureIDs:
+        return JSONRes.new(404, "Figure not found in artefact metadata.")
+    
+    art.metadata.raw.figureIDs.remove(figureID)
+    
+    try:
+        art.save()
+        user.newLog("Artefact {} Update".format(artefactID), "Figure {} removed.".format(figureID))
+    except Exception as e:
+        Logger.log("ARTEFACT REMOVEFIGURE ERROR: Failed to save artefact {} after removing figure ID: {}".format(artefactID, figureID))
+        return JSONRes.ambiguousError()
+
+    return JSONRes.new(200, f"Figure removed successfully.")
