@@ -165,11 +165,8 @@ def confirmBatch(user: User):
 
     # Find the specific batch
     batch = next((b for b in batches if b.id == batchID), None)
-    if batch is None:
-        return JSONRes.new(404, "Batch not found.")
-
     if not isinstance(batch, Batch):
-        raise Exception("Unexpected response in loading batch; error: {}".format(batch))
+        return JSONRes.new(404, "Batch not found.")
 
     if batch.stage != Batch.Stage.UPLOAD_PENDING:
         return JSONRes.new(400, "Batch stage is not upload pending.")
