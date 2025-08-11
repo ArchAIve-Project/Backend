@@ -11,7 +11,7 @@ class Artefact(DIRepresentable):
     Artefacts contain metadata and are associated with stored files. This class handles the creation,
     persistence, file management, and metadata binding of artefact objects.
     """
-    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', description: str=None, public: bool = False, created: str=None, artType: str | None = None, metadataLoaded: bool=True, id: str = None):
+    def __init__(self, name: str, image: str, metadata: 'Metadata | Dict[str, Any] | None', description: str=None, public: bool = False, created: str=None, artType: str | None=None, metadataLoaded: bool=True, id: str = None):
         """
         Initializes a new Artefact instance.
 
