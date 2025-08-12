@@ -7,7 +7,7 @@ from schemas import Artefact, User
 from NERPipeline import NERPipeline
 from addons import ArchSmith, ASReport
 
-artBP = Blueprint('artefact', __name__, url_prefix="/artefact")
+artBP = Blueprint('artefact', __name__, url_prefix="/studio/artefact")
 
 @artBP.route('/update', methods=['POST'])
 @checkAPIKey
