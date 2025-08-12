@@ -17,7 +17,7 @@ class DataImportProcessor:
         job.start()
         job.save()
         
-        targetBatchArtefacts = [x for x in batch.artefacts.values() if x.stage == Batch.Stage.UNPROCESSED]
+        targetBatchArtefacts = [x for x in batch.artefacts.values() if x.stage == BatchArtefact.Status.UNPROCESSED]
         
         if len(targetBatchArtefacts) == 0:
             Logger.log("DATAIMPORT PROCESSBATCH: Finished as no unprocessed artefacts found in batch '{}'.".format(batch.id))
@@ -53,21 +53,25 @@ class DataImportProcessor:
             
             chunk_i += 1
         
-        while not all(x.stage == Batch.Stage.PROCESSED for x in targetBatchArtefacts):
+        while not all(x.stage == BatchArtefact.Status.PROCESSED for x in targetBatchArtefacts):
             if (time.time() - start) > maxLife:
-                Logger.log("DATAIMPORT PROCESSBATCH: Max life exceeded for batch '{}'. Stopping processing with {} processed out of {}.".format(batch.id, sum(x.stage == Batch.Stage.PROCESSED for x in targetBatchArtefacts), len(targetBatchArtefacts)))
+                Logger.log("DATAIMPORT PROCESSBATCH: Max life exceeded for batch '{}'. Stopping processing with {} processed out of {}.".format(batch.id, sum(x.stage == BatchArtefact.Status.PROCESSED for x in targetBatchArtefacts), len(targetBatchArtefacts)))
                 job.end()
                 job.save()
                 return
             
             job.fetchLatestStatus() # Refresh the job status. By memory reference, chunks will also terminate if the job is cancelled.
             if job.status == BatchProcessingJob.Status.CANCELLED:
-                Logger.log("DATAIMPORT PROCESSBATCH: Job cancelled for batch '{}'. Stopping processing with {} processed out of {}.".format(batch.id, sum(x.stage == Batch.Stage.PROCESSED for x in targetBatchArtefacts), len(targetBatchArtefacts)))
+                Logger.log("DATAIMPORT PROCESSBATCH: Job cancelled for batch '{}'. Stopping processing with {} processed out of {}.".format(batch.id, sum(x.stage == BatchArtefact.Status.PROCESSED for x in targetBatchArtefacts), len(targetBatchArtefacts)))
                 return
             
             time.sleep(1)
         
         Logger.log("DATAIMPORT PROCESSBATCH: Finished processing batch '{}' with {} target artefacts.".format(batch.id, len(targetBatchArtefacts)))
+        
+        batch.stage = Batch.Stage.PROCESSED
+        batch.save()
+
         job.end()
         job.save()
         return
@@ -96,7 +100,7 @@ class DataImportProcessor:
         batchArt.processedTime = Universal.utcNowString()
         batchArt.processedDuration = '{:.3f}'.format(time.time() - processingStartTime)
         batchArt.processingError = errorMsg
-        batchArt.stage = Batch.Stage.PROCESSED
+        batchArt.stage = BatchArtefact.Status.PROCESSED
         batchArt.artefact = None # Clear the artefact reference to free memory
         batchArt.save()
         
@@ -105,7 +109,7 @@ class DataImportProcessor:
     
     @staticmethod
     def processItem(batchArtefact: BatchArtefact, offloadArtefactPostProcessing: bool=True, scheduleNextProcess=None):
-        if batchArtefact.stage != Batch.Stage.UNPROCESSED:
+        if batchArtefact.stage != BatchArtefact.Status.UNPROCESSED:
             Logger.log("DATAIMPORT PROCESSITEM WARNING: Processing Artefact '{}' of batch '{}' despite stage of '{}'.".format(batchArtefact.artefactID, batchArtefact.batchID, batchArtefact.stage.value))
         
         processingStartTime = time.time()

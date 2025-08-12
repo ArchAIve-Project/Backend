@@ -276,7 +276,7 @@ Reset Key: {} />""".format(
         """Saves the user to the database.
 
         Args:
-            checkSuperuserIntegrity (bool, optional): Whether to check for superuser integrity. Defaults to True.
+            checkIntegrity (bool, optional): Whether to check for user integrity. Defaults to True.
 
         Raises:
             Exception: If an error occurs during saving.
@@ -287,20 +287,20 @@ Reset Key: {} />""".format(
         """
         
         if checkIntegrity:
-            allUsers = User.load()
-            if not isinstance(allUsers, list):
-                raise Exception("USER SAVE ERROR: Unexpected User load response format; response: {}".format(allUsers))
-            
-            for user in allUsers:
-                if user.id != self.id:
-                    if self.superuser == True and user.superuser == True:
-                        raise Exception("USER SAVE ERROR: Cannot save superuser user when another superuser already exists.")
-                    elif user.username == self.username:
-                        raise Exception("USER SAVE ERROR: Cannot save when user with username '{}' already exists.".format(self.username))
-                    elif user.email == self.email:
-                        raise Exception("USER SAVE ERROR: Cannot save when user with email '{}' already exists.".format(self.email))
-                    elif user.authToken == self.authToken and isinstance(self.authToken, str) and len(self.authToken) > 0:
-                        raise Exception("USER SAVE ERROR: Cannot save when user with authToken '{}' already exists.".format(self.authToken))
+            conflictingUser: None | User = User.load(username=self.username, email=self.email, authToken=self.authToken, superuser=self.superuser)
+            if isinstance(conflictingUser, User) and conflictingUser.id != self.id:
+                violation = None
+                if conflictingUser.username == self.username:
+                    violation = "Username"
+                elif conflictingUser.email == self.email:
+                    violation = "Email"
+                elif conflictingUser.authToken == self.authToken:
+                    violation = "Auth Token"
+                elif conflictingUser.superuser and self.superuser:
+                    violation = "Superuser Status"
+                
+                if violation:
+                    raise Exception("USER SAVE ERROR: Integrity violation: {}".format(violation))
         
         convertedData = self.represent()
         return DI.save(convertedData, self.originRef)
@@ -402,7 +402,7 @@ Reset Key: {} />""".format(
         return u
     
     @staticmethod
-    def load(id: str=None, username: str=None, email: str=None, authToken: str=None, withLogs: bool=False) -> 'User | List[User] | None':
+    def load(id: str=None, username: str=None, email: str=None, authToken: str=None, superuser: bool | None=None, withLogs: bool=False) -> 'User | List[User] | None':
         """Loads a user from the database.
 
         Args:
@@ -410,6 +410,7 @@ Reset Key: {} />""".format(
             username (str, optional): The username of the user to load. Defaults to None.
             email (str, optional): The email of the user to load. Defaults to None.
             authToken (str, optional): The auth token of the user to load. Defaults to None.
+            superuser (bool | None, optional): To retrieve the first superuser available. Defaults to None.
             withLogs (bool, optional): Optionally load audit logs into a convenient `logs` attribute in the model. Defaults to False. Warning: Might be memory intensive if True.
 
         Raises:
@@ -446,7 +447,7 @@ Reset Key: {} />""".format(
                 if isinstance(data[id], dict):
                     users[id] = User.rawLoad(data[id], id)
 
-            if username == None and email == None and authToken == None:
+            if username == None and email == None and authToken == None and superuser != True:
                 if withLogs:
                     for u in users.values():
                         u.getAuditLogs()
@@ -465,6 +466,9 @@ Reset Key: {} />""".format(
                 elif authToken != None and user.authToken == authToken:
                     target = user
                     break
+                elif superuser == True and user.superuser == True:
+                    target = user
+                    break
             
             if target:
                 if withLogs:
@@ -474,28 +478,10 @@ Reset Key: {} />""".format(
                 return None
     
     @staticmethod
-    def getSuperuser() -> 'User | None':
-        """ Retrieves the superuser from the database.
-
-        Raises:
-            Exception: If more than one superuser exists.
-            Exception: If an error occurs during loading.
-
-        Returns: `User | None`: The superuser if found, otherwise None.
-        """
+    def getSuperuser():
+        """Same as `load(superuser=True)`."""
         
-        allUsers = User.load()
-        if not isinstance(allUsers, list):
-            raise Exception("USER GETSUPERUSER ERROR: Unexpected User load response format; response: {}".format(allUsers))
-        
-        su = None
-        for user in allUsers:
-            if user.superuser == True:
-                if su is not None:
-                    raise Exception("USER GETSUPERUSER ERROR: More than one superuser found; cannot determine which to return.")
-                su = user
-
-        return su
+        return User.load(superuser=True)
 
     @staticmethod
     def ref(id: str) -> Ref:

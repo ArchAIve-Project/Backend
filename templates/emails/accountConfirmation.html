@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your New Account | ArchAIve</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&display=swap');
+
+        body {
+            font-family: 'Lexend', sans-serif;
+            background-color: #f5f5f5;
+            color: black;
+            padding: 20px;
+            font-size: larger;
+        }
+    </style>
+</head>
+<body>
+    <img src="https://raw.githubusercontent.com/ArchAIve-Project/.github/refs/heads/main/logo.svg" alt="ArchAIve Logo" height="100px" width="100px" style="border-radius: 20px;">
+    <h2>Your New Account</h2>
+    <p>Dear {{ fname }},</p>
+    <p><strong>歡迎來到 ArchAIve!</strong></p>
+    <p>ArchAIve is an AI-powered artefact digitisation platform employed by your organisation.</p>
+    <p>The system administrator from your organisation has created an account for you to access the system's services!</p>
+    <br>
+    <p>To access your account, please login <a href="{{ loginURL }}">here</a> with the following credentials:</p>
+    <p><strong>Username:</strong> {{ username }}</p>
+    <p><strong>Password:</strong> {{ password }}</p>
+    <br>
+    <p>Should you have any questions/queries, please contact the system administrator.</p>
+    <p>A very warm welcome to ArchAIve; we hope you have a pleasant experience interacting with the system's innovative features.</p>
+    <br>
+    <p>謝謝，祝您有個愉快的一天</p>
+    <br>
+    <p>This is a system generated email delivered by ArchAIve.</p>
+    <p>{{ copyright }}</p>
+</body>
+</html>

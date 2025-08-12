@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Alert | ArchAIve</title>
+    <title>Admin Password Reset | ArchAIve</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&display=swap');
 
@@ -20,12 +20,16 @@
 
 <body>
     <img src="https://raw.githubusercontent.com/ArchAIve-Project/.github/refs/heads/main/logo.svg" alt="ArchAIve Logo" height="100px" width="100px" style="border-radius: 20px;">
-    <h2>New login detected</h2>
+    <h2>Your password has been reset</h2>
     <p>Dear {{ fname }},</p>
-    <p>We noticed a login to your account on {{ lastLogin }}. If this was you, no further action is needed.</p>
-    <p>If you did not authorize this login, please secure your account immediately by changing your password and reviewing your account activity.</p>
+    <p>A system admin has reset your password.</p>
+    <p>Please login with your new password: <strong>{{ newPwd }}</strong></p>
     <br>
-    <p>Than you for being a valued user of ArchAIve.</p>
+    <p>System admins typically carry out this action in the event you've forgotten your password, or due to some other security issue.</p>
+    <p>Should you require more clarification or assistance, please contact the system administrator.</p>
+    <p>It is recommended that you change your password in your next login session for your convenience.</p>
+    <br>
+    <p>Thank you for being a valued user of ArchAIve.</p>
     <br>
     <p>This is a system generated email delivered by ArchAIve.</p>
     <p>{{ copyright }}</p>
