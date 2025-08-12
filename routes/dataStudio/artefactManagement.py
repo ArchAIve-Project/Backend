@@ -14,13 +14,13 @@ artBP = Blueprint('artefact', __name__, url_prefix="/artefact")
 @jsonOnly
 @enforceSchema(
     ("artefactID", str),
-    ("name", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 100, None),
+    ("name", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 25, None),
     ("tradCN", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 1000, None),
     ("simplifiedCN", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 1000, None),
     ("english", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 2000, None),
     ("summary", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 2000, None),
     ("caption", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 1000, None),
-    ("addInfo", lambda x: isinstance(x, str) and 0 <= len(x.strip()) <= 3000, None),
+    ("addInfo", lambda x: isinstance(x, str) and len(x.strip()) <= 3000, None),
 )
 @checkSession(strict=True, provideUser=True)
 def update(user: User):
