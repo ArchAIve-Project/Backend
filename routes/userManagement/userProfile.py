@@ -21,18 +21,18 @@ def info(user: User):
 @enforceSchema(
     Param(
         "username",
-        lambda x: isinstance(x, str) and len(x) >= 3 and x.isalpha(), None,
-        invalidRes=JSONRes.new(400, "Username must be at least 3 characters, without any spaces or special characters.", ResType.USERERROR, serialise=False)
+        lambda x: isinstance(x, str) and len(x) >= 3 and x.isalnum() and len(x) <= 12, None,
+        invalidRes=JSONRes.new(400, "Username must be between 3 and 12 characters, without any spaces or special characters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "fname",
-        lambda x: isinstance(x, str) and len(x) >= 2 and x.replace(' ', '').isalpha(), None,
-        invalidRes=JSONRes.new(400, "First name must be at least 2 characters and have only letters.", ResType.USERERROR, serialise=False)
+        lambda x: isinstance(x, str) and len(x) >= 2 and x.replace(' ', '').isalpha() and len(x) <= 15, None,
+        invalidRes=JSONRes.new(400, "First name must be between 2 and 15 characters and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "lname",
-        lambda x: isinstance(x, str) and len(x) >= 1 and x.replace(' ', '').isalpha(), None,
-        invalidRes=JSONRes.new(400, "Last name must be at least 1 character and have only letters.", ResType.USERERROR, serialise=False)
+        lambda x: isinstance(x, str) and len(x) >= 1 and x.replace(' ', '').isalpha() and len(x) <= 15, None,
+        invalidRes=JSONRes.new(400, "Last name must be between 1 and 15 characters and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "contact",
@@ -45,6 +45,11 @@ def info(user: User):
         invalidRes=JSONRes.new(400, "Invalid email.", ResType.USERERROR, serialise=False)
     ),
     Param(
+        "role",
+        lambda x: isinstance(x, str) and len(x.strip()) >= 2 and len(x.strip()) <= 20, None,
+        invalidRes=JSONRes.new(400, "Role must be between 2 and 20 characters.", ResType.USERERROR, serialise=False)
+    ),
+    Param(
         "userID",
         str, None,
         invalidRes=JSONRes.new(400, "User ID must be a valid string if provided.", ResType.ERROR, serialise=False)
@@ -52,6 +57,8 @@ def info(user: User):
 )
 @checkSession(strict=True, provideUser=True)
 def update(user: User):
+    superuserPrivilege = user.superuser == True
+    
     # Carry out authorisation check. Superusers can update any user, others can only update their own profile.
     userID: str = request.json.get('userID', None)
     if userID and userID != user.id:
@@ -75,6 +82,7 @@ def update(user: User):
     lname = request.json.get('lname', user.lname).strip()
     contact = request.json.get('contact', user.contact).replace(' ', '').strip()
     email = request.json.get('email', user.email).strip()
+    role = request.json.get('role', user.role).strip()
     
     # Update user details
     changes = []
@@ -93,6 +101,9 @@ def update(user: User):
     if email != user.email:
         user.email = email
         changes.append("Email")
+    if role != user.role and superuserPrivilege:
+        user.role = role
+        changes.append("Role")
     
     if changes:
         try:
@@ -109,8 +120,8 @@ def update(user: User):
             
             Logger.log("USERPROFILE UPDATE ERROR: Failed to save user '{}' after updating details; error: {}".format(user.id, e))
             return JSONRes.ambiguousError()
-        
-        user.newLog("Profile Update", "{} details updated.".format(", ".join(changes)))
+
+        user.newLog("Profile Update", "{} details updated.{}".format(", ".join(changes), " (Admin)" if superuserPrivilege and user.superuser != True else ""))
     else:
         return JSONRes.new(200, "No changes made to the profile.")
     

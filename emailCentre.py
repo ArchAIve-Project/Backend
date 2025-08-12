@@ -1,3 +1,4 @@
+from services import Logger
 from emailer import Emailer
 from emailTemplates import *
 
@@ -8,6 +9,9 @@ class EmailCentre:
     
     @staticmethod
     def dispatch(template: EmailTemplate):
+        output = False
         if Emailer.servicesEnabled:
-            return Emailer.sendEmail(*template.generateDispatchParameters())
-        return False
+            output = Emailer.sendEmail(*template.generateDispatchParameters())
+        
+        Logger.log("EMAILCENTRE: Dispatch finished with result: {}".format(output))
+        return output
