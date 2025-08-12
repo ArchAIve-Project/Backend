@@ -58,7 +58,7 @@ def update(user: User):
     try:
         art = Artefact.load(artefactID)
     except Exception as e:
-        Logger.log("ARTEFACT UPDATE ERROR: Failed to load artefact {}: {}".format(artefactID, e))
+        Logger.log("ARTEFACTMANAGEMENT UPDATE ERROR: Failed to load artefact {}: {}".format(artefactID, e))
         return JSONRes.ambiguousError()
     
     if not art.metadata:
@@ -102,8 +102,11 @@ def update(user: User):
                     art.metadata.raw.nerLabels = newLabels
                     changes.append('NER Labels')
             except Exception as e:
-                tracer.addReport(ASReport("ARTEFACT UPDATE ERROR", "Exception during NER prediction: {}".format(e)))
+                tracer.addReport(ASReport("ARTEFACTMANAGEMENT UPDATE ERROR", "Exception during NER prediction: {}".format(e)))
                 nerFailed = True
+                
+            tracer.end()
+            ArchSmith.persist()
             
         if art.metadata.raw.summary != summary:
             art.metadata.raw.summary = summary
@@ -129,11 +132,11 @@ def update(user: User):
             
         if art.metadata.raw.addInfo != addInfo:
             art.metadata.raw.addInfo = addInfo
-            changes.append('AddInfo')
+            changes.append('Additional Information')
     
     if len(changes) > 0:
         art.save()
-        user.newLog("Artefact {} Update".format(artefactID), ", ".join(changes) + " updated.")
+        user.newLog("Artefact {} Update".format(art.name), ", ".join(changes) + " updated.")
     else:
         return JSONRes.new(200, "No changes made to the artefact.")
     
@@ -175,10 +178,10 @@ def removeFigure(user: User):
     try:
         art = Artefact.load(artefactID)
     except Exception as e:
-        Logger.log("ARTEFACT UPDATE ERROR: Failed to load artefact {}: {}".format(artefactID, e))
+        Logger.log("ARTEFACTMANAGEMENT UPDATE ERROR: Failed to load artefact {}: {}".format(artefactID, e))
         return JSONRes.ambiguousError()
     
-    if not art.metadata.isHF():
+    if art.artType != 'hf':
         return JSONRes.new(400, "Target artefact is not a human figure")
     
     if not art.metadata.raw.figureIDs:
@@ -190,10 +193,10 @@ def removeFigure(user: User):
     art.metadata.raw.figureIDs.remove(figureID)
     
     try:
-        art.save()
-        user.newLog("Artefact {} Update".format(artefactID), "Figure {} removed.".format(figureID))
+        art.metadata.save()
+        user.newLog("Artefact {} Update".format(art.name), "Figure {} removed.".format(figureID))
     except Exception as e:
-        Logger.log("ARTEFACT REMOVEFIGURE ERROR: Failed to save artefact {} after removing figure ID: {}".format(artefactID, figureID))
+        Logger.log("ARTEFACTMANAGEMENT REMOVEFIGURE ERROR: Failed to save artefact {} after removing figure ID: {}".format(artefactID, figureID))
         return JSONRes.ambiguousError()
 
     return JSONRes.new(200, "Figure removed successfully.")
