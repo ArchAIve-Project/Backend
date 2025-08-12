@@ -14,7 +14,7 @@ Instructions:
 Whatever your decision, you must provide a very brief, specific reason for your choice.
 
 Artefact and Category Information:
-Existing categories (<Name> - <Description> format):
+Existing categories (<Name>: <Description> format):
 {existingCategories}
 
 The artefact to categorize is as follows:
