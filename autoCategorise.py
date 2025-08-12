@@ -3,6 +3,8 @@ from services import Universal, Logger
 from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant
 from schemas import Batch, BatchArtefact, Artefact, Category, CategoryArtefact
 
+LLMInterface.initDefaultClients()
+
 class CategorisationPrompt:
     text = None
     
@@ -35,8 +37,8 @@ class AutoCategoriser:
     @staticmethod
     def getLLMCategorisation(art: Artefact, categories: List[Category]) -> None:
         cont = InteractionContext(
-            provider=LMProvider.QWEN,
-            variant=LMVariant.QWEN_VL_PLUS
+            provider=LMProvider.OPENAI,
+            variant=LMVariant.GPT_5_NANO
         )
         
         if not CategorisationPrompt.text:
@@ -54,7 +56,7 @@ class AutoCategoriser:
         )
 
         out = LLMInterface.engage(cont)
-
+        print(out)
         return out.content
     
     @staticmethod
