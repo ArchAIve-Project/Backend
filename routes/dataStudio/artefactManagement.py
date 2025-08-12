@@ -57,6 +57,9 @@ def update(user: User):
     art = None
     try:
         art = Artefact.load(artefactID)
+        
+        if not isinstance(art, Artefact):
+            return JSONRes.new(404, "Artefact not found.")
     except Exception as e:
         Logger.log("ARTEFACTMANAGEMENT UPDATE ERROR: Failed to load artefact {}: {}".format(artefactID, e))
         return JSONRes.ambiguousError()
