@@ -823,7 +823,7 @@ class LLMInterface:
             
             # Get response after tool invocation
             try:
-                response = client.chat.completions.create(**context.promptKwargs())
+                response = client.chat.completions.create(**context.promptKwargs(), timeout=30)
             except Exception as e:
                 return "ERROR: Failed to generate post-tool chat completion; error: {}".format(e)
             
