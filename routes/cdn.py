@@ -408,7 +408,7 @@ def getCollectionMemberIDs(colID):
         # Try Batch
         batch = Batch.load(id=colID)
         if isinstance(batch, Batch):
-            return JSONRes.new(200, "Retrieval success.", data=batch.represent())
+            return JSONRes.new(200, "Retrieval success.", data=list(batch.artefacts.keys()))
         
         # None found
         return JSONRes.new(404, "Collection not found.")
