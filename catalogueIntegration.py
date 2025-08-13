@@ -118,5 +118,12 @@ class HFCatalogueIntegrator:
                 )
             )
         
+        tracer.addReport(
+            ASReport(
+                "HFCATALOGUEINTEGRATOR INTEGRATE",
+                "Completed integration procedure for batch {}.".format(batch.id)
+            )
+        )
+        
         tracer.end()
         ArchSmith.persist()
