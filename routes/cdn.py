@@ -398,12 +398,12 @@ def getCollectionMemberIDs(colID):
         # Try Book
         book = Book.load(id=colID)
         if isinstance(book, Book):
-            return JSONRes.new(200, "Retrieval success.", data=book.represent())
+            return JSONRes.new(200, "Retrieval success.", data=book.mmIDs)
         
         # Try Category
         cat = Category.load(id=colID)
         if isinstance(cat, Category):
-            return JSONRes.new(200, "Retrieval success.", data=cat.represent())
+            return JSONRes.new(200, "Retrieval success.", data=list(cat.members.keys()))
         
         # Try Batch
         batch = Batch.load(id=colID)
@@ -415,6 +415,153 @@ def getCollectionMemberIDs(colID):
     
     except Exception as e:
         Logger.log(f"CDN GETCOLLECTIONMEMBERIDS ERROR: Failed to load collection members - {e}")
+        return JSONRes.ambiguousError()
+    
+@cdnBP.route('/collection/<colID>')
+@checkSession(strict=True)
+@cache(ttl=60, lsInvalidator='cdnCatalogueInvalidator')
+def getCollectionDetails(colID):
+    """
+    Returns detailed information about a collection (book, category, or batch) including all its member artefacts.
+    
+    This endpoint:
+    - Attempts to load the collection as each type (book, category, batch)
+    - Loads all artefacts for resolving member references
+    - Returns the collection details with full artefact information
+    
+    Response Format (varies by collection type):
+    - For Books:
+    ```json
+    {
+        "type": "book",
+        "id": "...",
+        "title": "...",
+        "subtitle": "...",
+        "mmArtefacts": [
+            { "id": ..., "name": ..., "description": ..., "image": ..., ... },
+            ...
+        ]
+    }
+    ```
+    - For Categories:
+    ```json
+    {
+        "type": "category",
+        "id": "...",
+        "name": "...",
+        "description": "...",
+        "members": [
+            { "id": ..., "name": ..., "image": ..., "description": ..., ... },
+            ...
+        ]
+    }
+    ```
+    - For Batches:
+    ```json
+    {
+        "type": "batch",
+        "id": "...",
+        ... (other batch fields),
+        "artefacts": [
+            { "id": ..., "name": ..., ... (other artefact fields) },
+            ...
+        ]
+    }
+    ```
+    """
+    
+    # First load all artefacts for reference
+    try:
+        all_artefacts = Artefact.load(includeMetadata=False) or []
+        artefactMap = {art.id: art for art in all_artefacts}
+    except Exception as e:
+        Logger.log(f"CDN GETCOLLECTIONDETAILS ERROR: Failed to load artefacts - {e}")
+        return JSONRes.ambiguousError()
+    
+    # Try loading as each collection type
+    try:
+        # Try Book
+        book = Book.load(id=colID)
+        if isinstance(book, Book):
+            mm_details = []
+            for mmID in getattr(book, 'mmIDs', []):
+                art = artefactMap.get(mmID)
+                if art and art.artType == "mm":
+                    mm_details.append({
+                        "id": art.id,
+                        "name": art.name,
+                        "description": art.description,
+                        # Include other relevant mm artefact fields
+                        "image": getattr(art, "image", None)
+                    })
+            
+            return JSONRes.new(200, "Retrieval success.", data={
+                "type": "book",
+                "id": book.id,
+                "title": book.title,
+                "subtitle": getattr(book, "subtitle", ""),
+                "mmArtefacts": mm_details
+            })
+        
+        # Try Category
+        cat = Category.load(id=colID)
+        if isinstance(cat, Category):
+            members = []
+            for artefact_id, _ in getattr(cat, 'members', {}).items():
+                art = artefactMap.get(artefact_id)
+                if art and art.artType == "hf":
+                    members.append({
+                        "id": art.id,
+                        "name": art.name,
+                        "image": art.image,
+                        "description": art.description
+                    })
+            
+            return JSONRes.new(200, "Retrieval success.", data={
+                "type": "category",
+                "id": cat.id,
+                "name": cat.name,
+                "description": getattr(cat, "description", ""),
+                "members": members
+            })
+        
+        # Try Batch
+        batch = Batch.load(id=colID)
+        if isinstance(batch, Batch):
+            artefacts = []
+            for art_id in getattr(batch, 'artefactIDs', []):
+                art = artefactMap.get(art_id)
+                if art:
+                    artefact_data = {
+                        "id": art.id,
+                        "name": art.name,
+                        "artType": art.artType
+                    }
+                    # Include type-specific fields
+                    if art.artType == "hf":
+                        artefact_data.update({
+                            "image": art.image,
+                            "description": art.description
+                        })
+                    elif art.artType == "mm":
+                        artefact_data.update({
+                            "description": art.description
+                        })
+                    artefacts.append(artefact_data)
+            
+            return JSONRes.new(200, "Retrieval success.", data={
+                "type": "batch",
+                "id": batch.id,
+                # Include other batch fields as needed
+                "name": getattr(batch, "name", ""),
+                "description": getattr(batch, "description", ""),
+                "artefacts": artefacts
+            })
+        
+        return JSONRes.new(404, "Collection not found.")
+    
+    except Exception as e:
+        Logger.log(f"CDN GETCOLLECTIONDETAILS ERROR: Failed to load collection - {e}")
         return JSONRes.ambiguousError()
 
 @cdnBP.route('/artefactMetadata/<artID>')
