@@ -23,7 +23,7 @@ The artefact to categorize is as follows:
 - Additional Information: {artAddInfo}
 
 Output Format:
-Provide your response in one of the structured formats as below:
+Provide your response in one of the structured formats as below (no need to provide variant number):
 
 Variant 1 (existing category):
 CATEGORY: <Existing category name>

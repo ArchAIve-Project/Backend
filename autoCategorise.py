@@ -113,16 +113,10 @@ class AutoCategoriser:
             )
         )
         
-        print("PRE TRIALS")
-        print(cont)
-        
         out = None
         parsedOutput = None
         while tries > 0:
             out = LLMInterface.engage(cont)
-            
-            print("AFTER ENGAGE")
-            print(cont)
             
             if isinstance(out, str):
                 Logger.log("AUTOCATEGORISER GETLLMCATEGORISATION ERROR: Failed to categorise artefact '{}'; response: {}".format(art.id, out))
@@ -145,9 +139,9 @@ class AutoCategoriser:
             except Exception as e:
                 tracer.addReport(
                     ASReport(
-                        source="AUTOCATEGORISER GETLLMCATEGORISATION",
+                        source="AUTOCATEGORISER GETLLMCATEGORISATION WARNING",
                         message="Failed to parse LLM output for artefact '{}'; error: {}".format(art.id, e),
-                        extraData={"retries": tries}
+                        extraData={"retries": tries, "output": out.content}
                     )
                 )
                 tries -= 1
@@ -180,11 +174,132 @@ class AutoCategoriser:
             )
         )
         
-        print("POST TRIALS")
-        print(cont)
-        
         return parsedOutput
     
     @staticmethod
     def feed(art: Artefact, categories: List[Category], tracer: ASTracer):
-        return AutoCategoriser.getLLMCategorisation(art, categories, tracer)
+        result = AutoCategoriser.getLLMCategorisation(art, categories, tracer)
+        if not isinstance(result, dict):
+            tracer.addReport(
+                ASReport(
+                    source="AUTOCATEGORISER FEED ERROR",
+                    message="Valid result couldn't be obtained in LLM categorisation attempt for artefact {}.".format(art.id),
+                    extraData={"result": result}
+                )
+            )
+        
+        if result['variant'] in [1, 2]:
+            targetCategory = [x for x in categories if x.name == result['category']]
+            if not targetCategory:
+                tracer.addReport(
+                    ASReport(
+                        "AUTOCATEGORISER FEED ERROR",
+                        "No such category '{}' found based on LLM output.".format(result['category'])
+                    )
+                )
+                return None
+            
+            targetCategory = targetCategory[0]
+            reason = result.get('reason', None)
+            if not reason:
+                tracer.addReport(
+                    ASReport(
+                        "AUTOCATEGORISER FEED ERROR",
+                        "No reason provided in LLM output for artefact '{}'.".format(art.id)
+                    )
+                )
+                return None
+            
+            if art.id not in targetCategory.members:
+                targetCategory.add(art, reason)
+            else:
+                targetCategory.members[art.id].reason = reason
+            
+            changes = {}
+            revisedName = result.get('name_revised', None)
+            revisedDesc = result.get('desc_revised', None)
+            if revisedName:
+                if revisedName in [x.name for x in categories]:
+                    tracer.addReport(
+                        ASReport(
+                            "AUTOCATEGORISER FEED WARNING",
+                            "Revised category name '{}' already exists, will not update name.".format(revisedName),
+                            extraData={"reason": reason}
+                        )
+                    )
+                else:
+                    changes['categoryName'] = "{} -> {}".format(targetCategory.name, revisedName)
+                    targetCategory.name = revisedName
+            
+            if revisedDesc:
+                changes['categoryDesc'] = "{} -> {}".format(targetCategory.description, revisedDesc)
+                targetCategory.description = revisedDesc
+            
+            try:
+                targetCategory.save()
+            except Exception as e:
+                tracer.addReport(
+                    ASReport(
+                        "AUTOCATEGORISER FEED ERROR",
+                        "Failed to save category '{}' after updating artefact '{}'; error: {}".format(targetCategory.name, art.id, e)
+                    )
+                )
+                return None
+            
+            tracer.addReport(
+                ASReport(
+                    "AUTOCATEGORISER FEED",
+                    "Successfully categorised artefact '{}' to category with ID '{}' and name '{}'.".format(art.id, targetCategory.id, targetCategory.name),
+                    extraData={"artefactID": art.id, "categoryID": targetCategory.id, "changes": changes, "reason": reason}
+                )
+            )
+            return targetCategory.id
+        else:
+            newCatName = result.get('new_category', None)
+            newCatDesc = result.get('category_desc', None)
+            reason = result.get('reason', None)
+            
+            if not (newCatName and newCatDesc and reason):
+                tracer.addReport(
+                    ASReport(
+                        "AUTOCATEGORISER FEED ERROR",
+                        "Malformed data for variant 3 processing in categorisation for artefact '{}'.".format(art.id)
+                    )
+                )
+                return None
+            if newCatName in [x.name for x in categories]:
+                tracer.addReport(
+                    ASReport(
+                        "AUTOCATEGORISER FEED ERROR",
+                        "Category name '{}' already exists, will not create new category for variant 3 processing.".format(newCatName),
+                        extraData={"artefactID": art.id, "reason": reason}
+                    )
+                )
+                return None
+
+            newCategory = Category(
+                name=newCatName,
+                description=newCatDesc
+            )
+            
+            newCategory.add(art, reason)
+            
+            try:
+                newCategory.save()
+            except Exception as e:
+                tracer.addReport(
+                    ASReport(
+                        "AUTOCATEGORISER FEED ERROR",
+                        "Failed to save new category '{}' after adding artefact '{}'; error: {}".format(newCategory.name, art.id, e)
+                    )
+                )
+                return None
+            
+            tracer.addReport(
+                ASReport(
+                    "AUTOCATEGORISER FEED",
+                    "Successfully created new category '{}' with ID '{}' and assigned artefact '{}' as member.".format(newCategory.name, newCategory.id, art.id),
+                    extraData={"artefactID": art.id, "categoryID": newCategory.id, "reason": reason}
+                )
+            )
+            return newCategory.id
