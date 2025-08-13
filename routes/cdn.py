@@ -6,7 +6,7 @@ from typing import Dict, List
 from flask import Blueprint, send_file, make_response, redirect, request
 from utils import JSONRes, ResType
 from services import Logger
-from schemas import Category, Book, Artefact, Figure, User
+from schemas import Category, Book, Artefact, User, Batch
 from fm import FileManager, File
 from decorators import cache, timeit
 from sessionManagement import checkSession
@@ -382,6 +382,36 @@ def getAllCategoriesWithArtefacts():
         "categories": result,
         "books": bookList
     })
+    
+@cdnBP.route('/collectionMemberIDs/<colID>')
+@checkSession(strict=True)
+@cache
+def getCollectionMemberIDs(colID):
+    """
+    Returns all artefact IDs in the collection (book, category or batch).
+    """
+    try:
+        # Try Book
+        book = Book.load(id=colID)
+        if isinstance(book, Book):
+            return JSONRes.new(200, "Retrieval success.", data=book.represent())
+        
+        # Try Category
+        cat = Category.load(id=colID)
+        if isinstance(cat, Category):
+            return JSONRes.new(200, "Retrieval success.", data=cat.represent())
+        
+        # Try Batch
+        batch = Batch.load(id=colID)
+        if isinstance(batch, Batch):
+            return JSONRes.new(200, "Retrieval success.", data=batch.represent())
+        
+        # None found
+        return JSONRes.new(404, "Collection not found.")
+    
+    except Exception as e:
+        Logger.log(f"CDN GETCOLLECTIONMEMBERIDS ERROR: Failed to load collection members - {e}")
+        return JSONRes.ambiguousError()
 
 @cdnBP.route('/artefactMetadata/<artID>')
 @checkSession(strict=True)
