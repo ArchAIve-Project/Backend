@@ -109,10 +109,10 @@ class CCRPipeline:
         # Extract extension, normalize
         ext = os.path.splitext(image_path)[1].lower().replace('.', '')
         if ext not in ['jpg', 'jpeg', 'jpe', 'png']:
-            tracer.addReport(ASReport("CCRPIPELINE CHECKFILETYPE ERROR", f"File type of {ext} not supported."))
-            return f"ERROR: Unsupported image file type: .{ext}"
+            tracer.addReport(ASReport("CCRPIPELINE CHECKFILETYPE ERROR", "File type of {} not supported.".format(ext)))
+            return "ERROR: Unsupported image file type: .{}".format(ext)
 
-        imageFileType = f"image/{'jpeg' if ext in ['jpg', 'jpeg', 'jpe'] else 'png'}"
+        imageFileType = "image/{0}".format('jpeg' if ext in ['jpg', 'jpeg', 'jpe'] else 'png')
         return imageFileType
 
     @staticmethod
@@ -219,8 +219,8 @@ class CCRPipeline:
         # Read the image in color
         img = cv2.imread(image_path, cv2.IMREAD_COLOR)
         if img is None:
-            tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE ERROR", f"Could not read image: {image_path}"))
-            return f"Could not read image: {image_path}"
+            tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE ERROR", "Could not read image: {}".format(image_path)))
+            return "Could not read image: {}".format(image_path)
 
         # Convert the image to grayscale and apply binarization (inverse + Otsu)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -305,14 +305,14 @@ class CCRPipeline:
                     pad_errors.append(str(e))
 
         # Report how many characters were padded and any errors that occurred
-        summary_msg = f"{padded_count} images padded to square."
+        summary_msg = "{} images padded to square.".format(padded_count)
         if pad_errors:
-            summary_msg += f" {len(pad_errors)} failed with errors: {', '.join(pad_errors[:3])}"
+            summary_msg += " {} failed with errors: {}".format(len(pad_errors), ', '.join(pad_errors[:3]))
             if len(pad_errors) > 3:
-                summary_msg += f", and {len(pad_errors) - 3} more."
+                summary_msg += ", and {} more.".format(len(pad_errors) - 3)
 
         tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE PADTOSQUARE", summary_msg))
-        tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE", f"Segmented image: {image_path}"))
+        tracer.addReport(ASReport("CCRPIPELINE SEGMENTIMAGE", "Segmented image: {}".format(image_path)))
 
         return char_images
 
@@ -361,7 +361,7 @@ class CCRPipeline:
 
         total = sum(len(chars) for chars in result.values())
         removed = len(char_images) - len(kept_images)
-        tracer.addReport(ASReport("CCRPIPELINE DETECTCHARACTERS", f"{total} recognized, {removed} filtered out."))
+        tracer.addReport(ASReport("CCRPIPELINE DETECTCHARACTERS", "{} recognized, {} filtered out.".format(total, removed)))
         return result
 
     @staticmethod
@@ -387,7 +387,7 @@ class CCRPipeline:
 
         concatText = "\n".join("".join(result_dict[col]) for col in sorted(result_dict.keys()))
         textCount = sum(len(chars) for chars in result_dict.values())
-        tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", f"Reconstructed final text. Number of text: {textCount}"))
+        tracer.addReport(ASReport("CCRPIPELINE CONCATCHARACTERS", "Reconstructed final text. Number of text: {}".format(textCount)))
         return concatText
 
     @staticmethod
@@ -433,7 +433,7 @@ class CCRPipeline:
                     "Make sure the correction matches the characters in the image and makes sense in context. "
                     "Fix any errors, missing characters, or confusing parts. "
                     "Only output the corrected Chinese text—no explanations.\n\n"
-                    f"Predicted text:\n{predicted_text.strip()}"
+                    "Predicted text:\n{}".format(predicted_text.strip())
                 ),
                 imagePath=image_path,
                 imageFileType=imageFileType
@@ -450,11 +450,11 @@ class CCRPipeline:
             corrected = response.content.strip()
             textCount = len(corrected)
 
-            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION", f"LLM correction applied. Final text count: {textCount}"))
+            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION", "LLM correction applied. Final text count: {}".format(textCount)))
             return corrected
 
         except Exception as e:
-            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION ERROR", f"LLM correction failed: {e}"))            
+            tracer.addReport(ASReport("CCRPIPELINE LLMCORRECTION ERROR", "LLM correction failed: {}".format(e)))            
             return predicted_text  # fallback to uncorrected text
 
     @staticmethod
@@ -527,6 +527,50 @@ class CCRPipeline:
         acc = match_count / len(gt_text) if len(gt_text) > 0 else 0.0
 
         return acc
+    
+    @staticmethod
+    def manualTranscription(image_path: str, tracer: ASTracer, imageFileType: str) -> dict:
+        # Create a new interaction context for each call with the reused tool and callbacks.
+        cont = InteractionContext(
+            provider=LMProvider.QWEN,
+            variant=LMVariant.QWEN_VL_PLUS
+        )
+
+        # Add the user interaction to the context:
+        # Ask the LLM to correct the predicted text based on the image.
+        # The LLM is expected to only output corrected Chinese text.
+
+        cont.addInteraction(
+            Interaction(
+                role=Interaction.Role.USER,
+                content=(
+                    "Please review the provided image and transcribe the Chinese text it contains. "
+                    "Ensure the transcription is accurate, complete, and reflects the characters in the image. "
+                    "Preserve the original wording, punctuation, and formatting as closely as possible. "
+                    "Only output the transcribed Chinese text—no explanations.\n\n"
+                ),
+                imagePath=image_path,
+                imageFileType=imageFileType
+            ),
+            imageMessageAcknowledged=True
+        )
+
+        try:
+            response = LLMInterface.engage(cont)
+
+            if isinstance(response, str):
+                raise Exception("ERROR: Failed to carry out LLM transcription; response: {}".format(response))
+
+            predicted = response.content.strip()
+            textCount = len(predicted)
+
+            tracer.addReport(ASReport("CCRPIPELINE MANUALTRANSCRIPTION", "LLM transcription applied. Final text count: {}".format(textCount)))
+            
+            return predicted
+
+        except Exception as e:
+            tracer.addReport(ASReport("CCRPIPELINE MANUALTRANSCRIPTION ERROR", "LLM transcription failed: {}".format(e)))            
+            return "ERROR: {}".format(e)
 
     @staticmethod
     def transcribe(image_path: str, tracer: ASTracer, computeAccuracy: bool = False, useLLMCorrection: bool = True, gtPath: str = None) -> dict:
@@ -555,6 +599,20 @@ class CCRPipeline:
             return "ERROR: Ground truth file is required for accuracy computation."
 
         try:
+            imageFileType = CCRPipeline.checkFileType(image_path, tracer)
+            if imageFileType.startswith("ERROR"):
+                return "ERROR: Unsupported file type provided. Please only provide .jpg .jpe .jpeg .png files."
+            
+            if os.environ.get("LLM_INFERENCE", "False") == "True":
+                recognized = CCRPipeline.manualTranscription(image_path, tracer, imageFileType)
+                
+                return {
+                    "transcription": recognized,
+                    "corrected": True,
+                    "preCorrectionAccuracy": None,
+                    "postCorrectionAccuracy": None
+                }
+            
             ccr_model_ctx = ModelStore.getModel("ccr")
             if not ccr_model_ctx or not ccr_model_ctx.model:
                 return "ERROR: CCR model not loaded"
@@ -565,10 +623,6 @@ class CCRPipeline:
 
             if CCRPipeline.idx2char is None:
                 CCRPipeline.idx2char = CCRPipeline.load_label_mappings()
-
-            imageFileType = CCRPipeline.checkFileType(image_path, tracer)
-            if imageFileType.startswith("ERROR"):
-                return "ERROR: Unsupported file type provided. Please only provide .jpg .jpe .jpeg .png files."
 
             char_images = CCRPipeline.segmentImage(image_path, tracer)
 
@@ -614,8 +668,8 @@ class CCRPipeline:
             }
 
         except Exception as e:
-            tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", f"Error: {e}"))
-            return f"ERROR: {e}"
+            tracer.addReport(ASReport("CCRPIPELINE TRANSCRIBE ERROR", "Error: {}".format(e)))
+            return "ERROR: {}".format(e)
 
 # === Entry Point ===
 
@@ -640,5 +694,5 @@ if __name__ == "__main__":
     ccr_ctx = ModelStore.getModel("ccr")
     filter_ctx = ModelStore.getModel("ccrCharFilter")
 
-    print(f"CCR model output shape: {ccr_ctx.model(test_tensor).shape}")
-    print(f"Filter model output shape: {filter_ctx.model(test_tensor).shape}")
+    print("CCR model output shape: {}").format(ccr_ctx.model(test_tensor).shape)
+    print("Filter model output shape: {}").format(filter_ctx.model(test_tensor).shape)
