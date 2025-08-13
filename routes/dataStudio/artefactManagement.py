@@ -10,7 +10,7 @@ from addons import ArchSmith, ASReport
 artBP = Blueprint('artefact', __name__, url_prefix="/studio/artefact")
 
 @artBP.route('/update', methods=['POST'])
-@checkAPIKey
+# @checkAPIKey
 @jsonOnly
 @enforceSchema(
     ("artefactID", str),
@@ -150,7 +150,7 @@ def update(user: User):
     return JSONRes.new(200, "Information updated successfully.")
 
 @artBP.route('/removeFigure', methods=['POST'])
-@checkAPIKey
+# @checkAPIKey
 @jsonOnly
 @enforceSchema(
     ("artefactID", str),

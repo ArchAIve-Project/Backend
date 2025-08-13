@@ -347,7 +347,11 @@ def getAllCategoriesWithArtefacts():
                         })
                 except Exception as e:
                     Logger.log("CDN: Failed to resolve artefact in category {} - {}".format(cat.name, e))
-        result[cat.name] = artefactsList
+        result[cat.id] = {
+            "name": cat.name,
+            "description": getattr(cat, "description", ""),
+            "members": artefactsList
+        }
 
     # Load all books
     try:
