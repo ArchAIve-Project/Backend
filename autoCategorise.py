@@ -179,7 +179,9 @@ class AutoCategoriser:
     
     @staticmethod
     def feed(art: Artefact, categories: List[Category], tracer: ASTracer):
-        categories = categories or []
+        if not isinstance(categories, list) or not all(isinstance(c, Category) for c in categories):
+            return None
+        
         result = AutoCategoriser.getLLMCategorisation(art, categories, tracer)
         if not isinstance(result, dict):
             tracer.addReport(
@@ -297,6 +299,8 @@ class AutoCategoriser:
                     )
                 )
                 return None
+            
+            categories.append(newCategory)
             
             tracer.addReport(
                 ASReport(
