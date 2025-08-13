@@ -17,7 +17,6 @@ class CategorisationPrompt:
     
     @staticmethod
     def fill(art: Artefact, categories: List[Category]):
-        categories = categories or []
         if not CategorisationPrompt.text:
             return None
         
@@ -178,6 +177,7 @@ class AutoCategoriser:
     
     @staticmethod
     def feed(art: Artefact, categories: List[Category], tracer: ASTracer):
+        categories = categories or []
         result = AutoCategoriser.getLLMCategorisation(art, categories, tracer)
         if not isinstance(result, dict):
             tracer.addReport(

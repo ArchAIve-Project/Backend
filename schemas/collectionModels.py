@@ -1621,7 +1621,7 @@ Created: {} />
         else:
             data = DI.load(Ref("categories"))
             if data is None:
-                return None
+                return []
             if isinstance(data, DIError):
                 raise Exception("CATEGORY LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
