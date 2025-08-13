@@ -23,21 +23,26 @@ The artefact to categorize is as follows:
 - Additional Information: {artAddInfo}
 
 Output Format:
-Provide your response in one of the structured formats as below (no need to provide variant number):
+Provide your response in one of the structured formats as below.
 
-Variant 1 (existing category):
+--- FORMATS:
+
 CATEGORY: <Existing category name>
 REASON: <Your brief, specific reason for choosing this category>
 
-Variant 2 (existing category with revised name/description):
+--- OR
+
 CATEGORY: <Existing category name>
 CATEGORY_NAME_REVISED: <Revised name for the category, optional as may not be applicable>
 CATEGORY_DESC_REVISED: <Revised brief description for the category, optional as may not be applicable>
 REASON: <Your brief, specific reason for choosing this category>
 
-Variant 3:
+--- OR
+
 NEW_CATEGORY: <A new category name>
 CATEGORY_DESC: <Proposed brief description for the new category>
 REASON: <Your brief, specific reason for choosing this new category>
 
-You must strictly follow the format above and ensure your response is concise and to the point.
+---
+
+You must strictly follow one of the formats above and ensure your response is concise and to the point.

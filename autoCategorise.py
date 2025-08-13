@@ -24,12 +24,14 @@ class CategorisationPrompt:
         
         existingCategories = ['- {}: {}'.format(c.name, c.description) for c in categories]
         existingCategories = "\n".join(existingCategories) or "No categories yet"
+        artCaption = "No caption available" if not (art.metadata and art.metadata.raw) else (art.metadata.raw.caption or "No caption available")
+        artAddInfo = "No additional information available" if not (art.metadata and art.metadata.raw) else (art.metadata.raw.addInfo or "No additional information available")
         
         filledText = filledText.format(
             existingCategories=existingCategories,
-            artName=art.name,
-            artCaption=art.metadata.raw.caption,
-            artAddInfo=art.metadata.raw.addInfo
+            artName=art.name or "No name available",
+            artCaption=artCaption,
+            artAddInfo=artAddInfo
         )
         
         return filledText
@@ -147,7 +149,7 @@ class AutoCategoriser:
                 cont.addInteraction(
                     Interaction(
                         role=Interaction.Role.USER,
-                        content="Your response was not in the expected format. Try again and stick to the given output format instructions."
+                        content="Your response was not in the expected format. Remember to NOT provide the case number or description.\n\nTry again and stick to the given output format instructions for any one of the three cases."
                     )
                 )
                 
@@ -187,6 +189,7 @@ class AutoCategoriser:
                     extraData={"result": result}
                 )
             )
+            return None
         
         if result['variant'] in [1, 2]:
             targetCategory = [x for x in categories if x.name == result['category']]
