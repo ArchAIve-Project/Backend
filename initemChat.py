@@ -92,7 +92,7 @@ class InItemChatbot:
 
         context = InteractionContext(
             provider=LMProvider.OPENAI,
-            variant=LMVariant.GPT_4O_MINI,
+            variant=LMVariant.GPT_5_NANO,
             history=contextHistory
         )
 

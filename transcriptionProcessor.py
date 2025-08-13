@@ -141,7 +141,7 @@ class TranscriptionProcessor:
 
         cont = InteractionContext(
             provider=LMProvider.OPENAI,
-            variant=LMVariant.GPT_4O_MINI
+            variant=LMVariant.GPT_5_NANO
         )
         cont.addInteraction(
             Interaction(

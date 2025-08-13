@@ -40,8 +40,8 @@ def listUsers(user: User):
 @enforceSchema(
     Param(
         "username",
-        lambda x: isinstance(x, str) and len(x) >= 3 and x.isalpha(),
-        invalidRes=JSONRes.new(400, "Username must be at least 3 characters, without any spaces or special characters.", ResType.USERERROR, serialise=False)
+        lambda x: isinstance(x, str) and len(x) >= 3 and x.isalnum() and len(x) <= 12,
+        invalidRes=JSONRes.new(400, "Username must be between 3 and 12 characters, without any spaces or special characters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "email",
@@ -55,13 +55,13 @@ def listUsers(user: User):
     ),
     Param(
         "fname",
-        lambda x: isinstance(x, str) and len(x) >= 2 and x.replace(' ', '').isalpha(),
-        invalidRes=JSONRes.new(400, "First name must be at least 2 characters and have only letters.", ResType.USERERROR, serialise=False)
+        lambda x: isinstance(x, str) and len(x) >= 2 and x.replace(' ', '').isalpha() and len(x) <= 15,
+        invalidRes=JSONRes.new(400, "First name must be between 2 and 15 characters and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "lname",
-        lambda x: isinstance(x, str) and len(x) >= 1 and x.replace(' ', '').isalpha(),
-        invalidRes=JSONRes.new(400, "Last name must be at least 1 character and have only letters.", ResType.USERERROR, serialise=False)
+        lambda x: isinstance(x, str) and len(x) >= 1 and x.replace(' ', '').isalpha() and len(x) <= 15,
+        invalidRes=JSONRes.new(400, "Last name must be between 1 and 15 characters and have only letters.", ResType.USERERROR, serialise=False)
     ),
     Param(
         "contact",

@@ -132,6 +132,10 @@ if __name__ == "__main__":
     from routes.dataProcessing.dataImport import dataImportBP
     app.register_blueprint(dataImportBP)
     
+    # Data Studio Routes
+    from routes.dataStudio.artefactManagement import artBP
+    app.register_blueprint(artBP)
+    
     # Superuser creation
     superuser = User.getSuperuser()
     if superuser == None:
