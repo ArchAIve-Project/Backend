@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 from utils import JSONRes
-from services import Logger
+from services import Logger, LiteStore
 from decorators import jsonOnly, enforceSchema, checkAPIKey
 from sessionManagement import checkSession
 from schemas import Artefact, User
@@ -19,7 +19,7 @@ artBP = Blueprint('artefact', __name__, url_prefix="/studio/artefact")
     ("simplifiedCN", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 1000, None),
     ("english", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 2000, None),
     ("summary", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 2000, None),
-    ("caption", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 1000, None),
+    ("caption", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 200, None),
     ("addInfo", lambda x: isinstance(x, str) and len(x.strip()) <= 3000, None),
 )
 @checkSession(strict=True, provideUser=True)
@@ -140,6 +140,7 @@ def update(user: User):
     if len(changes) > 0:
         art.save()
         user.newLog("Artefact {} Update".format(art.name), ", ".join(changes) + " updated.")
+        LiteStore.set("artefactMetadata", True)
     else:
         return JSONRes.new(200, "No changes made to the artefact.")
     
@@ -201,6 +202,7 @@ def removeFigure(user: User):
     try:
         art.metadata.save()
         user.newLog("Artefact {} Update".format(art.name), "Figure {} removed.".format(figureID))
+        LiteStore.set("artefactMetadata", True)
     except Exception as e:
         Logger.log("ARTEFACTMANAGEMENT REMOVEFIGURE ERROR: Failed to save artefact {} after removing figure ID: {}".format(artefactID, figureID))
         return JSONRes.ambiguousError()
