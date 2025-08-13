@@ -529,7 +529,7 @@ class CCRPipeline:
         return acc
     
     @staticmethod
-    def manualTranscription(image_path: str, tracer: ASTracer, imageFileType: str) -> dict:
+    def llmTranscription(image_path: str, tracer: ASTracer, imageFileType: str) -> dict:
         # Create a new interaction context for each call with the reused tool and callbacks.
         cont = InteractionContext(
             provider=LMProvider.QWEN,
@@ -564,12 +564,12 @@ class CCRPipeline:
             predicted = response.content.strip()
             textCount = len(predicted)
 
-            tracer.addReport(ASReport("CCRPIPELINE MANUALTRANSCRIPTION", "LLM transcription applied. Final text count: {}".format(textCount)))
+            tracer.addReport(ASReport("CCRPIPELINE LLMTRANSCRIPTION", "LLM transcription applied. Final text count: {}".format(textCount)))
             
             return predicted
 
         except Exception as e:
-            tracer.addReport(ASReport("CCRPIPELINE MANUALTRANSCRIPTION ERROR", "LLM transcription failed: {}".format(e)))            
+            tracer.addReport(ASReport("CCRPIPELINE LLMTRANSCRIPTION ERROR", "LLM transcription failed: {}".format(e)))            
             return "ERROR: {}".format(e)
 
     @staticmethod
@@ -604,7 +604,7 @@ class CCRPipeline:
                 return "ERROR: Unsupported file type provided. Please only provide .jpg .jpe .jpeg .png files."
             
             if os.environ.get("LLM_INFERENCE", "False") == "True":
-                recognized = CCRPipeline.manualTranscription(image_path, tracer, imageFileType)
+                recognized = CCRPipeline.llmTranscription(image_path, tracer, imageFileType)
                 
                 return {
                     "transcription": recognized,
