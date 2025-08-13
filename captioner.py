@@ -4,7 +4,7 @@ from torch import nn
 from torchvision import models, transforms
 from PIL import Image
 from services import FileOps
-from addons import ModelStore, ArchSmith, ASTracer, ASReport
+from addons import ModelStore, ASTracer, ASReport
 from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant
 
 class Vocabulary:
@@ -322,17 +322,17 @@ class ImageCaptioning:
         
         return improvedCaption
 
-if __name__ == "__main__":
-    # ModelStore.setup(imageCaptioner=ImageCaptioning.loadModel)
-    LLMInterface.initDefaultClients()
+# if __name__ == "__main__":
+#     # ModelStore.setup(imageCaptioner=ImageCaptioning.loadModel)
+#     LLMInterface.initDefaultClients()
     
-    # print(ModelStore.getModel("imageCaptioner").model)
+#     # print(ModelStore.getModel("imageCaptioner").model)
 
-    tracer = ArchSmith.newTracer("Test run of ImageCaptioning")
+#     tracer = ArchSmith.newTracer("Test run of ImageCaptioning")
     
-    print(ImageCaptioning.generateCaption("Companydata/16.8.92_2.jpg", tracer))
+#     print(ImageCaptioning.generateCaption("Companydata/16.8.92_2.jpg", tracer))
     
-    tracer.end()
-    ArchSmith.persist()
+#     tracer.end()
+#     ArchSmith.persist()
     
-    print('Done.')
+#     print('Done.')
