@@ -86,6 +86,10 @@ class LMVariant(str, Enum):
     GPT_4_1_NANO = "gpt-4.1-nano"
     GPT_4_1_MINI = "gpt-4.1-mini"
     
+    GPT_5 = "gpt-5"
+    GPT_5_MINI = "gpt-5-mini"
+    GPT_5_NANO = "gpt-5-nano"
+    
     O3 = "o3"
     O3_MINI = "o3-mini"
     O4_MINI = "o4-mini"

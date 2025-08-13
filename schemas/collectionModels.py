@@ -993,6 +993,7 @@ class BatchArtefact(DIRepresentable):
         processedDuration (str | None): The duration for which the artefact has been processed, if applicable.
         processedTime (str | None): The timestamp when the artefact was processed, if applicable.
         processingError (str | None): Any error that occurred during the processing of the artefact, if applicable.
+        integrationResult (dict | None): Any information about the results of the artefact's catalogue integration procedure.
         artefact (Artefact | None): A convenience attribute that holds the `Artefact` object if it has been loaded.
         originRef (Ref): The reference to the artefact in the database.
     
@@ -1035,11 +1036,13 @@ class BatchArtefact(DIRepresentable):
             UNPROCESSED: The artefact has not been processed yet.
             PROCESSED: The artefact has been processed.
             CONFIRMED: The artefact has been confirmed after processing.
+            INTEGRATED: The artefact has been integrated into the catalogue.
         """
         
         UNPROCESSED = "unprocessed"
         PROCESSED = "processed"
         CONFIRMED = "confirmed"
+        INTEGRATED = "integrated"
         
         @staticmethod
         def validateAndReturn(status: 'BatchArtefact.Status | str') -> 'BatchArtefact.Status | Literal[False]':
@@ -1061,7 +1064,7 @@ class BatchArtefact(DIRepresentable):
             else:
                 return False
     
-    def __init__(self, batch: Batch | str, artefact: Artefact | str, stage: 'BatchArtefact.Status', processedDuration: str | None=None, processedTime: str | None=None, processingError: str | None=None):
+    def __init__(self, batch: Batch | str, artefact: Artefact | str, stage: 'BatchArtefact.Status', processedDuration: str | None=None, processedTime: str | None=None, processingError: str | None=None, integrationResult: dict | None=None):
         """Initializes a BatchArtefact instance.
 
         Args:
@@ -1071,6 +1074,7 @@ class BatchArtefact(DIRepresentable):
             processedDuration (str | None, optional): The duration for which the artefact has been processed, if applicable. Defaults to None.
             processedTime (str | None, optional): The timestamp when the artefact was processed, if applicable. Defaults to None.
             processingError (str | None, optional): Any error that occurred during the processing of the artefact, if applicable. Defaults to None.
+            integrationResult (dict | None): Any information about the results of the artefact's catalogue integration procedure. Defaults to None.
         """
         
         batchID = batch.id if isinstance(batch, Batch) else batch
@@ -1085,6 +1089,7 @@ class BatchArtefact(DIRepresentable):
         self.processedDuration: str | None = processedDuration
         self.processedTime: str | None = processedTime
         self.processingError: str | None = processingError
+        self.integrationResult: dict | None = integrationResult
         self.artefact: Artefact | None = artefact if isinstance(artefact, Artefact) else None
         self.originRef = BatchArtefact.ref(batchID, artefactID)
     
@@ -1093,7 +1098,8 @@ class BatchArtefact(DIRepresentable):
             "stage": self.stage.value,
             "processedDuration": self.processedDuration,
             "processedTime": self.processedTime,
-            "processingError": self.processingError
+            "processingError": self.processingError,
+            "integrationResult": self.integrationResult
         }
     
     def save(self):
@@ -1155,13 +1161,14 @@ class BatchArtefact(DIRepresentable):
         return True
     
     def __str__(self):
-        return "BatchArtefact(batchID='{}', artefactID='{}', stage='{}', processedDuration='{}', processedTime='{}', processingError='{}', artefact={})".format(
+        return "BatchArtefact(batchID='{}', artefactID='{}', stage='{}', processedDuration='{}', processedTime='{}', processingError='{}', integrationResult='{}', artefact={})".format(
             self.batchID,
             self.artefactID,
             self.stage.value,
             self.processedDuration,
             self.processedTime,
             self.processingError,
+            self.integrationResult,
             self.artefact if self.artefact != None else None
         )
     
@@ -1180,7 +1187,7 @@ class BatchArtefact(DIRepresentable):
             BatchArtefact: The loaded BatchArtefact instance.
         """
         
-        reqParams = ['stage', 'processedDuration', 'processedTime', 'processingError']
+        reqParams = ['stage', 'processedDuration', 'processedTime', 'processingError', "integrationResult"]
         for reqParam in reqParams:
             if reqParam not in data:
                 if reqParam == 'stage':
@@ -1198,7 +1205,8 @@ class BatchArtefact(DIRepresentable):
             stage=stage,
             processedDuration=data.get('processedDuration'),
             processedTime=data.get('processedTime'),
-            processingError=data.get('processingError')
+            processingError=data.get('processingError'),
+            integrationResult=data.get('integrationResult'),
         )
         
         if withArtefact:
@@ -1621,7 +1629,7 @@ Created: {} />
         else:
             data = DI.load(Ref("categories"))
             if data is None:
-                return None
+                return []
             if isinstance(data, DIError):
                 raise Exception("CATEGORY LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
