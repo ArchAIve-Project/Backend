@@ -385,7 +385,7 @@ def getAllCategoriesWithArtefacts():
 
 @cdnBP.route('/artefactMetadata/<artID>')
 @checkSession(strict=True)
-@cache
+@cache(lsInvalidator='artefactMetadata')
 def getArtefactMetedata(artID):
     """
     Returns the metadata of an artefact.
@@ -395,7 +395,7 @@ def getArtefactMetedata(artID):
         if not isinstance(art, Artefact):
             return JSONRes.new(404, "Artefact not found.")
         
-        return JSONRes.new(200, "Retrieval success.", data=art.metadata.represent())
+        return JSONRes.new(200, "Retrieval success.", data=art.represent())
 
     except Exception as e:
         Logger.log("CDN GETARTEFACTMETADATA ERROR: Failed to load artefact metadata - {}".format(e))
