@@ -29,7 +29,7 @@ Variant 1 (existing category):
 CATEGORY: <Existing category name>
 REASON: <Your brief, specific reason for choosing this category>
 
-Variant 2 (existing category with revised description):
+Variant 2 (existing category with revised name/description):
 CATEGORY: <Existing category name>
 CATEGORY_NAME_REVISED: <Revised name for the category, optional as may not be applicable>
 CATEGORY_DESC_REVISED: <Revised brief description for the category, optional as may not be applicable>
