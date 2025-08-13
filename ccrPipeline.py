@@ -559,7 +559,7 @@ class CCRPipeline:
             response = LLMInterface.engage(cont)
 
             if isinstance(response, str):
-                raise Exception("ERROR: Failed to carry out LLM transcription; response: {}".format(response))
+                raise Exception("Failed to carry out LLM transcription; response: {}".format(response))
 
             predicted = response.content.strip()
             textCount = len(predicted)
