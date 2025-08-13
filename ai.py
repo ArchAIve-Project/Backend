@@ -761,7 +761,7 @@ class LLMInterface:
             return "ERROR: Failed to generate chat completion; error: {}".format(e)
     
     @staticmethod
-    def engage(context: InteractionContext) -> ChatCompletionMessage | str:
+    def engage(context: InteractionContext, timeout: int=30) -> ChatCompletionMessage | str:
         if not LLMInterface.checkPermission():
             return "ERROR: LLMInterface does not have permission to operate."
         
@@ -772,7 +772,7 @@ class LLMInterface:
         # Initial prompt execution
         response: ChatCompletion | None = None
         try:
-            response: ChatCompletion = client.chat.completions.create(**context.promptKwargs())
+            response: ChatCompletion = client.chat.completions.create(**context.promptKwargs(), timeout=timeout)
         except Exception as e:
             return "ERROR: Failed to generate chat completion; error: {}".format(e)
         
@@ -823,7 +823,7 @@ class LLMInterface:
             
             # Get response after tool invocation
             try:
-                response = client.chat.completions.create(**context.promptKwargs())
+                response = client.chat.completions.create(**context.promptKwargs(), timeout=timeout)
             except Exception as e:
                 return "ERROR: Failed to generate post-tool chat completion; error: {}".format(e)
             
