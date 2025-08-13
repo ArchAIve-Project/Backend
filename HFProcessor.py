@@ -39,12 +39,13 @@ class HFProcessor:
     
     # Face Recognition + Detection and Matching
     @staticmethod
-    def identifyFaces(imagePath: str, tracer: ASTracer) -> list[str]:
+    def identifyFaces(imagePath: str, tracer: ASTracer, seedFigureID: str=None) -> list[str]:
         """Detects and recognises faces in the given image.
 
         Args:
             imagePath (str): The path to the image file.
             tracer (ASTracer): An instance of `ASTracer` to log reports.
+            seedFigureID (str, optional): If provided, this ID is used to add embeddings to the existing seed figure. Defaults to None.
 
         Returns:
             list[str]: A list of recognized face IDs.
@@ -100,6 +101,42 @@ class HFProcessor:
                 extraData={"faceCropsLength": len(face_crops)}
             )
         )
+        
+        if isinstance(seedFigureID, str) and seedFigureID.strip() and len(embed_values) > 0:
+            with HFProcessor.faceMatchLock:
+                seedFigure: Figure = Figure.load(seedFigureID, withEmbeddings=True)
+                if seedFigure is None:
+                    tracer.addReport(
+                        ASReport(
+                            source="HFPROCESSOR IDENTIFYFACES ERROR",
+                            message="Seed figure with ID '{}' not found.".format(seedFigureID),
+                            extraData={"imageName": imgName}
+                        )
+                    )
+                    return []
+                
+                try:
+                    embed = FaceEmbedding(value=embed_values[0], origin=imgName)
+                    seedFigure.face.addEmbedding(embed, autoSave=True)
+                    
+                    tracer.addReport(
+                        ASReport(
+                            "HFPROCESSOR IDENTIFYFACES",
+                            "Added embedding from '{}' to seed figure '{}' (Label: {}) successfully.".format(imgName, seedFigureID, seedFigure.label),
+                            extraData={"imageName": imgName, "faceCropIndex": 0}
+                        )
+                    )
+                    
+                    return [seedFigureID]
+                except Exception as e:
+                    tracer.addReport(
+                        ASReport(
+                            "HFPROCESSOR IDENTIFYFACES ERROR",
+                            "Failed to add embedding to seed figure '{}'; error: {}".format(seedFigureID, e),
+                            extraData={"imageName": imgName, "faceCropIndex": 0}
+                        )
+                    )
+                    return []
         
         matchedFigureIDs: set[str] = set()
         
