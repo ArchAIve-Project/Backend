@@ -582,6 +582,44 @@ def getCollectionDetails(colID):
     except Exception as e:
         Logger.log("CDN GETCOLLECTIONDETAILS ERROR: Failed to load collection - {}".format(e))
         return JSONRes.ambiguousError()
+    
+@cdnBP.route('/retrieveAssociationInfo/<artID>')
+@checkSession(strict=True)
+@cache
+def getAssociationInfo(artID):
+    try:
+        art = Artefact.load(id=artID)
+        if not isinstance(art, Artefact):
+            return JSONRes.new(404, "Artefact not found.")
+
+        mm = art.metadata.isMM()
+        results = []
+
+        if mm:
+            allBooks = Book.load()
+            for book in allBooks:
+                results.append({
+                    "type": "book",
+                    "id": book.id,
+                    "name": book.title or "Unavailable",
+                    "isMember": artID in book.mmIDs
+                })
+        else:
+            allCat = Category.load()
+            for cat in allCat:
+                results.append({
+                    "type": "category",
+                    "id": cat.id,
+                    "name": cat.name or "Unavailable",
+                    "isMember": artID in cat.members
+                })
+
+        return JSONRes.new(200, "Retrieval Successful", data=results)
+
+    except Exception as e:
+        Logger.log("CDN GETASSOCIATEDINFO ERROR: Failed to fetch associations by artefact ID - {}".format(e))
+        return JSONRes.ambiguousError()
+
 
 @cdnBP.route('/artefactMetadata/<artID>')
 @checkSession(strict=True)
