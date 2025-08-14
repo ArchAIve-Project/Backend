@@ -522,7 +522,6 @@ def getCollectionDetails(colID):
                         "id": art.id,
                         "name": art.name,
                         "description": art.description,
-                        # Include other relevant mm artefact fields
                         "image": getattr(art, "image", None)
                     })
             
@@ -568,7 +567,6 @@ def getCollectionDetails(colID):
                         "name": art.name,
                         "artType": art.artType
                     }
-                    # Include type-specific fields
                     if art.artType == "hf":
                         artefact_data.update({
                             "image": art.image,
@@ -583,7 +581,6 @@ def getCollectionDetails(colID):
             return JSONRes.new(200, "Retrieval success.", data={
                 "type": "batch",
                 "id": batch.id,
-                # Include other batch fields as needed
                 "name": getattr(batch, "name", ""),
                 "description": getattr(batch, "description", ""),
                 "artefacts": artefacts
