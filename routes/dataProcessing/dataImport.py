@@ -411,8 +411,8 @@ def startIntegration():
         if batch is None:
             return JSONRes.new(404, "Batch not found.")
        
-        if batch.stage != Batch.Stage.PROCESSED:
-            return JSONRes.new(400, "Batch must be in 'processed' stage to start integration.")
+        if batch.stage != Batch.Stage.VETTING:
+            return JSONRes.new(400, "Batch must be in 'vetting' stage to start integration.")
 
         allConfirmed = all(a.stage == BatchArtefact.Status.CONFIRMED for a in batch.artefacts.values())
         if not allConfirmed:
