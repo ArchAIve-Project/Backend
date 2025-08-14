@@ -601,6 +601,7 @@ def getAssociationInfo(artID):
                 results.append({
                     "type": "book",
                     "id": book.id,
+                    "description": book.subtitle,
                     "name": book.title or "Unavailable",
                     "isMember": artID in book.mmIDs
                 })
@@ -610,6 +611,7 @@ def getAssociationInfo(artID):
                 results.append({
                     "type": "category",
                     "id": cat.id,
+                    "description": cat.description,
                     "name": cat.name or "Unavailable",
                     "isMember": artID in cat.members
                 })
