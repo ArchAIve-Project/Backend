@@ -224,11 +224,12 @@ class Batch(DIRepresentable):
             else:
                 return False
 
-    def __init__(self, userID: str, batchArtefacts: 'List[BatchArtefact | Artefact]'=None, job: 'BatchProcessingJob | None'=None, stage: 'Batch.Stage'=None, created: str=None, id: str=None):
+    def __init__(self, userID: str, name: str=None, batchArtefacts: 'List[BatchArtefact | Artefact]'=None, job: 'BatchProcessingJob | None'=None, stage: 'Batch.Stage'=None, created: str=None, id: str=None):
         """Initializes a new Batch instance.
 
         Args:
             userID (str): The ID of the user associated with the batch.
+            name (str | None): The name of the batch, optional. Defaults to None.
             batchArtefacts (List[BatchArtefact | Artefact], optional): The artefacts to include in the batch. Both `BatchArtefact` and `Artefact` objects are accepted. `Artefact` objects are converted into 'unprocessed' `BatchArtefact` objects. Defaults to None.
             job (BatchProcessingJob | None, optional): The processing job associated with the batch. Defaults to None.
             stage (Batch.Stage, optional): The stage of the batch. Defaults to `Batch.Stage.UPLOAD_PENDING`.
@@ -259,6 +260,7 @@ class Batch(DIRepresentable):
         
         self.id: str = id
         self.userID: str = userID
+        self.name: str | None = name
         self.artefacts: Dict[str, BatchArtefact] = batchArts
         self.job: BatchProcessingJob | None = job
         self.stage: Batch.Stage = stage
@@ -311,6 +313,7 @@ class Batch(DIRepresentable):
     def represent(self) -> Dict[str, Any]:
         return {
             "userID": self.userID,
+            "name": self.name,
             "artefacts": {id: batchArt.represent() for id, batchArt in self.artefacts.items()},
             'job': self.job.represent() if self.job != None else None,
             'stage': self.stage.value,
@@ -332,6 +335,7 @@ class Batch(DIRepresentable):
     def __str__(self):
         return """<Batch instance
 ID: {}
+Name: {}
 User ID: {}
 User Object:{}
 Artefact References:{}
@@ -340,6 +344,7 @@ Stage: {}
 Created: {} />
         """.format(
             self.id,
+            self.name,
             self.userID,
             self.user.represent() if isinstance(self.user, User) else " None",
             ("\n---\n- " + ("\n- ".join(str(batchArt) if isinstance(batchArt, BatchArtefact) else "CORRUPTED BATCHARTEFACT AT '{}'".format(artID) for artID, batchArt in self.artefacts.items())) + "\n---") if isinstance(self.artefacts, dict) else " None",
@@ -572,7 +577,7 @@ Created: {} />
             Batch: The loaded batch object.
         """
         
-        requiredParams = ['userID', 'artefacts', 'job', 'stage', 'created']
+        requiredParams = ['userID', 'name', 'artefacts', 'job', 'stage', 'created']
         for reqParam in requiredParams:
             if reqParam not in data:
                 if reqParam == 'artefacts':
@@ -600,6 +605,7 @@ Created: {} />
         
         batch = Batch(
             userID=data.get('userID'),
+            name=data.get('name'),
             batchArtefacts=arts,
             job=job,
             stage=stage,
