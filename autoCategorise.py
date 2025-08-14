@@ -221,8 +221,8 @@ class AutoCategoriser:
                 targetCategory.members[art.id].reason = reason
             
             changes = {}
-            revisedName = result.get('name_revised', None)
-            revisedDesc = result.get('desc_revised', None)
+            revisedName = result.get('category_name_revised', None)
+            revisedDesc = result.get('category_desc_revised', None)
             if revisedName:
                 if revisedName in [x.name for x in categories]:
                     tracer.addReport(
