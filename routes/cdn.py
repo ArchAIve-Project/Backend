@@ -271,7 +271,7 @@ def getAsset(filename):
 
 @cdnBP.route('/catalogue')
 @checkSession(strict=True)
-@cache
+@cache(lsInvalidator="catalogue")
 def getAllCategoriesWithArtefacts():
     """
     Retrieves all human-figure artefacts grouped by category and all books with their associated 
@@ -393,7 +393,7 @@ def getAllCategoriesWithArtefacts():
     
 @cdnBP.route('/collectionMemberIDs/<colID>')
 @checkSession(strict=True)
-@cache
+@cache(lsInvalidator="collectionMemberIDs")
 def getCollectionMemberIDs(colID):
     """
     Returns the list of all artefact IDs in a collection, which can be a Book, Category, or Batch.
@@ -450,7 +450,7 @@ def getCollectionMemberIDs(colID):
     
 @cdnBP.route('/collection/<colID>')
 @checkSession(strict=True)
-@cache
+@cache(lsInvalidator="collectionDetails")
 def getCollectionDetails(colID):
     """
     Returns detailed information about a collection (book, category, or batch) including all its member artefacts.
@@ -583,6 +583,46 @@ def getCollectionDetails(colID):
     except Exception as e:
         Logger.log("CDN GETCOLLECTIONDETAILS ERROR: Failed to load collection - {}".format(e))
         return JSONRes.ambiguousError()
+    
+@cdnBP.route('/retrieveAssociationInfo/<artID>')
+@checkSession(strict=True)
+@cache(lsInvalidator="associationInfo")
+def getAssociationInfo(artID):
+    try:
+        art = Artefact.load(id=artID)
+        if not isinstance(art, Artefact):
+            return JSONRes.new(404, "Artefact not found.")
+
+        mm = art.metadata.isMM()
+        results = []
+
+        if mm:
+            allBooks = Book.load()
+            for book in allBooks:
+                results.append({
+                    "type": "book",
+                    "id": book.id,
+                    "description": book.subtitle,
+                    "name": book.title or "Unavailable",
+                    "isMember": artID in book.mmIDs
+                })
+        else:
+            allCat = Category.load()
+            for cat in allCat:
+                results.append({
+                    "type": "category",
+                    "id": cat.id,
+                    "description": cat.description,
+                    "name": cat.name or "Unavailable",
+                    "isMember": artID in cat.members
+                })
+
+        return JSONRes.new(200, "Retrieval Successful", data=results)
+
+    except Exception as e:
+        Logger.log("CDN GETASSOCIATEDINFO ERROR: Failed to fetch associations by artefact ID - {}".format(e))
+        return JSONRes.ambiguousError()
+
 
 @cdnBP.route('/artefactMetadata/<artID>')
 @checkSession(strict=True)
