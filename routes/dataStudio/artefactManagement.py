@@ -242,13 +242,18 @@ def updateAssociation(user: User):
                 book = Book.load(id=collectionID)
                 if not isinstance(book, Book):
                     continue
-
+                
+                changes = False
+                
                 if isMember and artefactID not in book.mmIDs:
                     book.mmIDs.append(artefactID)
+                    changes = True
                 elif not isMember and artefactID in book.mmIDs:
                     book.mmIDs.remove(artefactID)
-
-                book.save()
+                    changes = True
+                
+                if changes:
+                    book.save()
                 
             except Exception as e:
                 Logger.log("ARTEFACTMANAGEMENT UPDATEASSOCIATION ERROR: Failed to update book association for artefact {}: {}".format(artefactID, e))
@@ -260,13 +265,16 @@ def updateAssociation(user: User):
                 cat = Category.load(id=collectionID)
                 if not isinstance(cat, Category):
                     continue
+                
+                changes = False
 
-                if isMember:
-                    cat.add(artefactID, "Reassigned by use {}".format(user.username))
-                else:
+                if isMember and not artefactID in cat.members:
+                    cat.add(artefactID, "Reassigned by user {}".format(user.username))
+                elif not isMember and artefactID in cat.members:
                     cat.remove(artefactID)
 
-                cat.save()
+                if changes:
+                    cat.save()
         
             except Exception as e:
                 Logger.log("ARTEFACTMANAGEMENT UPDATEASSOCIATION ERROR: Failed to update category for artefact {}: {}".format(artefactID, e))
