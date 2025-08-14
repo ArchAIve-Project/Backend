@@ -273,39 +273,46 @@ def getAsset(filename):
 @cache(ttl=60, lsInvalidator='cdnCatalogueInvalidator')
 def getAllCategoriesWithArtefacts():
     """
-    Returns all human-figure artefacts grouped by category and all books with their associated
+    Retrieves all human-figure artefacts grouped by category and all books with their associated 
     meeting-minute artefacts.
 
-    This endpoint:
-    - Loads all artefacts (without metadata) into a lookup map, with `artType` used to differentiate types.
-    - Loads all categories and links each to its human-figure artefacts (artType = 'hf').
-    - Loads all books and links each to its meeting-minute artefacts (artType = 'mm') via mmIDs.
-    - Handles exceptions at each loading or lookup stage.
-    - Caches the output and requires session authentication.
+    Key Operations:
+    1. Loads all artefacts (without metadata) into a lookup map keyed by artefact ID.
+       - Differentiates artefacts by `artType` ("hf" for human-figure, "mm" for meeting-minute).
+    2. Loads all categories and attaches their human-figure artefacts (`artType = "hf"`).
+    3. Loads all books and attaches their meeting-minute artefacts (`artType = "mm"`) via `mmIDs`.
+    4. Handles exceptions at every loading or lookup stage.
+    5. Requires session authentication.
+    6. Caches the response for 60 seconds using `cdnCatalogueInvalidator`.
 
     Response Format:
     ```json
     {
         "categories": {
-            "CategoryName1": [
-                { "id": ..., "name": ..., "image": ..., "description": ... },
-                ...
-            ],
+            "CategoryID1": {
+                "name": "Category Name",
+                "description": "Optional description",
+                "members": [
+                    { "id": "...", "name": "...", "image": "...", "description": "..." },
+                    ...
+                ]
+            },
             ...
         },
         "books": [
             {
-                "id": ...,
-                "title": ...,
-                "subtitle": ...,
+                "id": "...",
+                "title": "...",
+                "subtitle": "...",
                 "mmArtefacts": [
-                    { "id": ..., "name": ..., "description": ... },
+                    { "id": "...", "name": "...", "description": "..." },
                     ...
                 ]
             },
             ...
         ]
     }
+    ```
     """
 
     artefactMap = {}
@@ -389,8 +396,35 @@ def getAllCategoriesWithArtefacts():
 @cache
 def getCollectionMemberIDs(colID):
     """
-    Returns all artefact IDs in the collection (book, category or batch).
+    Returns the list of all artefact IDs in a collection, which can be a Book, Category, or Batch.
+
+    This endpoint:
+    - Attempts to load the collection sequentially as a Book, Category, or Batch by `colID`.
+    - For Books: returns the `mmIDs` (meeting-minute artefact IDs).
+    - For Categories: returns the keys of `members` (human-figure artefact IDs).
+    - For Batches: returns the keys of `artefacts` (all artefact IDs in the batch).
+    - Logs any errors and returns a generic error response on failure.
+
+    Response Format:
+    - Success (200):
+    ```json
+    ["artefactID1", "artefactID2", ...]
+    ````
+
+    * Not found (404):
+
+    ```json
+    "Collection not found."
+    ```
+
+    * Error (ambiguous):
+
+    ```json
+    "An error occurred."
+    ```
+
     """
+
     try:
         # Try Book
         book = Book.load(id=colID)
@@ -411,7 +445,7 @@ def getCollectionMemberIDs(colID):
         return JSONRes.new(404, "Collection not found.")
     
     except Exception as e:
-        Logger.log(f"CDN GETCOLLECTIONMEMBERIDS ERROR: Failed to load collection members - {e}")
+        Logger.log("CDN GETCOLLECTIONMEMBERIDS ERROR: Failed to load collection members - {}".format(e))
         return JSONRes.ambiguousError()
     
 @cdnBP.route('/collection/<colID>')
@@ -472,7 +506,7 @@ def getCollectionDetails(colID):
         all_artefacts = Artefact.load(includeMetadata=False) or []
         artefactMap = {art.id: art for art in all_artefacts}
     except Exception as e:
-        Logger.log(f"CDN GETCOLLECTIONDETAILS ERROR: Failed to load artefacts - {e}")
+        Logger.log("CDN GETCOLLECTIONDETAILS ERROR: Failed to load artefacts - {}".format(e))
         return JSONRes.ambiguousError()
     
     # Try loading as each collection type
@@ -558,7 +592,7 @@ def getCollectionDetails(colID):
         return JSONRes.new(404, "Collection not found.")
     
     except Exception as e:
-        Logger.log(f"CDN GETCOLLECTIONDETAILS ERROR: Failed to load collection - {e}")
+        Logger.log("CDN GETCOLLECTIONDETAILS ERROR: Failed to load collection - {}".format(e))
         return JSONRes.ambiguousError()
 
 @cdnBP.route('/artefactMetadata/<artID>')
