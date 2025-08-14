@@ -7,6 +7,7 @@ from schemas import Artefact, User, Batch, BatchProcessingJob, BatchArtefact
 from fm import FileManager, File
 from services import ThreadManager
 from ingestion import DataImportProcessor
+from catalogueIntegration import HFCatalogueIntegrator
 from services import Logger, Universal
 from decorators import jsonOnly, enforceSchema
 
@@ -170,10 +171,6 @@ def confirmBatch(user: User):
 
     if batch.stage != Batch.Stage.UPLOAD_PENDING:
         return JSONRes.new(400, "Batch stage is not upload pending.")
-
-    # Ensure user owns the batch
-    if batch.userID != user.id:
-        return JSONRes.new(403, "You don't have permission to start this batch's processing.", ResType.USERERROR)
 
     # Check if any batch is currently processing
     for b in batches:
@@ -341,31 +338,31 @@ def deleteBatch(batchID: str):
 
     return JSONRes.new(200, "Batch '{}' and all artefacts deleted.".format(batchID), updates=deletionResults, batchID=batchID)
 
-@dataImportBP.route('/vetting/start', methods=['POST'])
-@jsonOnly
-@enforceSchema(('batchID', str))
-@checkSession(strict=True)
-def startVetting():
-    '''
-    Start a vet
-    '''
-    batchID = request.json.get('batchID')
-    try:
-        batch = Batch.load(batchID)
+# @dataImportBP.route('/vetting/start', methods=['POST'])
+# @jsonOnly
+# @enforceSchema(('batchID', str))
+# @checkSession(strict=True)
+# def startVetting():
+#     '''
+#     Start a vet
+#     '''
+#     batchID = request.json.get('batchID')
+#     try:
+#         batch = Batch.load(batchID)
 
-        if batch is None:
-            return JSONRes.new(404, "Batch not found.")
+#         if batch is None:
+#             return JSONRes.new(404, "Batch not found.")
 
-        if batch.stage != Batch.Stage.PROCESSED:
-            return JSONRes.new(400, "Batch must be in 'processed' stage to begin vetting.")
+#         if batch.stage != Batch.Stage.PROCESSED:
+#             return JSONRes.new(400, "Batch must be in 'processed' stage to begin vetting.")
 
-        batch.stage = Batch.Stage.VETTING
-        batch.save()
+#         batch.stage = Batch.Stage.VETTING
+#         batch.save()
 
-        return JSONRes.new(200, "Batch moved to vetting stage.", batchID=batchID)
-    except Exception as e:
-        Logger.log("DATAIMPORT STARTVETTING ERROR: Batch '{}' failed to start vetting; error {}".format(batchID, e))
-        return JSONRes.ambiguousError()
+#         return JSONRes.new(200, "Batch moved to vetting stage.", batchID=batchID)
+#     except Exception as e:
+#         Logger.log("DATAIMPORT STARTVETTING ERROR: Batch '{}' failed to start vetting; error {}".format(batchID, e))
+#         return JSONRes.ambiguousError()
     
 @dataImportBP.route('/vetting/confirm', methods=['POST'])
 @jsonOnly
@@ -405,42 +402,43 @@ def startIntegration():
         if batch is None:
             return JSONRes.new(404, "Batch not found.")
        
-        if batch.stage != Batch.Stage.VETTING:
-            return JSONRes.new(400, "Batch must be in 'vetting' stage to start integration.")
+        if batch.stage != Batch.Stage.PROCESSED:
+            return JSONRes.new(400, "Batch must be in 'processed' stage to start integration.")
 
         allConfirmed = all(a.stage == BatchArtefact.Status.CONFIRMED for a in batch.artefacts.values())
         if not allConfirmed:
             return JSONRes.new(400, "Not all artefacts are confirmed.")
 
         batch.stage = Batch.Stage.INTEGRATION
+        batch.initJob()
+        batch.job.jobID = ThreadManager.defaultProcessor.addJob(HFCatalogueIntegrator.integrate, batch)
         batch.save()
 
-        return JSONRes.new(200, "Batch moved to integration stage.", batchID=batchID)
-
+        return JSONRes.new(200, "Batch catalogue integration in progress.", batchID=batchID)
     except Exception as e:
-        Logger.log("DATAIMPORT STARTINTEGRATION ERROR: Batch '{}' failed to integrate; error {}".format(batchID, e))
+        Logger.log("DATAIMPORT STARTINTEGRATION ERROR: Failed to trigger batch {} integration; error {}".format(batchID, e))
         return JSONRes.ambiguousError()
-    
-@dataImportBP.route('/completebatch', methods=['POST'])
-@jsonOnly
-@enforceSchema(('batchID', str))
-@checkSession(strict=True)
-def completeBatch():
-    batchID = request.json.get('batchID')
-    try:
-        batch = Batch.load(batchID)
 
-        if batch.stage != Batch.Stage.INTEGRATION:
-            return JSONRes.new(400, "Batch must be in 'integration' stage to mark as complete.")
+# @dataImportBP.route('/completebatch', methods=['POST'])
+# @jsonOnly
+# @enforceSchema(('batchID', str))
+# @checkSession(strict=True)
+# def completeBatch():
+#     batchID = request.json.get('batchID')
+#     try:
+#         batch = Batch.load(batchID)
 
-        batch.stage = Batch.Stage.COMPLETED
-        batch.save()
+#         if batch.stage != Batch.Stage.INTEGRATION:
+#             return JSONRes.new(400, "Batch must be in 'integration' stage to mark as complete.")
 
-        return JSONRes.new(200, "Batch marked as complete.", batchID=batchID)
+#         batch.stage = Batch.Stage.COMPLETED
+#         batch.save()
 
-    except Exception as e:
-        Logger.log("DATAIMPORT COMPLETEBATCH ERROR: Batch '{}' failed to complete; error {}".format(batchID, e))
-        return JSONRes.ambiguousError()
+#         return JSONRes.new(200, "Batch marked as complete.", batchID=batchID)
+
+#     except Exception as e:
+#         Logger.log("DATAIMPORT COMPLETEBATCH ERROR: Batch '{}' failed to complete; error {}".format(batchID, e))
+#         return JSONRes.ambiguousError()
     
 @dataImportBP.route('/batches/resume', methods=['POST'])
 @jsonOnly
