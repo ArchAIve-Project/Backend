@@ -270,7 +270,7 @@ def getAsset(filename):
 
 @cdnBP.route('/catalogue')
 @checkSession(strict=True)
-@cache(ttl=60, lsInvalidator='cdnCatalogueInvalidator')
+@cache
 def getAllCategoriesWithArtefacts():
     """
     Retrieves all human-figure artefacts grouped by category and all books with their associated 
@@ -283,7 +283,6 @@ def getAllCategoriesWithArtefacts():
     3. Loads all books and attaches their meeting-minute artefacts (`artType = "mm"`) via `mmIDs`.
     4. Handles exceptions at every loading or lookup stage.
     5. Requires session authentication.
-    6. Caches the response for 60 seconds using `cdnCatalogueInvalidator`.
 
     Response Format:
     ```json
@@ -353,7 +352,7 @@ def getAllCategoriesWithArtefacts():
                     Logger.log("CDN: Failed to resolve artefact in category {} - {}".format(cat.name, e))
         result[cat.id] = {
             "name": cat.name,
-            "description": getattr(cat, "description", ""),
+            "description": cat.description or "Unavailable",
             "members": artefactsList
         }
 
@@ -450,7 +449,7 @@ def getCollectionMemberIDs(colID):
     
 @cdnBP.route('/collection/<colID>')
 @checkSession(strict=True)
-@cache(ttl=60, lsInvalidator='cdnCatalogueInvalidator')
+@cache
 def getCollectionDetails(colID):
     """
     Returns detailed information about a collection (book, category, or batch) including all its member artefacts.
@@ -504,7 +503,7 @@ def getCollectionDetails(colID):
     # First load all artefacts for reference
     try:
         all_artefacts = Artefact.load(includeMetadata=False) or []
-        artefactMap = {art.id: art for art in all_artefacts}
+        artefactMap: Dict[str, Artefact] = {art.id: art for art in all_artefacts}
     except Exception as e:
         Logger.log("CDN GETCOLLECTIONDETAILS ERROR: Failed to load artefacts - {}".format(e))
         return JSONRes.ambiguousError()
@@ -515,21 +514,21 @@ def getCollectionDetails(colID):
         book = Book.load(id=colID)
         if isinstance(book, Book):
             mm_details = []
-            for mmID in getattr(book, 'mmIDs', []):
+            for mmID in book.mmIDs:
                 art = artefactMap.get(mmID)
                 if art and art.artType == "mm":
                     mm_details.append({
                         "id": art.id,
                         "name": art.name,
-                        "description": art.description,
-                        "image": getattr(art, "image", None)
+                        "description": art.description or "Unavailable",
+                        "image": art.image
                     })
             
             return JSONRes.new(200, "Retrieval success.", data={
                 "type": "book",
                 "id": book.id,
                 "title": book.title,
-                "subtitle": getattr(book, "subtitle", ""),
+                "subtitle": book.subtitle or "Unavailable",
                 "mmArtefacts": mm_details
             })
         
@@ -537,21 +536,21 @@ def getCollectionDetails(colID):
         cat = Category.load(id=colID)
         if isinstance(cat, Category):
             members = []
-            for artefact_id, _ in getattr(cat, 'members', {}).items():
+            for artefact_id, _ in cat.members.items():
                 art = artefactMap.get(artefact_id)
                 if art and art.artType == "hf":
                     members.append({
                         "id": art.id,
                         "name": art.name,
                         "image": art.image,
-                        "description": art.description
+                        "description": art.description or "Unavailable"
                     })
             
             return JSONRes.new(200, "Retrieval success.", data={
                 "type": "category",
                 "id": cat.id,
                 "name": cat.name,
-                "description": getattr(cat, "description", ""),
+                "description": cat.description or "Unavailable",
                 "members": members
             })
         
@@ -559,30 +558,22 @@ def getCollectionDetails(colID):
         batch = Batch.load(id=colID)
         if isinstance(batch, Batch):
             artefacts = []
-            for art_id in getattr(batch, 'artefactIDs', []):
+            for art_id in batch.artefacts.keys():
                 art = artefactMap.get(art_id)
                 if art:
                     artefact_data = {
                         "id": art.id,
                         "name": art.name,
-                        "artType": art.artType
+                        "artType": art.artType,
+                        "image": art.image,
+                        "description": art.description or "Unavailable"
                     }
-                    if art.artType == "hf":
-                        artefact_data.update({
-                            "image": art.image,
-                            "description": art.description
-                        })
-                    elif art.artType == "mm":
-                        artefact_data.update({
-                            "description": art.description
-                        })
                     artefacts.append(artefact_data)
             
             return JSONRes.new(200, "Retrieval success.", data={
                 "type": "batch",
                 "id": batch.id,
-                "name": getattr(batch, "name", ""),
-                "description": getattr(batch, "description", ""),
+                "name": batch.name or "Name Unavailable",
                 "artefacts": artefacts
             })
         
