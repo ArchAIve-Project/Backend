@@ -135,7 +135,14 @@ if __name__ == "__main__":
     # Data Studio Routes
     from routes.dataStudio.artefactManagement import artBP
     app.register_blueprint(artBP)
+
+    # In Item Chatbot
+    from routes.initemChatbot.chatbot import chatbotBP
+    app.register_blueprint(chatbotBP)
     
+    from routes.dataStudio.figureGallery import figureGalleryBP
+    app.register_blueprint(figureGalleryBP)
+
     # Superuser creation
     superuser = User.getSuperuser()
     if superuser == None:

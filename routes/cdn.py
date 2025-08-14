@@ -4,8 +4,9 @@ from utils import JSONRes
 from typing import Dict, List
 from flask import Blueprint, send_file, make_response, redirect, request
 from services import Logger
-from schemas import Category, Book, Artefact, User, Batch
-from decorators import cache
+from schemas import Category, Book, Artefact, Figure, User, Batch
+from fm import FileManager, File
+from decorators import cache, timeit
 from sessionManagement import checkSession
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
@@ -640,3 +641,84 @@ def getArtefactMetedata(artID):
     except Exception as e:
         Logger.log("CDN GETARTEFACTMETADATA ERROR: Failed to load artefact metadata - {}".format(e))
         return JSONRes.ambiguousError()
+
+@cdnBP.route('/batch/<batchID>/preview')
+@checkSession(strict=True)
+@cache
+def getBatchFirstArtefact(batchID: str):
+    """
+    Serve the first artefact image of a batch.
+    """
+    try:
+        batch = Batch.load(batchID, withArtefacts=True)
+        if not batch:
+            return JSONRes.new(404, "Batch not found.")
+    except Exception as e:
+        Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to load batch '{}'; error: {}".format(batchID, e))
+        return JSONRes.ambiguousError()
+
+    # Get first artefact
+    artefacts = list(batch.artefacts.values())
+    if not artefacts:
+        return JSONRes.new(404, "Batch has no artefacts.")
+    
+    firstArtefact = artefacts[0].artefact
+    if not firstArtefact or not firstArtefact.image:
+        return JSONRes.new(404, "No image found for the first artefact.")
+
+    file = File(firstArtefact.image, "artefacts")
+    res = None
+
+    # Serve raw file if requested
+    if request.args.get('raw', 'false').lower() == 'true':
+        prep = FileManager.prepFile(file=file)
+        if isinstance(prep, str):
+            if prep == "ERROR: File does not exist.":
+                return JSONRes.new(404, "Artefact image not found.")
+            else:
+                Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to prepare file for batch '{}': {}".format(batchID, prep))
+                return JSONRes.ambiguousError()
+        try:
+            res = make_response(send_file(file.path()))
+        except Exception as e:
+            Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to send file for batch '{}': {}".format(batchID, e))
+            return JSONRes.ambiguousError()
+    else:
+        # Generate signed URL
+        try:
+            url = file.getSignedURL(expiration=datetime.timedelta(minutes=10))
+            if url.startswith("ERROR"):
+                if url == "ERROR: File does not exist.":
+                    return JSONRes.new(404, "Artefact image not found.")
+                else:
+                    raise Exception(url)
+            res = make_response(redirect(url))
+        except Exception as e:
+            Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to generate signed URL for batch '{}': {}".format(batchID, e))
+            return JSONRes.ambiguousError()
+
+    # No-cache headers
+    res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+    res.headers["Pragma"] = "no-cache"
+    res.headers["Expires"] = "0"
+    return res
+
+@cdnBP.route('/figures', methods=['GET'])
+@checkSession(strict=True)
+def getFigures():
+    try:
+        figures: List[Figure] = Figure.load()
+        if not isinstance(figures, list):
+            raise Exception("Unexpected load response: {}".format(figures))
+    except Exception as e:
+        Logger.log("CDN GETFIGURES ERROR: Failed to load figures - {}".format(e))
+        return JSONRes.ambiguousError()
+    
+    outputData = []
+    for figure in figures:
+        outputData.append({
+            "id": figure.id,
+            "label": figure.label if len(figure.label) <= 20 else "No Label"
+        })
+    
+    return JSONRes.new(200, "Retrieval success.", data=outputData)

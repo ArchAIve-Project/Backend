@@ -22,6 +22,10 @@ class HFCatalogueIntegrator:
         if not isinstance(batch, Batch):
             Logger.log("HFCATALOGUEINTEGRATOR INTEGRATE ERROR: Terminating due to invalid input.")
             return
+        
+        job = batch.job
+        job.start()
+        job.save()
 
         tracer = ArchSmith.newTracer("HF Catalogue Integration for Batch {}".format(batch.id))
         tracer.start()
@@ -117,6 +121,9 @@ class HFCatalogueIntegrator:
                     "Failed to mark batch {} as completed: {}".format(batch.id, e)
                 )
             )
+        
+        job.end()
+        job.save()
         
         tracer.addReport(
             ASReport(
