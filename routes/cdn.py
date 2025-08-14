@@ -1,14 +1,11 @@
 import os, datetime
-from flask import Blueprint, send_file, make_response, redirect
 from fm import FileManager, File
-from utils import JSONRes, ResType
+from utils import JSONRes
 from typing import Dict, List
 from flask import Blueprint, send_file, make_response, redirect, request
-from utils import JSONRes, ResType
 from services import Logger
-from schemas import Category, Book, Artefact, Figure, User
-from fm import FileManager, File
-from decorators import cache, timeit
+from schemas import Category, Book, Artefact, User, Batch
+from decorators import cache
 from sessionManagement import checkSession
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
@@ -273,42 +270,48 @@ def getAsset(filename):
 
 @cdnBP.route('/catalogue')
 @checkSession(strict=True)
-@cache(ttl=60, lsInvalidator='cdnCatalogueInvalidator')
+@cache
 def getAllCategoriesWithArtefacts():
     """
-    Returns all human-figure artefacts grouped by category and all books with their associated
+    Retrieves all human-figure artefacts grouped by category and all books with their associated 
     meeting-minute artefacts.
 
-    This endpoint:
-    - Loads all artefacts (without metadata) into a lookup map, with `artType` used to differentiate types.
-    - Loads all categories and links each to its human-figure artefacts (artType = 'hf').
-    - Loads all books and links each to its meeting-minute artefacts (artType = 'mm') via mmIDs.
-    - Handles exceptions at each loading or lookup stage.
-    - Caches the output and requires session authentication.
+    Key Operations:
+    1. Loads all artefacts (without metadata) into a lookup map keyed by artefact ID.
+       - Differentiates artefacts by `artType` ("hf" for human-figure, "mm" for meeting-minute).
+    2. Loads all categories and attaches their human-figure artefacts (`artType = "hf"`).
+    3. Loads all books and attaches their meeting-minute artefacts (`artType = "mm"`) via `mmIDs`.
+    4. Handles exceptions at every loading or lookup stage.
+    5. Requires session authentication.
 
     Response Format:
     ```json
     {
         "categories": {
-            "CategoryName1": [
-                { "id": ..., "name": ..., "image": ..., "description": ... },
-                ...
-            ],
+            "CategoryID1": {
+                "name": "Category Name",
+                "description": "Optional description",
+                "members": [
+                    { "id": "...", "name": "...", "image": "...", "description": "..." },
+                    ...
+                ]
+            },
             ...
         },
         "books": [
             {
-                "id": ...,
-                "title": ...,
-                "subtitle": ...,
+                "id": "...",
+                "title": "...",
+                "subtitle": "...",
                 "mmArtefacts": [
-                    { "id": ..., "name": ..., "description": ... },
+                    { "id": "...", "name": "...", "description": "..." },
                     ...
                 ]
             },
             ...
         ]
     }
+    ```
     """
 
     artefactMap = {}
@@ -347,7 +350,11 @@ def getAllCategoriesWithArtefacts():
                         })
                 except Exception as e:
                     Logger.log("CDN: Failed to resolve artefact in category {} - {}".format(cat.name, e))
-        result[cat.name] = artefactsList
+        result[cat.id] = {
+            "name": cat.name,
+            "description": cat.description or "Unavailable",
+            "members": artefactsList
+        }
 
     # Load all books
     try:
@@ -382,6 +389,199 @@ def getAllCategoriesWithArtefacts():
         "categories": result,
         "books": bookList
     })
+    
+@cdnBP.route('/collectionMemberIDs/<colID>')
+@checkSession(strict=True)
+@cache
+def getCollectionMemberIDs(colID):
+    """
+    Returns the list of all artefact IDs in a collection, which can be a Book, Category, or Batch.
+
+    This endpoint:
+    - Attempts to load the collection sequentially as a Book, Category, or Batch by `colID`.
+    - For Books: returns the `mmIDs` (meeting-minute artefact IDs).
+    - For Categories: returns the keys of `members` (human-figure artefact IDs).
+    - For Batches: returns the keys of `artefacts` (all artefact IDs in the batch).
+    - Logs any errors and returns a generic error response on failure.
+
+    Response Format:
+    - Success (200):
+    ```json
+    ["artefactID1", "artefactID2", ...]
+    ````
+
+    * Not found (404):
+
+    ```json
+    "Collection not found."
+    ```
+
+    * Error (ambiguous):
+
+    ```json
+    "An error occurred."
+    ```
+
+    """
+
+    try:
+        # Try Book
+        book = Book.load(id=colID)
+        if isinstance(book, Book):
+            return JSONRes.new(200, "Retrieval success.", data=book.mmIDs)
+        
+        # Try Category
+        cat = Category.load(id=colID)
+        if isinstance(cat, Category):
+            return JSONRes.new(200, "Retrieval success.", data=list(cat.members.keys()))
+        
+        # Try Batch
+        batch = Batch.load(id=colID)
+        if isinstance(batch, Batch):
+            return JSONRes.new(200, "Retrieval success.", data=list(batch.artefacts.keys()))
+        
+        # None found
+        return JSONRes.new(404, "Collection not found.")
+    
+    except Exception as e:
+        Logger.log("CDN GETCOLLECTIONMEMBERIDS ERROR: Failed to load collection members - {}".format(e))
+        return JSONRes.ambiguousError()
+    
+@cdnBP.route('/collection/<colID>')
+@checkSession(strict=True)
+@cache
+def getCollectionDetails(colID):
+    """
+    Returns detailed information about a collection (book, category, or batch) including all its member artefacts.
+    
+    This endpoint:
+    - Attempts to load the collection as each type (book, category, batch)
+    - Loads all artefacts for resolving member references
+    - Returns the collection details with full artefact information
+    
+    Response Format (varies by collection type):
+    - For Books:
+    ```json
+    {
+        "type": "book",
+        "id": "...",
+        "title": "...",
+        "subtitle": "...",
+        "mmArtefacts": [
+            { "id": ..., "name": ..., "description": ..., "image": ..., ... },
+            ...
+        ]
+    }
+    ```
+    - For Categories:
+    ```json
+    {
+        "type": "category",
+        "id": "...",
+        "name": "...",
+        "description": "...",
+        "members": [
+            { "id": ..., "name": ..., "image": ..., "description": ..., ... },
+            ...
+        ]
+    }
+    ```
+    - For Batches:
+    ```json
+    {
+        "type": "batch",
+        "id": "...",
+        ... (other batch fields),
+        "artefacts": [
+            { "id": ..., "name": ..., ... (other artefact fields) },
+            ...
+        ]
+    }
+    ```
+    """
+    
+    # First load all artefacts for reference
+    try:
+        all_artefacts = Artefact.load(includeMetadata=False) or []
+        artefactMap: Dict[str, Artefact] = {art.id: art for art in all_artefacts}
+    except Exception as e:
+        Logger.log("CDN GETCOLLECTIONDETAILS ERROR: Failed to load artefacts - {}".format(e))
+        return JSONRes.ambiguousError()
+    
+    # Try loading as each collection type
+    try:
+        # Try Book
+        book = Book.load(id=colID)
+        if isinstance(book, Book):
+            mm_details = []
+            for mmID in book.mmIDs:
+                art = artefactMap.get(mmID)
+                if art and art.artType == "mm":
+                    mm_details.append({
+                        "id": art.id,
+                        "name": art.name,
+                        "description": art.description or "Unavailable",
+                        "image": art.image
+                    })
+            
+            return JSONRes.new(200, "Retrieval success.", data={
+                "type": "book",
+                "id": book.id,
+                "title": book.title,
+                "subtitle": book.subtitle or "Unavailable",
+                "mmArtefacts": mm_details
+            })
+        
+        # Try Category
+        cat = Category.load(id=colID)
+        if isinstance(cat, Category):
+            members = []
+            for artefact_id, _ in cat.members.items():
+                art = artefactMap.get(artefact_id)
+                if art and art.artType == "hf":
+                    members.append({
+                        "id": art.id,
+                        "name": art.name,
+                        "image": art.image,
+                        "description": art.description or "Unavailable"
+                    })
+            
+            return JSONRes.new(200, "Retrieval success.", data={
+                "type": "category",
+                "id": cat.id,
+                "name": cat.name,
+                "description": cat.description or "Unavailable",
+                "members": members
+            })
+        
+        # Try Batch
+        batch = Batch.load(id=colID)
+        if isinstance(batch, Batch):
+            artefacts = []
+            for art_id in batch.artefacts.keys():
+                art = artefactMap.get(art_id)
+                if art:
+                    artefact_data = {
+                        "id": art.id,
+                        "name": art.name,
+                        "artType": art.artType,
+                        "image": art.image,
+                        "description": art.description or "Unavailable"
+                    }
+                    artefacts.append(artefact_data)
+            
+            return JSONRes.new(200, "Retrieval success.", data={
+                "type": "batch",
+                "id": batch.id,
+                "name": batch.name or "Name Unavailable",
+                "artefacts": artefacts
+            })
+        
+        return JSONRes.new(404, "Collection not found.")
+    
+    except Exception as e:
+        Logger.log("CDN GETCOLLECTIONDETAILS ERROR: Failed to load collection - {}".format(e))
+        return JSONRes.ambiguousError()
 
 @cdnBP.route('/artefactMetadata/<artID>')
 @checkSession(strict=True)
