@@ -401,8 +401,9 @@ def getArtefactMetedata(artID):
         Logger.log("CDN GETARTEFACTMETADATA ERROR: Failed to load artefact metadata - {}".format(e))
         return JSONRes.ambiguousError()
 
-@cdnBP.route('/batch/<batchID>')
+@cdnBP.route('/batch/<batchID>/preview')
 @checkSession(strict=True)
+@cache
 def getBatchFirstArtefact(batchID: str):
     """
     Serve the first artefact image of a batch.
@@ -412,7 +413,7 @@ def getBatchFirstArtefact(batchID: str):
         if not batch:
             return JSONRes.new(404, "Batch not found.")
     except Exception as e:
-        Logger.log("CDN GETBATCH ERROR: Failed to load batch '{}'; error: {}".format(batchID, e))
+        Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to load batch '{}'; error: {}".format(batchID, e))
         return JSONRes.ambiguousError()
 
     # Get first artefact
@@ -432,16 +433,14 @@ def getBatchFirstArtefact(batchID: str):
         prep = FileManager.prepFile(file=file)
         if isinstance(prep, str):
             if prep == "ERROR: File does not exist.":
-                firstArtefact.image = None
-                firstArtefact.save()
                 return JSONRes.new(404, "Artefact image not found.")
             else:
-                Logger.log("CDN GETBATCH ERROR: Failed to prepare file for batch '{}': {}".format(batchID, prep))
+                Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to prepare file for batch '{}': {}".format(batchID, prep))
                 return JSONRes.ambiguousError()
         try:
             res = make_response(send_file(file.path()))
         except Exception as e:
-            Logger.log("CDN GETBATCH ERROR: Failed to send file for batch '{}': {}".format(batchID, e))
+            Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to send file for batch '{}': {}".format(batchID, e))
             return JSONRes.ambiguousError()
     else:
         # Generate signed URL
@@ -449,14 +448,12 @@ def getBatchFirstArtefact(batchID: str):
             url = file.getSignedURL(expiration=datetime.timedelta(minutes=10))
             if url.startswith("ERROR"):
                 if url == "ERROR: File does not exist.":
-                    firstArtefact.image = None
-                    firstArtefact.save()
                     return JSONRes.new(404, "Artefact image not found.")
                 else:
                     raise Exception(url)
             res = make_response(redirect(url))
         except Exception as e:
-            Logger.log("CDN GETBATCH ERROR: Failed to generate signed URL for batch '{}': {}".format(batchID, e))
+            Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to generate signed URL for batch '{}': {}".format(batchID, e))
             return JSONRes.ambiguousError()
 
     # No-cache headers
