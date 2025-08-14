@@ -1,9 +1,9 @@
 import os, sys
 from bootCheck import BootCheck
-if not (len(sys.argv) > 1 and sys.argv[1] == "--skip-bootcheck"):
-    BootCheck.check()
-    print("BOOTCHECK: Check complete.")
-del BootCheck
+# if not (len(sys.argv) > 1 and sys.argv[1] == "--skip-bootcheck"):
+#     BootCheck.check()
+#     print("BOOTCHECK: Check complete.")
+# del BootCheck
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -135,6 +135,10 @@ if __name__ == "__main__":
     # Data Studio Routes
     from routes.dataStudio.artefactManagement import artBP
     app.register_blueprint(artBP)
+
+    # In Item Chatbot
+    from routes.initemChatbot.chabot import chatbotBP
+    app.register_blueprint(chatbotBP)
     
     # Superuser creation
     superuser = User.getSuperuser()
