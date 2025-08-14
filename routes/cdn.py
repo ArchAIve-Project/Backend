@@ -662,3 +662,23 @@ def getBatchFirstArtefact(batchID: str):
     res.headers["Pragma"] = "no-cache"
     res.headers["Expires"] = "0"
     return res
+
+@cdnBP.route('/figures', methods=['GET'])
+@checkSession(strict=True)
+def getFigures():
+    try:
+        figures: List[Figure] = Figure.load()
+        if not isinstance(figures, list):
+            raise Exception("Unexpected load response: {}".format(figures))
+    except Exception as e:
+        Logger.log("CDN GETFIGURES ERROR: Failed to load figures - {}".format(e))
+        return JSONRes.ambiguousError()
+    
+    outputData = []
+    for figure in figures:
+        outputData.append({
+            "id": figure.id,
+            "label": figure.label if len(figure.label) <= 20 else "No Label"
+        })
+    
+    return JSONRes.new(200, "Retrieval success.", data=outputData)

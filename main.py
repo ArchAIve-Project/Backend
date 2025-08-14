@@ -140,6 +140,9 @@ if __name__ == "__main__":
     from routes.initemChatbot.chatbot import chatbotBP
     app.register_blueprint(chatbotBP)
     
+    from routes.dataStudio.figureGallery import figureGalleryBP
+    app.register_blueprint(figureGalleryBP)
+
     # Superuser creation
     superuser = User.getSuperuser()
     if superuser == None:
