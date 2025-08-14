@@ -1,6 +1,6 @@
 import os
 from flask import Blueprint, request
-from utils import JSONRes, ResType
+from utils import JSONRes, ResType, Extensions
 from services import Logger, Universal, FileOps
 from sessionManagement import checkSession
 from schemas import Artefact, User, Batch, BatchProcessingJob, BatchArtefact
@@ -39,6 +39,13 @@ def upload(user : User):
 
     if batchID != None and (not isinstance(batchID, str) or len(batchID.strip()) == 0):
         return JSONRes.new(400, "Invalid batch ID.")
+    
+    name = request.form.get('name')
+    if batchID == None:
+        if (not name or not isinstance(name, str) or len(name.strip()) == 0):
+            return JSONRes.new(400, "Valid name must be provided for upload to a new batch.", ResType.USERERROR)
+        elif not 1 <= len(name.strip()) <= 15 or not name.strip().replace(' ', '').isalnum():
+            return JSONRes.new(400, "Name must be alphanumeric and between 1 and 15 characters.", ResType.USERERROR)
 
     if 'file' not in request.files:
         return JSONRes.new(400, "No file part in request.")
@@ -53,10 +60,8 @@ def upload(user : User):
         batch = Batch.load(id=batchID)
         if not batch:
             return JSONRes.new(404, "Batch {} not found.".format(batchID))
-        if batch.userID != user.id:
-            return JSONRes.new(403, "You do not have permission to modify this batch.", ResType.USERERROR)
         if batch.stage != Batch.Stage.UPLOAD_PENDING:
-            return JSONRes.new(400, "Cannot add files to batch in stage '{}'.".format(batch.stage))
+            return JSONRes.new(400, "Batch must be in pending upload stage to upload artefacts.", ResType.USERERROR)
 
     fileSaveUpdates = {}
     successfulFiles = []
@@ -126,9 +131,11 @@ def upload(user : User):
         if batchID:
             for artefact in successfulFiles:
                 batch.add(artefact,BatchArtefact.Status.UNPROCESSED)
+            if batch.name != None:
+                batch.name = name
             batch.save()
         else:
-            batch = Batch(user.id, batchArtefacts=successfulFiles)
+            batch = Batch(user.id, name=name, batchArtefacts=successfulFiles)
             batch.save()
     except Exception as e:
         Logger.log("DATAIMPORT UPLOAD ERROR: Failed to create batch for user '{}' with '{}' artefacts; error: {}".format(user.id, len(successfulFiles), e))
@@ -209,22 +216,24 @@ def getAllBatches():
     for b in batches:
         try:
             rep = b.represent()
-
+            
+            clean = Extensions.sanitiseData(rep, None, ['userID', 'processingError', 'jobID'])
+            formatted[b.id] = clean
+            
             # Remove userID completely
-            rep.pop("userID", None)
+            # rep.pop("userID", None)
 
-            # Remove processingError from each artefact
-            for artefactData in rep.get("artefacts", {}).values():
-                artefactData.pop("processingError", None)
+            # # Remove processingError from each artefact
+            # for artefactData in rep.get("artefacts", {}).values():
+            #     artefactData.pop("processingError", None)
 
-            # Keep job but remove jobID
-            if "job" in rep and isinstance(rep["job"], dict):
-                rep["job"].pop("jobID", None)
+            # # Keep job but remove jobID
+            # if "job" in rep and isinstance(rep["job"], dict):
+            #     rep["job"].pop("jobID", None)
 
-            formatted[b.id] = rep
-
+            # formatted[b.id] = rep
         except Exception as e:
-            Logger.log("DATAIMPORT GETALLBATCHES ERROR: Failed to filter batch '{}'; error: {}".format(b.id, e))
+            Logger.log("DATAIMPORT GETALLBATCHES WARNING: Failed to filter batch '{}'; error: {}".format(b.id, e))
             continue
 
     return JSONRes.new(200, "All batches retrieved.", batches=formatted)
