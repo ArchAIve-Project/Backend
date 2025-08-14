@@ -136,6 +136,9 @@ if __name__ == "__main__":
     from routes.dataStudio.artefactManagement import artBP
     app.register_blueprint(artBP)
     
+    from routes.dataStudio.figureGallery import figureGalleryBP
+    app.register_blueprint(figureGalleryBP)
+
     # Superuser creation
     superuser = User.getSuperuser()
     if superuser == None:
