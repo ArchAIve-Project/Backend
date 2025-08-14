@@ -270,7 +270,7 @@ def getAsset(filename):
 
 @cdnBP.route('/catalogue')
 @checkSession(strict=True)
-@cache
+@cache(lsInvalidator="catalogue")
 def getAllCategoriesWithArtefacts():
     """
     Retrieves all human-figure artefacts grouped by category and all books with their associated 
@@ -392,7 +392,7 @@ def getAllCategoriesWithArtefacts():
     
 @cdnBP.route('/collectionMemberIDs/<colID>')
 @checkSession(strict=True)
-@cache
+@cache(lsInvalidator="collectionMemberIDs")
 def getCollectionMemberIDs(colID):
     """
     Returns the list of all artefact IDs in a collection, which can be a Book, Category, or Batch.
@@ -449,7 +449,7 @@ def getCollectionMemberIDs(colID):
     
 @cdnBP.route('/collection/<colID>')
 @checkSession(strict=True)
-@cache
+@cache(lsInvalidator="collectionDetails")
 def getCollectionDetails(colID):
     """
     Returns detailed information about a collection (book, category, or batch) including all its member artefacts.
@@ -585,7 +585,7 @@ def getCollectionDetails(colID):
     
 @cdnBP.route('/retrieveAssociationInfo/<artID>')
 @checkSession(strict=True)
-@cache
+@cache(lsInvalidator="associationInfo")
 def getAssociationInfo(artID):
     try:
         art = Artefact.load(id=artID)

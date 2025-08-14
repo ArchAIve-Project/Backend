@@ -3,7 +3,7 @@ from utils import JSONRes
 from services import Logger, LiteStore
 from decorators import jsonOnly, enforceSchema, checkAPIKey
 from sessionManagement import checkSession
-from schemas import Artefact, User
+from schemas import Artefact, User, Category, Book
 from NERPipeline import NERPipeline
 from addons import ArchSmith, ASReport
 
@@ -208,3 +208,74 @@ def removeFigure(user: User):
         return JSONRes.ambiguousError()
 
     return JSONRes.new(200, "Figure removed successfully.")
+
+@artBP.route('/updateAssociation', methods=['POST'])
+@checkAPIKey
+@jsonOnly
+@enforceSchema(
+    ("artefactID", str),
+    ("colIDs", list)
+)
+@checkSession(strict=True, provideUser=True)
+def updateAssociation(user: User):
+    artefactID: str = request.json.get("artefactID")
+    colIDs: list = request.json.get("colIDs", [])
+
+    try:
+        art = Artefact.load(id=artefactID)
+        if not isinstance(art, Artefact):
+            return JSONRes.new(404, "Artefact not found.")
+        
+    except Exception as e:
+        Logger.log("ARTEFACTMANAGEMENT UPDATEASSOCIATION ERROR: Failed to load artefact {}: {}".format(artefactID, e))
+        return JSONRes.ambiguousError()
+
+    mm = art.metadata.isMM()
+
+    for entry in colIDs:
+        collectionID = entry.get("colID")
+        isMember = entry.get("isMember", False)
+
+        if mm:
+            try:
+                # Handle MM associations with Book
+                book = Book.load(id=collectionID)
+                if not isinstance(book, Book):
+                    continue
+
+                if isMember and artefactID not in book.mmIDs:
+                    book.mmIDs.append(artefactID)
+                elif not isMember and artefactID in book.mmIDs:
+                    book.mmIDs.remove(artefactID)
+
+                book.save()
+                
+            except Exception as e:
+                Logger.log("ARTEFACTMANAGEMENT UPDATEASSOCIATION ERROR: Failed to update book association for artefact {}: {}".format(artefactID, e))
+                return JSONRes.ambiguousError()
+
+        else:
+            try:
+                # Handle category associations
+                cat = Category.load(id=collectionID)
+                if not isinstance(cat, Category):
+                    continue
+
+                if isMember:
+                    cat.add(artefactID, "Reassigned by use {}".format(user.username))
+                else:
+                    cat.remove(artefactID)
+
+                cat.save()
+        
+            except Exception as e:
+                Logger.log("ARTEFACTMANAGEMENT UPDATEASSOCIATION ERROR: Failed to update category for artefact {}: {}".format(artefactID, e))
+                return JSONRes.ambiguousError()
+                        
+    user.newLog("Artefact {} Update".format(art.name), "Association updated.")
+    LiteStore.set("catalogue", True)
+    LiteStore.set("collectionMemberIDs", True)
+    LiteStore.set("collectionDetails", True)
+    LiteStore.set("associationInfo", True)
+    LiteStore.set("artefactMetadata", True)
+    return JSONRes.new(200, "Associations Updated.")
