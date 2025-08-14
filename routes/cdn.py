@@ -406,8 +406,6 @@ def getArtefactMetedata(artID):
 def getBatchFirstArtefact(batchID: str):
     """
     Serve the first artefact image of a batch.
-    Query param: ?raw=true → serve file directly; else redirect to signed URL.
-    No user authorization check.
     """
     try:
         batch = Batch.load(batchID, withArtefacts=True)
