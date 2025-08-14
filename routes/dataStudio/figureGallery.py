@@ -40,7 +40,7 @@ def updateFigure(user: User):
     try:
         conflictingFigure = Figure.load(label=label)
         if isinstance(conflictingFigure, Figure) and conflictingFigure.id != targetFigure.id:
-            return JSONRes.new(409, "Figure with label '{}' already exists.".format(label))
+            return JSONRes.new(409, "Figure with label '{}' already exists.".format(label), ResType.USERERROR)
     except Exception as e:
         Logger.log("FIGUREGALLERY UPDATEFIGURE ERROR: Couldn't load figure for conflict check with label '{}'; error: {}".format(label, e))
         return JSONRes.ambiguousError()
