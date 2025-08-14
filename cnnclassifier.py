@@ -4,13 +4,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 from PIL import Image
+from services import FileOps, Universal
 from addons import ModelStore, ASTracer, ASReport
+# from addons import ArchSmith
+from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant
 
 """
 A CNN-based binary classifier for distinguishing between 'cc' and 'hf' classes.
 """
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # === Model Definition ===
 class CNNModel(nn.Module):
@@ -60,11 +61,11 @@ class ImageClassifier:
 
         model = CNNModel() 
 
-        checkpoint = torch.load(modelPath, map_location=DEVICE)
+        checkpoint = torch.load(modelPath, map_location=Universal.getBestDevice())
         state_dict = checkpoint.get("model_state_dict", checkpoint)
         model.load_state_dict(state_dict, strict=False)
-        
-        model.to(DEVICE)
+
+        model.to(Universal.getBestDevice())
         model.eval()
 
         ImageClassifier.transform = transforms.Compose([
@@ -81,12 +82,15 @@ class ImageClassifier:
         Performs inference on a single image file or directory of images.
         Returns a list of (path, predicted_label, confidence).
         """
-
-        model_ctx = ModelStore.getModel("cnn")
-        if model_ctx is None or model_ctx.model is None:
-            raise RuntimeError("CNN model is not loaded. Ensure it is registered and loaded in ModelStore.")
-        model = model_ctx.model
-
+        
+        model_ctx = None
+        model = None
+        if os.environ.get("LLM_INFERENCE", "False") != "True":
+            model_ctx = ModelStore.getModel("cnn")
+            if model_ctx is None or model_ctx.model is None:
+                raise RuntimeError("CNN model is not loaded. Ensure it is registered and loaded in ModelStore.")
+            model = model_ctx.model
+        
         # if dir or file path is provided
         if isinstance(input_path, str):
             # dir
@@ -126,9 +130,53 @@ class ImageClassifier:
         results = []
 
         for path in image_paths:
+            if os.environ.get("LLM_INFERENCE", "False") == "True":
+                cont = InteractionContext(
+                    provider=LMProvider.QWEN,
+                    variant=LMVariant.QWEN_VL_PLUS
+                )
+                
+                cont.addInteraction(
+                    Interaction(
+                        role=Interaction.Role.USER,
+                        content=("You are part of an historical artefact digitisation program. "
+                                 "Classify the attached image as meeting minutes (MM), if it contains traditional Chinese Calligraphy like text, "
+                                 "or human figures (HF), if it contains pictures of people. Stricly output only either 'hf' or 'mm', and nothing else.\n\nOutput:"),
+                        imagePath=path,
+                        imageFileType="image/{}".format(FileOps.getFileExtension(path))
+                    ),
+                    imageMessageAcknowledged=True
+                )
+                
+                try:
+                    response = LLMInterface.engage(cont)
+                    if isinstance(response, str):
+                        raise Exception("Unexpected response: {}".format(response))
+                    
+                    classification = "hf" in response.content.lower()
+                    results.append((path, "hf" if classification else "mm", 100.0))
+                    
+                    tracer.addReport(
+                        ASReport(
+                            source="IMAGECLASSIFIER PREDICT",
+                            message="LLM classification result: {}".format("hf" if classification else "mm"),
+                            extraData={"path": path, "response": response.content}
+                        )
+                    )
+                    
+                    continue
+                except Exception as e:
+                    tracer.addReport(
+                        ASReport(
+                            source="IMAGECLASSIFIER PREDICT ERROR",
+                            message="LLM image classification failed; error: {}".format(e)
+                        )
+                    )
+                    continue
+            
             try:
                 image = Image.open(path).convert("RGB")
-                image = ImageClassifier.transform(image).unsqueeze(0).to(DEVICE)
+                image = ImageClassifier.transform(image).unsqueeze(0).to(Universal.getBestDevice())
 
                 with torch.no_grad():
                     output = model(image)
@@ -144,14 +192,13 @@ class ImageClassifier:
                 if tracer:
                     report = ASReport(
                         source="IMAGECLASSIFIER PREDICT",
-                        message=f"Prediction: {label} ({confidence:.2f}%)",
+                        message="Prediction: {} ({:.2f}%)".format(label, confidence),
                         extraData={"probability": prob, "label_index": label_idx}
                     )
                     tracer.addReport(report)
 
             except Exception as e:
-                error_msg = f"Error processing {path}: {e}"
-                print(error_msg)
+                error_msg = "Error processing {}: {}".format(path, e)
                 
                 if tracer:
                     error_report = ASReport(
@@ -164,27 +211,33 @@ class ImageClassifier:
         return results
 
 # === Entry point for testing the classifier ===
-if __name__ == "__main__":
-    ModelStore.setup()
+# if __name__ == "__main__":
+#     ModelStore.setup(
+#         autoLoad=True,
+#         cnn=ImageClassifier.load_model
+#     )
 
-    ModelStore.registerLoadModelCallbacks(
-        cnn=ImageClassifier.load_model
+    # model_ctx = ModelStore.getModel("cnn")
+    # if model_ctx is None or model_ctx.model is None:
+    #     raise RuntimeError("CNN model is not loaded. Ensure it is registered and loaded in ModelStore.")
+    # model = model_ctx.model
+
+    # test_tensor = torch.randn(1, 3, 224, 224).to(DEVICE)
+    # print(f"CNN model output shape: {model(test_tensor).shape}")
     
-    )
+    # LLMInterface.initDefaultClients()
+    
+    # print(Universal.getBestDevice())
+    
+    # t = ArchSmith.newTracer("cnn testing")
 
-    ModelStore.loadModels("cnn")
-
-    model_ctx = ModelStore.getModel("cnn")
-    if model_ctx is None or model_ctx.model is None:
-        raise RuntimeError("CNN model is not loaded. Ensure it is registered and loaded in ModelStore.")
-    model = model_ctx.model
-
-    test_tensor = torch.randn(1, 3, 224, 224).to(DEVICE)
-    print(f"CNN model output shape: {model(test_tensor).shape}")
-
-    # Predict on a sample image
-    results = ImageClassifier.predict("Companydata/CC/Sample 1/-003.jpg", tracer=None)
-
-    # Print results
-    for path, label, confidence in results:
-        print(f"{path}: {label} - {confidence:.1f}%")
+    # # Predict on a sample image
+    # results = ImageClassifier.predict("Companydata/63 20231117 ACCCIM hosted a forum with SCCCI.jpg", tracer=t)
+    # t.end()
+    # ArchSmith.persist()
+    
+    # print(results)
+    
+    # # Print results
+    # for path, label, confidence in results:
+    #     print(f"{path}: {label} - {confidence:.1f}%")
