@@ -44,7 +44,7 @@ class InItemChatbot:
         else:
             role = "You are an assistant providing factual information about a museum artefact.\n"
 
-        prompt = "{}\n\nArtefact Details\n Name: {}\n".format(role, artefact.name)
+        prompt = "{}\n\nArtefact Details\nName: {}\n".format(role, artefact.name)
 
         # Check for metadata
         if artefact.metadata is None:
@@ -55,16 +55,13 @@ class InItemChatbot:
             filtered_metadata = InItemChatbot.filterMetadata(metadata_repr)
             if filtered_metadata:
                 for key, value in filtered_metadata.items():
-                    if value:
-                        prompt += "- {}: {}\n".format(key, value)
-                    else:
-                        prompt += "- {}: (Not provided)\n".format(key)
+                    prompt += "- {}: {}\n".format(key, value or '(Not provided)')
             else:
                 prompt += "(No relevant metadata found)\n"
 
         prompt += """
         Please answer the user's questions by presenting artefact information in a natural, conversational tone. 
-        Avoid listing facts robotically—respond as a friendly museum guide would.
+        Avoid listing facts robotically; respond as a friendly museum guide would.
 
         Important guidelines:
         - Base responses strictly on the artefact details provided.
