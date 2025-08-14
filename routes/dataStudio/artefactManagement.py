@@ -270,8 +270,10 @@ def updateAssociation(user: User):
 
                 if isMember and not artefactID in cat.members:
                     cat.add(artefactID, "Reassigned by user {}".format(user.username))
+                    changes = True
                 elif not isMember and artefactID in cat.members:
                     cat.remove(artefactID)
+                    changes = True
 
                 if changes:
                     cat.save()
