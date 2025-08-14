@@ -27,6 +27,7 @@ class EnvVariable:
             EnvVariable("LOGGING_ENABLED", True, False),
             EnvVariable("DEBUG_MODE", True, False),
             EnvVariable("DEBUG_MS_AUTOLOAD", True, False),
+            EnvVariable("LLM_INFERENCE", True, True),
             EnvVariable("FM_DEBUG_MODE", True, False),
             EnvVariable("DECORATOR_DEBUG_MODE", True, False),
             EnvVariable("DB_DEBUG_MODE", True, False),
