@@ -69,7 +69,7 @@ class DataImportProcessor:
         
         Logger.log("DATAIMPORT PROCESSBATCH: Finished processing batch '{}' with {} target artefacts.".format(batch.id, len(targetBatchArtefacts)))
         
-        batch.stage = Batch.Stage.PROCESSED
+        batch.stage = Batch.Stage.VETTING
         batch.save()
 
         job.end()

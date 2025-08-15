@@ -140,8 +140,8 @@ class ImageClassifier:
                     Interaction(
                         role=Interaction.Role.USER,
                         content=("You are part of an historical artefact digitisation program. "
-                                 "Classify the attached image as meeting minutes (MM), if it contains traditional Chinese Calligraphy like text, "
-                                 "or human figures (HF), if it contains pictures of people. Stricly output only either 'hf' or 'mm', and nothing else.\n\nOutput:"),
+                                 "Classify the attached image as Chinese Calligraphy (CC), if it contains traditional Chinese Calligraphy like text, "
+                                 "or human figures (HF), if it contains pictures of people. Stricly output only either 'hf' or 'cc', and nothing else.\n\nOutput:"),
                         imagePath=path,
                         imageFileType="image/{}".format(FileOps.getFileExtension(path))
                     ),
@@ -154,12 +154,12 @@ class ImageClassifier:
                         raise Exception("Unexpected response: {}".format(response))
                     
                     classification = "hf" in response.content.lower()
-                    results.append((path, "hf" if classification else "mm", 100.0))
+                    results.append((path, "hf" if classification else "cc", 100.0))
                     
                     tracer.addReport(
                         ASReport(
                             source="IMAGECLASSIFIER PREDICT",
-                            message="LLM classification result: {}".format("hf" if classification else "mm"),
+                            message="LLM classification result: {}".format("hf" if classification else "cc"),
                             extraData={"path": path, "response": response.content}
                         )
                     )
