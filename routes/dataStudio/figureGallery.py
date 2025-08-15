@@ -50,6 +50,8 @@ def updateFigure(user: User):
     try:
         targetFigure.save(embeds=False)
         user.newLog("FIGURE UPDATE", "Updated label for figure '{}' from '{}' to '{}'.".format(figureID, prev, label))
+        
+        LiteStore.set("artefactMetadata", True)
         return JSONRes.new(200, "Figure updated successfully.")
     except Exception as e:
         Logger.log("FIGUREGALLERY UPDATEFIGURE ERROR: Couldn't save figure with ID '{}'; error: {}".format(figureID, e))
