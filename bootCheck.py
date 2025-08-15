@@ -26,7 +26,6 @@ class EnvVariable:
             EnvVariable("DEVICE", False, False),
             EnvVariable("LOGGING_ENABLED", True, False),
             EnvVariable("DEBUG_MODE", True, False),
-            EnvVariable("DEBUG_MS_AUTOLOAD", True, False),
             EnvVariable("LLM_INFERENCE", True, True),
             EnvVariable("FM_DEBUG_MODE", True, False),
             EnvVariable("DECORATOR_DEBUG_MODE", True, False),
@@ -35,6 +34,7 @@ class EnvVariable:
             EnvVariable("API_KEY", False, True),
             EnvVariable("SECRET_KEY", False, True),
             EnvVariable("FRONTEND_URL", False, True),
+            EnvVariable("MAX_FILE_UPLOADS", False, False),
             EnvVariable("EMAILING_ENABLED", True, True, [
                 EnvVariable("SENDER_EMAIL", False, True),
                 EnvVariable("SENDER_EMAIL_APP_PASSWORD", False, True)

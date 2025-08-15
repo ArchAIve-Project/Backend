@@ -92,7 +92,7 @@ if __name__ == "__main__":
     
     # Setup ModelStore
     ModelStore.setup(
-        autoLoad=os.environ.get("DEBUG_MS_AUTOLOAD", "True") == "True" and os.environ.get("LLM_INFERENCE", "False") == "False",
+        autoLoad=os.environ.get("LLM_INFERENCE", "False") != "True",
         ccr=CCRPipeline.loadChineseClassifier,
         ccrCharFilter=CCRPipeline.loadBinaryClassifier,
         cnn=ImageClassifier.load_model,

@@ -1,15 +1,13 @@
 import os
 from flask import Blueprint, request
 from utils import JSONRes, ResType, Extensions
-from services import Logger, Universal, FileOps, LiteStore
-from sessionManagement import checkSession
-from schemas import Artefact, User, Batch, BatchProcessingJob, BatchArtefact
+from services import Logger, Universal, FileOps, LiteStore, ThreadManager
 from fm import FileManager, File
-from services import ThreadManager
+from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
+from schemas import Artefact, User, Batch, BatchProcessingJob, BatchArtefact, Book, Category
+from sessionManagement import checkSession
 from ingestion import DataImportProcessor
 from catalogueIntegration import HFCatalogueIntegrator
-from services import Logger, Universal
-from decorators import jsonOnly, enforceSchema
 
 dataImportBP = Blueprint('dataImport', __name__, url_prefix="/dataImport")
 
@@ -54,6 +52,10 @@ def upload(user : User):
     files = list(filter(lambda f: f and f.filename, files))
     if not files:
         return JSONRes.new(400, "No files selected.", ResType.USERERROR)
+    
+    max_upload_limit = int(os.environ.get("MAX_FILE_UPLOADS", "15"))
+    if len(files) > max_upload_limit:
+        return JSONRes.new(400, "Exceeded maximum file upload limit of {}.".format(max_upload_limit), ResType.USERERROR)
     
     batch = None
     if batchID:
@@ -282,9 +284,14 @@ def cancelBatch():
         Logger.log("DATAIMPORT CANCELBATCH ERROR: Failed to cancel batch '{}'; error: {}".format(batchJob.batchID, e))
         return JSONRes.ambiguousError()
 
-@dataImportBP.route('/batches/<batchID>', methods=['DELETE'])
-@checkSession(strict=True)
-def deleteBatch(batchID: str):
+@dataImportBP.route('/batches/delete', methods=['POST'])
+@checkAPIKey
+@jsonOnly
+@enforceSchema(
+    Param("batchID", lambda x: isinstance(x, str) and len(x) > 0, invalidRes=JSONRes.new(400, "Invalid batch ID.", serialise=False))
+)
+@checkSession(strict=True, provideUser=True)
+def deleteBatch(user: User):
     """
     Deletes a batch and its artefacts.
 
@@ -295,26 +302,53 @@ def deleteBatch(batchID: str):
 
     Returns a summary of deletion results per artefact and batchID.
     """
+    batchID: str = request.json.get("batchID")
+    
     try:
-        batch = Batch.load(id=batchID, withArtefacts=True)
+        batch = Batch.load(batchID, withArtefacts=True)
         if not batch:
             return JSONRes.new(404, "Batch '{}' not found.".format(batchID))
-
     except Exception as e:
         Logger.log("DATAIMPORT DELETE ERROR: Failed to load batch '{}'; error : {}".format(batchID, e))
         return JSONRes.ambiguousError()
-
+    
+    if batch.job and batch.job.status == BatchProcessingJob.Status.PROCESSING:
+        return JSONRes.new(400, "Batch '{}' is currently processing. Cannot delete.".format(batch.name), ResType.USERERROR)
+    
     deletionResults = {}
     batchArtefacts = batch.artefacts or {}
-
+    
+    categories: list[Category] = []
+    books: list[Book] = []
+    try:
+        books = Book.load()
+        categories = Category.load()
+    except Exception as e:
+        Logger.log("DATAIMPORT DELETEBATCH ERROR: Failed to load groups for batch '{}' deletion; error: {}".format(batch.id, e))
+        return JSONRes.ambiguousError()
+    
     for artefactID in list(batchArtefacts.keys()):
-
         artefact = batchArtefacts[artefactID].artefact
-
+        
+        # Delete associations first
+        try:
+            for category in categories:
+                if category.has(artefactID):
+                    category.remove(artefactID)
+                    category.save()
+            for book in books:
+                if artefactID in book.mmIDs:
+                    book.mmIDs.remove(artefactID)
+                    book.save()
+        except Exception as e:
+            Logger.log("DATAIMPORT DELETEBATCH ERROR: Failed to remove associations for artefact '{}' in batch '{}'; error: {}".format(artefactID, batchID, e))
+            deletionResults[artefactID] = "ERROR: Failed to remove associations."
+            continue
+        
         # Delete file from FileManager
         res = artefact.fmDelete()
         if res is not True:
-            Logger.log("DATAIMPORT DELETE ERROR: Failed to FM delete file for artefact '{}'; error: {}".format(artefactID, res))
+            Logger.log("DATAIMPORT DELETEBATCH WARNING: Failed to FM delete file for artefact '{}' in batch '{}'; error: {}".format(artefactID, batchID, res))
             deletionResults[artefactID] = "ERROR: Failed to delete artefact."
             continue
 
@@ -327,24 +361,29 @@ def deleteBatch(batchID: str):
             del batch.artefacts[artefactID]
 
             deletionResults[artefactID] = "SUCCESS: Artefact deleted successfully."
-
         except Exception as e:
-            Logger.log("DATAIMPORT DELETE ERROR: Failed to DB delete artefact '{}'; error: {}".format(artefactID, e))
+            Logger.log("DATAIMPORT DELETEBATCH ERROR: Failed to DB delete artefact '{}'; error: {}".format(artefactID, e))
             deletionResults[artefactID]= "ERROR: Failed to delete artefact."
-
+    
     # Attempt to delete the batch
-    try:
-        batch.destroy()
-        deletionResults[batchID] = "SUCCESS: Batch deleted successfully."
-    except Exception as e:
-        Logger.log("DATAIMPORT DELETE ERROR: Failed to delete batch '{}'; error: {}".format(batchID, e))
-        deletionResults[batchID] = "ERROR: Failed to delete batch."
-
-    # Determine overall response
     hasErrors = any("ERROR" in msg for msg in deletionResults.values())
+    if not hasErrors:
+        try:
+            batch.destroy()
+            deletionResults[batchID] = "SUCCESS: Batch deleted successfully."
+        except Exception as e:
+            Logger.log("DATAIMPORT DELETEBATCH ERROR: Failed to delete batch '{}'; error: {}".format(batchID, e))
+            deletionResults[batchID] = "ERROR: Failed to delete batch."
+    
+    try:
+        user.newLog("Batch {}Deletion".format(" Partial" if hasErrors else ""), "Batch with name '{}' and ID '{}' deleted along with{} its artefacts.".format(batch.name, batchID, " some of" if hasErrors else ""))
+    except Exception as e:
+        Logger.log("DATAIMPORT DELETEBATCH WARNING: Failed to log batch '{}' deletion for user '{}'; error: {}".format(batchID, user.id, e))
+    
+    # Determine overall response
     if hasErrors:
         return JSONRes.new(207, "Batch '{}' deletion partially failed.".format(batchID), updates=deletionResults, batchID=batchID)
-
+    
     return JSONRes.new(200, "Batch '{}' and all artefacts deleted.".format(batchID), updates=deletionResults, batchID=batchID)
 
 # @dataImportBP.route('/vetting/start', methods=['POST'])
