@@ -142,6 +142,9 @@ if __name__ == "__main__":
     
     from routes.dataStudio.figureGallery import figureGalleryBP
     app.register_blueprint(figureGalleryBP)
+    
+    from routes.dataStudio.groupManagement import grpBP
+    app.register_blueprint(grpBP)
 
     # Superuser creation
     superuser = User.getSuperuser()

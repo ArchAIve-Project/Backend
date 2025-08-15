@@ -1,7 +1,7 @@
 import os
 from flask import Blueprint, request
 from utils import JSONRes, ResType, Extensions
-from services import Logger, Universal, FileOps
+from services import Logger, Universal, FileOps, LiteStore
 from sessionManagement import checkSession
 from schemas import Artefact, User, Batch, BatchProcessingJob, BatchArtefact
 from fm import FileManager, File
@@ -393,6 +393,8 @@ def confirmArtefact():
 
         batchArtefact.stage = BatchArtefact.Status.CONFIRMED
         batchArtefact.save()
+        
+        LiteStore.set('artefactMetadata', True)
 
         return JSONRes.new(200, "Artefact '{}' confirmed.".format(artefactID))
     except Exception as e:
