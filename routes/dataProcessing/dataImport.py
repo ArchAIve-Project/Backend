@@ -12,6 +12,7 @@ from catalogueIntegration import HFCatalogueIntegrator
 dataImportBP = Blueprint('dataImport', __name__, url_prefix="/dataImport")
 
 @dataImportBP.route('/upload', methods=['POST'])
+@checkAPIKey
 @checkSession(strict=True, provideUser=True)
 def upload(user : User):
     """

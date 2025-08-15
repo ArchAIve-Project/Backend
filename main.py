@@ -10,6 +10,7 @@ load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
 from flask_cors import CORS
 from flask_limiter import Limiter
+import appUtils
 from emailer import Emailer
 from fm import FileManager
 from ai import LLMInterface
@@ -24,17 +25,9 @@ from cnnclassifier import ImageClassifier
 from captioner import ImageCaptioning, Vocabulary
 from schemas import User
 
-def getIP():
-    return request.headers.get('X-Real-Ip', request.remote_addr)
-
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, origins="*", supports_credentials=True, allow_private_network=True)
-limiter = Limiter(
-    getIP,
-    app=app,
-    default_limits=["100 per minute"],
-    storage_uri="memory://",
-)
+appUtils.limiter.init_app(app)
 
 app.secret_key = os.environ['SECRET_KEY']
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get("MAX_CONTENT_SIZE", 100)) * 1024 * 1024
