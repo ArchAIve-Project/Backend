@@ -36,13 +36,13 @@ def createGroup(user: User):
                 name=title,
                 description=subtitle
             ).save()
-            user.newLog("CategoryCreated", "Created category '{}'".format(title))
+            user.newLog("Category Created", "Created category '{}'".format(title))
             
         LiteStore.set("catalogue", True)
         return JSONRes.new(200, "{} created successfully".format(groupType.capitalize()))
         
     except Exception as e:
-        Logger.log("GROUPMANAGEMENT CREATEGROUP ERROR: Failed to create {} '{}': {}".format(groupType, title, e))
+        Logger.log("GROUPMANAGEMENT CREATEGROUP ERROR: Failed to create {} with title'{}': {}".format(groupType, title, e))
         return JSONRes.ambiguousError()
     
 @grpBP.route('/updateDetails', methods=['POST'])
@@ -58,50 +58,64 @@ def updateDetails(user: User):
     collectionID = request.json.get("collectionID")
     newName = request.json.get("name")
     newDescription = request.json.get("description")
-    changes = []
-    
+
     try:
         collection = Book.load(id=collectionID)
-        isBook = True
-        
-        if not isinstance(collection, Book):
-            collection = Category.load(id=collectionID)
-            isBook = False
-            
-            if not isinstance(collection, Category):
-                return JSONRes.new(404, "Collection not found")
-        
-        currentName = collection.title if isBook else collection.name
-        if newName and currentName != newName:
-            if isBook:
-                collection.title = newName.strip()
-            else:
-                collection.name = newName.strip()
-            changes.append("Name")
-            
-        currentDesc = collection.subtitle if isBook else collection.description
-        if newDescription is not None and currentDesc != newDescription:
-            if isBook:
-                collection.subtitle = newDescription.strip() if newDescription else None
-            else:
-                collection.description = newDescription.strip() if newDescription else None
-            changes.append("Description")
-        
-        if changes:
-            collection.save()
-            user.newLog("Group {} Update".format(newName), ", ".join(changes) + " updated.")
+        if isinstance(collection, Book):
+            changes = []
 
-            LiteStore.set("catalogue", True)
-            LiteStore.set("collectionMemberIDs", True)
-            LiteStore.set("collectionDetails", True)
-            LiteStore.set("associationInfo", True)
-            
-            return JSONRes.new(200, "Updated successfully")
-            
-        return JSONRes.new(200, "No changes made to the collection")
-        
+            if newName and collection.title != newName:
+                collection.title = newName.strip()
+                changes.append("Name")
+
+            if newDescription is not None and collection.subtitle != newDescription:
+                collection.subtitle = newDescription.strip() if newDescription else None
+                changes.append("Description")
+
+            if changes:
+                collection.save()
+                logName = newName if newName else collection.title
+                user.newLog(f"Group {logName} Update", ", ".join(changes) + " updated.")
+
+                LiteStore.set("catalogue", True)
+                LiteStore.set("collectionMemberIDs", True)
+                LiteStore.set("collectionDetails", True)
+                LiteStore.set("associationInfo", True)
+
+                return JSONRes.new(200, "Updated successfully")
+
+            return JSONRes.new(200, "No changes made to the collection")
+
+        collection = Category.load(id=collectionID)
+        if isinstance(collection, Category):
+            changes = []
+
+            if newName and collection.name != newName:
+                collection.name = newName.strip()
+                changes.append("Name")
+
+            if newDescription is not None and collection.description != newDescription:
+                collection.description = newDescription.strip() if newDescription else None
+                changes.append("Description")
+
+            if changes:
+                collection.save()
+                logName = newName if newName else collection.name
+                user.newLog(f"Group {logName} Update", ", ".join(changes) + " updated.")
+
+                LiteStore.set("catalogue", True)
+                LiteStore.set("collectionMemberIDs", True)
+                LiteStore.set("collectionDetails", True)
+                LiteStore.set("associationInfo", True)
+
+                return JSONRes.new(200, "Updated successfully")
+
+            return JSONRes.new(200, "No changes made to the collection")
+
+        return JSONRes.new(404, "Collection not found")
+
     except Exception as e:
-        Logger.log("GROUPMANAGEMENT UPDATE ERROR: Failed to update collection {}: {}".format(collectionID, e))
+        Logger.log(f"GROUPMANAGEMENT UPDATE ERROR: Failed to update collection {collectionID}: {e}")
         return JSONRes.ambiguousError()
 
 @grpBP.route('/delete', methods=['POST'])
@@ -133,4 +147,7 @@ def deleteGroup(user: User):
         Logger.log("GROUPMANAGEMENT DELETEGROUP ERROR: Failed to delete group {}: {}".format(groupID, e))
         return JSONRes.ambiguousError
     
+    LiteStore.set("catalogue", True)
+    LiteStore.set("associationInfo", True)
+            
     return JSONRes.new(200, "Group deleted successfully")
