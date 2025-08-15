@@ -50,7 +50,7 @@ def login(user: User | None=None):
     
     ThreadManager.defaultProcessor.addJob(EmailCentre.dispatch, LoginAlert(user))
     
-    return JSONRes.new(200, "Login successful.", fname=user.fname, lname=user.lname)
+    return JSONRes.new(200, "Login successful.", fname=user.fname, lname=user.lname, username=user.username)
 
 @authBP.route("/logout", methods=["GET"])
 @checkSession(strict=True, provideUser=True)
