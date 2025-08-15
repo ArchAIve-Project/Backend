@@ -5,7 +5,7 @@ from decorators import jsonOnly, enforceSchema, checkAPIKey
 from sessionManagement import checkSession
 from schemas import User, Category, Book
 
-grpBP = Blueprint('group', __name__, url_prefix="/group")
+grpBP = Blueprint('group', __name__, url_prefix="/studio/group")
 
 @grpBP.route('/create', methods=['POST'])
 @checkAPIKey
@@ -21,26 +21,29 @@ def createGroup(user: User):
         groupType = request.json["type"]
         title = request.json["title"].strip()
         subtitle = request.json.get("subtitle", "").strip() or None
-        mmIds=[]
+        mmIds = []
+        groupID = None
 
         if groupType == "book":
-            Book(
+            book = Book(
                 title=title,
                 subtitle=subtitle,
                 mmIDs=mmIds
-            ).save()
-            user.newLog("BookCreated", "Created book '{}'".format(title))
-            
+            )
+            book.save()
+            user.newLog("Book Created", "Created book with title '{}'.".format(title))
+            groupID = book.id
         elif groupType == "category":
-            Category(
+            category = Category(
                 name=title,
                 description=subtitle
-            ).save()
-            user.newLog("Category Created", "Created category '{}'".format(title))
-            
-        LiteStore.set("catalogue", True)
-        return JSONRes.new(200, "{} created successfully".format(groupType.capitalize()))
+            )
+            category.save()
+            user.newLog("Category Created", "Created category with name '{}'.".format(title))
+            groupID = category.id
         
+        LiteStore.set("catalogue", True)
+        return JSONRes.new(200, "Group created successfully.", groupID=groupID)
     except Exception as e:
         Logger.log("GROUPMANAGEMENT CREATEGROUP ERROR: Failed to create {} with title'{}': {}".format(groupType, title, e))
         return JSONRes.ambiguousError()
@@ -50,72 +53,59 @@ def createGroup(user: User):
 @jsonOnly
 @enforceSchema(
     ("collectionID", str),
-    ("name", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 50),
-    ("description", lambda x: isinstance(x, str) and len(x.strip()) <= 200)
+    ("name", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 50, None),
+    ("description", lambda x: isinstance(x, str) and len(x.strip()) <= 200, None)
 )
 @checkSession(strict=True, provideUser=True)
 def updateDetails(user: User):
     collectionID = request.json.get("collectionID")
     newName = request.json.get("name")
     newDescription = request.json.get("description")
-
+    
     try:
-        collection = Book.load(id=collectionID)
+        collection: Book | Category | None = Book.load(id=collectionID) or Category.load(id=collectionID)
+        if not collection:
+            return JSONRes.new(404, "No such group with that ID.")
+        
+        updatesMade = False
         if isinstance(collection, Book):
             changes = []
-
             if newName and collection.title != newName:
                 collection.title = newName.strip()
-                changes.append("Name")
-
-            if newDescription is not None and collection.subtitle != newDescription:
+                changes.append("Title")
+            if newDescription and collection.subtitle != newDescription:
                 collection.subtitle = newDescription.strip() if newDescription else None
                 changes.append("Description")
-
+            
             if changes:
                 collection.save()
-                logName = newName if newName else collection.title
-                user.newLog(f"Group {logName} Update", ", ".join(changes) + " updated.")
-
-                LiteStore.set("catalogue", True)
-                LiteStore.set("collectionMemberIDs", True)
-                LiteStore.set("collectionDetails", True)
-                LiteStore.set("associationInfo", True)
-
-                return JSONRes.new(200, "Updated successfully")
-
-            return JSONRes.new(200, "No changes made to the collection")
-
-        collection = Category.load(id=collectionID)
-        if isinstance(collection, Category):
+                user.newLog("Book Updated", "{} details changed.".format(", ".join(changes)))
+                updatesMade = True
+        elif isinstance(collection, Category):
             changes = []
-
             if newName and collection.name != newName:
                 collection.name = newName.strip()
                 changes.append("Name")
-
-            if newDescription is not None and collection.description != newDescription:
+            if newDescription and collection.description != newDescription:
                 collection.description = newDescription.strip() if newDescription else None
                 changes.append("Description")
 
             if changes:
                 collection.save()
-                logName = newName if newName else collection.name
-                user.newLog(f"Group {logName} Update", ", ".join(changes) + " updated.")
-
-                LiteStore.set("catalogue", True)
-                LiteStore.set("collectionMemberIDs", True)
-                LiteStore.set("collectionDetails", True)
-                LiteStore.set("associationInfo", True)
-
-                return JSONRes.new(200, "Updated successfully")
-
-            return JSONRes.new(200, "No changes made to the collection")
-
-        return JSONRes.new(404, "Collection not found")
-
+                user.newLog("Category Updated", "{} details changed.".format(", ".join(changes)))
+                updatesMade = True
+        
+        if updatesMade:
+            LiteStore.set("catalogue", True)
+            LiteStore.set("collectionMemberIDs", True)
+            LiteStore.set("collectionDetails", True)
+            LiteStore.set("associationInfo", True)
+            
+            return JSONRes.new(200, "Group details updated successfully.")
+        else:
+            return JSONRes.new(200, "No changes made to the group details.")
     except Exception as e:
-        Logger.log(f"GROUPMANAGEMENT UPDATE ERROR: Failed to update collection {collectionID}: {e}")
+        Logger.log("GROUPMANAGEMENT UPDATE ERROR: Failed to update group {}: {}".format(collectionID, e))
         return JSONRes.ambiguousError()
 
 @grpBP.route('/delete', methods=['POST'])
@@ -129,25 +119,21 @@ def deleteGroup(user: User):
     groupID = request.json['groupID']
     
     try:
-        group = Book.load(id=groupID)
-        
-        if not isinstance(group, Book):
-            group = Category.load(id=groupID)
-            
-            if not isinstance(group, Category):
-                return JSONRes.new(404, "Group not found")
-            
+        group: Book | Category | None = Book.load(id=groupID) or Category.load(id=groupID)
+        if not group:
+            return JSONRes.new(404, "No such group with that ID.")
     except Exception as e:
         Logger.log("GROUPMANAGEMENT DELETEGROUP ERROR: Failed to load group {}: {}".format(groupID, e))
         return JSONRes.ambiguousError()
     
     try:
         group.destroy()
+        user.newLog("Group Deleted", "Deleted group with name/title '{}'".format(group.name if isinstance(group, Category) else group.title))
     except Exception as e:
         Logger.log("GROUPMANAGEMENT DELETEGROUP ERROR: Failed to delete group {}: {}".format(groupID, e))
-        return JSONRes.ambiguousError
+        return JSONRes.ambiguousError()
     
     LiteStore.set("catalogue", True)
     LiteStore.set("associationInfo", True)
-            
-    return JSONRes.new(200, "Group deleted successfully")
+    
+    return JSONRes.new(200, "Group deleted successfully.")
