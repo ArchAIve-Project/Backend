@@ -4,7 +4,7 @@ from utils import JSONRes
 from typing import Dict, List
 from flask import Blueprint, send_file, make_response, redirect, request
 from services import Logger
-from schemas import Category, Book, Artefact, Figure, User, Batch
+from schemas import Category, Book, Artefact, Figure, User, Batch, BatchArtefact
 from fm import FileManager, File
 from decorators import cache, timeit
 from sessionManagement import checkSession
@@ -651,8 +651,17 @@ def getArtefactMetedata(artID):
                     Logger.log("CDN GETARTEFACTMETADATA WARNING: Failed to load figure '{}'; error: {}".format(figID, e))
                     continue
         
-        return JSONRes.new(200, "Retrieval success.", data=art.represent(), figureInfo=figureInfo)
-
+        possibleBatchID = request.args.get('colID')
+        vettedStatus = None
+        if isinstance(possibleBatchID, str) and len(possibleBatchID) > 0:
+            try:
+                batchArtefact = BatchArtefact.load(possibleBatchID, artID)
+                if isinstance(batchArtefact, BatchArtefact):
+                    vettedStatus = batchArtefact.stage == BatchArtefact.Status.CONFIRMED
+            except Exception as e:
+                Logger.log("CDN GETARTEFACTMETADATA WARNING: Couldn't load batch artefact information vetting status information; error: {}".format(e))
+        
+        return JSONRes.new(200, "Retrieval success.", data=art.represent(), figureInfo=figureInfo, vetted=vettedStatus)
     except Exception as e:
         Logger.log("CDN GETARTEFACTMETADATA ERROR: Failed to load artefact metadata - {}".format(e))
         return JSONRes.ambiguousError()
