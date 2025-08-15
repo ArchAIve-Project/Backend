@@ -1,13 +1,70 @@
 from flask import Blueprint, request
-from utils import JSONRes
+from utils import JSONRes, ResType
 from services import Logger, LiteStore
 from decorators import jsonOnly, enforceSchema, checkAPIKey
 from sessionManagement import checkSession
-from schemas import Artefact, User, Category, Book
+from schemas import Artefact, User, Category, Book, Metadata, MMData, HFData
 from NERPipeline import NERPipeline
 from addons import ArchSmith, ASReport
 
 artBP = Blueprint('artefact', __name__, url_prefix="/studio/artefact")
+
+@artBP.route("/manualMetadataUpdate", methods=['POST'])
+@checkAPIKey
+@jsonOnly
+@jsonOnly
+@enforceSchema(
+    ("artefactID", str),
+    ("type", lambda x: x in ["mm", "hf"])
+)
+@checkSession(strict=True)
+def manualMetadataUpdate():
+    artefactID = request.json.get("artefactID")
+    artType = request.json.get("type")
+    
+    targetArtefact = None
+    try:
+        targetArtefact = Artefact.load(artefactID)
+        if not isinstance(targetArtefact, Artefact):
+            return JSONRes.new(404, "Artefact not found.")
+    except Exception as e:
+        Logger.log("ARTEFACTMANAGEMENT MANUALMETADATAUPDATE ERROR: Failed to load artefact {}: {}".format(artefactID, e))
+        return JSONRes.ambiguousError()
+    
+    if targetArtefact.metadata and targetArtefact.metadata.raw is not None:
+        return JSONRes.new(400, "Artefact already has metadata. Manual update not required.", ResType.USERERROR)
+    
+    dataObject = None
+    if artType == "mm":
+        dataObject = MMData(
+            artefactID=targetArtefact.id,
+            tradCN="No transcription available.",
+            preCorrectionAcc=None,
+            postCorrectionAcc=None,
+            simplifiedCN="No transcription available.",
+            english="No transcription available.",
+            summary="No transcription available.",
+            nerLabels=[],
+            corrected=False
+        )
+    else:
+        dataObject = HFData(
+            artefactID=targetArtefact.id,
+            figureIDs=[],
+            caption="No caption available.",
+            addInfo="No additional information available."
+        )
+    
+    targetArtefact.metadata = Metadata(targetArtefact.id, dataObject)
+    try:
+        targetArtefact.save()
+    except Exception as e:
+        Logger.log("ARTEFACTMANAGEMENT MANUALMETADATAUPDATE ERROR: Failed to save artefact {} after manual metadata update: {}".format(artefactID, e))
+        return JSONRes.ambiguousError()
+    
+    LiteStore.set("artefactMetadata", True)
+    
+    return JSONRes.new(200, "Manual metadata update completed successfully.")
 
 @artBP.route('/update', methods=['POST'])
 @checkAPIKey

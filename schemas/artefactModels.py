@@ -376,7 +376,7 @@ class Metadata(DIRepresentable):
 
 
 class MMData(DIRepresentable):
-    def __init__(self, artefactID: str, tradCN: str, preCorrectionAcc: str, postCorrectionAcc: str, simplifiedCN: str, english: str, summary: str, nerLabels: str, corrected: bool = False):
+    def __init__(self, artefactID: str, tradCN: str, preCorrectionAcc: float | None, postCorrectionAcc: float | None, simplifiedCN: str, english: str, summary: str, nerLabels: list | None, corrected: bool = False):
         """
         Metadata for meeting minutes artefacts.
     
@@ -388,12 +388,12 @@ class MMData(DIRepresentable):
             artefactID (str): Associated artefact identifier.
             tradCN (str): Traditional Chinese text from meeting minutes.
             corrected (bool): Flag indicating if text has been manually corrected.
-            preCorrectionAcc (str): Accuracy score before any corrections.
-            postCorrectionAcc (str): Accuracy score after corrections.
+            preCorrectionAcc (float | None): Accuracy score before any corrections.
+            postCorrectionAcc (float | None): Accuracy score after corrections.
             simplifiedCN (str): Simplified Chinese version of the text.
             english (str): English translation of the meeting minutes.
             summary (str): Concise summary of the meeting content.
-            nerLabels (str): Named entity recognition labels extracted from text.
+            nerLabels (list | None): Named entity recognition labels extracted from text.
         """
         self.artefactID = artefactID
         self.tradCN = tradCN
