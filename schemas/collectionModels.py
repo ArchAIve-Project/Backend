@@ -95,7 +95,7 @@ class Book(DIRepresentable):
         else:
             data = DI.load(Ref("books"))
             if data is None:
-                return None
+                return []
             if isinstance(data, DIError):
                 raise Exception("BOOK LOAD ERROR: DIError occurred: {}".format(data))
             if not isinstance(data, dict):
