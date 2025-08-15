@@ -430,7 +430,8 @@ class Universal:
     copyright = "© 2025 The ArchAIve Team. All Rights Reserved."
     version = None
     store = {}
-    MAX_FILE_SIZE = 10 * 1024 * 1024
+    MAX_ARTEFACT_SIZE = int(os.environ.get("MAX_ARTEFACT_SIZE", None) or 7 * 1024 * 1024)
+    MAX_PFP_SIZE = int(os.environ.get("MAX_PFP_SIZE", None) or 5 * 1024 * 1024)
     localisationOffset = 480
     device = os.environ.get(
         "DEVICE",

@@ -91,7 +91,7 @@ def upload(user : User):
             fileSaveUpdates[file.filename] = "ERROR: Failed to get file size."
             continue
 
-        if validSize > Universal.MAX_FILE_SIZE:
+        if validSize > Universal.MAX_ARTEFACT_SIZE:
             fileSaveUpdates[file.filename] = "ERROR: File size exceeds 10MB."
             continue
 

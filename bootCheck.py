@@ -35,6 +35,8 @@ class EnvVariable:
             EnvVariable("SECRET_KEY", False, True),
             EnvVariable("FRONTEND_URL", False, True),
             EnvVariable("MAX_FILE_UPLOADS", False, False),
+            EnvVariable("MAX_ARTEFACT_SIZE", False, False),
+            EnvVariable("MAX_PFP_SIZE", False, False),
             EnvVariable("EMAILING_ENABLED", True, True, [
                 EnvVariable("SENDER_EMAIL", False, True),
                 EnvVariable("SENDER_EMAIL_APP_PASSWORD", False, True)
