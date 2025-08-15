@@ -99,8 +99,6 @@ class InItemChatbot:
         else:
             botResponse = result.content.strip()
         
-        print(context)
-
         # Update history
         updatedHistory = (history or []) + [
             {"role": "user", "content": userQuestion},
