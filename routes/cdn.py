@@ -636,7 +636,22 @@ def getArtefactMetedata(artID):
         if not isinstance(art, Artefact):
             return JSONRes.new(404, "Artefact not found.")
         
-        return JSONRes.new(200, "Retrieval success.", data=art.represent())
+        figureInfo = {}
+        
+        if art.metadata and art.metadata.isHF():
+            figureIDs = art.metadata.raw.figureIDs or []
+            for figID in figureIDs:
+                try:
+                    fig = Figure.load(figID)
+                    if not isinstance(fig, Figure):
+                        raise Exception("Unexpected load response: {}".format(fig))
+                    
+                    figureInfo[figID] = fig.label if fig.label else "No Label"
+                except Exception as e:
+                    Logger.log("CDN GETARTEFACTMETADATA WARNING: Failed to load figure '{}'; error: {}".format(figID, e))
+                    continue
+        
+        return JSONRes.new(200, "Retrieval success.", data=art.represent(), figureInfo=figureInfo)
 
     except Exception as e:
         Logger.log("CDN GETARTEFACTMETADATA ERROR: Failed to load artefact metadata - {}".format(e))
