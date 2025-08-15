@@ -98,7 +98,7 @@ class InItemChatbot:
             return "ERROR: {}".format(result)
         else:
             botResponse = result.content.strip()
-        
+
         # Update history
         updatedHistory = (history or []) + [
             {"role": "user", "content": userQuestion},
@@ -135,11 +135,11 @@ class InItemChatbot:
                 "English Translation": raw.get("english"),
                 "Summary": raw.get("summary")
             }
-        
+
         elif "figureIDs" in raw:  # HFData (event photos)
             return {
                 "Caption": raw.get("caption"),
                 "Additional Information": raw.get("addInfo")
             }
-        
+
         return {}
