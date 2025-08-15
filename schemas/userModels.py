@@ -481,7 +481,7 @@ Reset Key: {} />""".format(
     def getSuperuser():
         """Same as `load(superuser=True)`."""
         
-        return User.load(superuser=True)
+        return User.load(superuser=True) or None
 
     @staticmethod
     def ref(id: str) -> Ref:
