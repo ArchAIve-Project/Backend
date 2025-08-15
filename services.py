@@ -430,13 +430,21 @@ class Universal:
     copyright = "© 2025 The ArchAIve Team. All Rights Reserved."
     version = None
     store = {}
-    MAX_ARTEFACT_SIZE = int(os.environ.get("MAX_ARTEFACT_SIZE", None) or 7 * 1024 * 1024)
-    MAX_PFP_SIZE = int(os.environ.get("MAX_PFP_SIZE", None) or 5 * 1024 * 1024)
+    MAX_ARTEFACT_SIZE = int(os.environ.get("MAX_ARTEFACT_SIZE", 7))
+    MAX_PFP_SIZE = int(os.environ.get("MAX_PFP_SIZE", 5))
     localisationOffset = 480
     device = os.environ.get(
         "DEVICE",
         "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     )
+    
+    @staticmethod
+    def getMaxArtefactSize():
+        return Universal.MAX_ARTEFACT_SIZE * 1024 * 1024
+    
+    @staticmethod
+    def getMaxPFPSize():
+        return Universal.MAX_PFP_SIZE * 1024 * 1024
     
     @staticmethod
     def getVersion():

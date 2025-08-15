@@ -9,8 +9,9 @@ from dotenv import load_dotenv
 load_dotenv()
 from flask import Flask, request, jsonify, url_for, render_template, redirect
 from flask_cors import CORS
+from flask_limiter import Limiter
 from emailer import Emailer
-from fm import FileManager, File
+from fm import FileManager
 from ai import LLMInterface
 from addons import ModelStore, ArchSmith
 from services import Universal, Logger, ThreadManager, Encryption, LiteStore
@@ -23,14 +24,40 @@ from cnnclassifier import ImageClassifier
 from captioner import ImageCaptioning, Vocabulary
 from schemas import User
 
+def getIP():
+    return request.headers.get('X-Real-Ip', request.remote_addr)
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, origins="*", supports_credentials=True, allow_private_network=True)
+limiter = Limiter(
+    getIP,
+    app=app,
+    default_limits=["100 per minute"],
+    storage_uri="memory://",
+)
 
 app.secret_key = os.environ['SECRET_KEY']
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get("MAX_CONTENT_SIZE", 100)) * 1024 * 1024
 
 @app.route('/')
 def home():
-    return "Welcome to ArchAIve!"
+    return "<h1>Welcome to the ArchAIve Backend System!</h1><br><p>Current time: {}</p>".format(Universal.utcNowString(localisedTo=Universal.localisationOffset))
+
+@app.errorhandler(413)
+def requestEntityTooLarge(e):
+    return "ERROR: Request entity too large.", 413
+
+@app.errorhandler(429)
+def tooManyRequests(e):
+    return "ERROR: Too many requests.", 429
+
+@app.errorhandler(500)
+def internalServerError(e):
+    return "ERROR: Internal server error.", 500
+
+@app.errorhandler(503)
+def serviceUnavailable(e):
+    return "ERROR: Service unavailable.", 503
 
 if __name__ == "__main__":
     # Boot pre-processing

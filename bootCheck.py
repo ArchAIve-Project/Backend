@@ -37,6 +37,7 @@ class EnvVariable:
             EnvVariable("MAX_FILE_UPLOADS", False, False),
             EnvVariable("MAX_ARTEFACT_SIZE", False, False),
             EnvVariable("MAX_PFP_SIZE", False, False),
+            EnvVariable("MAX_CONTENT_SIZE", False, False),
             EnvVariable("EMAILING_ENABLED", True, True, [
                 EnvVariable("SENDER_EMAIL", False, True),
                 EnvVariable("SENDER_EMAIL_APP_PASSWORD", False, True)

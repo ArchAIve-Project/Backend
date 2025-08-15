@@ -182,7 +182,7 @@ def uploadPicture(user: User):
         return JSONRes.new(400, "Only valid image files are allowed (png, jpg, jpeg).", ResType.USERERROR)
     
     # Check file size (optional, e.g., max 5MB)
-    if FileOps.getFileStorageSize(file) > Universal.MAX_PFP_SIZE:
+    if FileOps.getFileStorageSize(file) > Universal.getMaxPFPSize():
         return JSONRes.new(400, "File size exceeds 5MB limit.", ResType.USERERROR)
     
     # Delete existing profile picture if it exists
