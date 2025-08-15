@@ -87,7 +87,7 @@ def getProfilePicture(user: User, userID: str=None):
     
     file = File(user.pfp, "FileStore")
     res = None
-    if request.args.get('raw', 'false').lower() == 'true':
+    if os.environ.get("RAW_FILE_SERVICE", "False") == "True" or request.args.get('raw', 'false').lower() == 'true':
         res = FileManager.prepFile(file=file)
         if isinstance(res, str):
             if res == "ERROR: File does not exist.":
@@ -143,45 +143,43 @@ def getArtefactImage(artefactId):
     
     # Attempt to create file object
     file = File(filename, "artefacts")
+    res = None
     
-    if os.environ.get("DEBUG_MODE", "False") == "True":
+    if os.environ.get("RAW_FILE_SERVICE", "False") == "True" or request.args.get('raw', 'false').lower() == 'true':
         # In debug mode, serve the file directly from the filesystem
-        res = FileManager.prepFile(file=file)
-        if isinstance(res, str):
-            if res == "ERROR: File does not exist.":
+        prep = FileManager.prepFile(file=file)
+        if isinstance(prep, str):
+            if prep == "ERROR: File does not exist.":
                 return JSONRes.new(404, "Requested file not found.")
             else:
-                Logger.log("CDN GETARTEFACT ERROR: Failed to prepare file for delivery; response: {}".format(res))
+                Logger.log("CDN GETARTEFACT ERROR: Failed to prepare file for delivery; response: {}".format(prep))
                 return JSONRes.ambiguousError()
         
         try:
-            return send_file(file.path())
+            res = make_response(send_file(file.path()))
         except Exception as e:
-            Logger.log("CDN GETARTEFACT ERROR: Failed to send file '{}' for artefact '{}'; error: {}".format(filename, artefactId, e))
+            Logger.log("CDN GETARTEFACTIMAGE ERROR: Failed to send artefact image for artefact '{}': {}".format(artefactId, e))
+            return JSONRes.ambiguousError()
+    else:
+        # Attempt to generate signed URL
+        try:
+            url = file.getSignedURL(expiration=datetime.timedelta(minutes=10)) # note: useCache=True
+            if url.startswith("ERROR"):
+                if url == "ERROR: File does not exist.":
+                    return JSONRes.new(404, "Requested file not found.")
+                else:
+                    raise Exception(url)
+            
+            res = make_response(redirect(url))
+        except Exception as e:
+            Logger.log("CDN GETARTEFACT ERROR: Failed to generate signed URL for '{}': {}".format(artefactId, e)) # changed to artefactId
             return JSONRes.ambiguousError()
     
-    # Attempt to generate signed URL
-    try:
-        url = file.getSignedURL(expiration=datetime.timedelta(minutes=10)) # note: useCache=True
-        if url.startswith("ERROR"):
-            if url == "ERROR: File does not exist.":
-                return JSONRes.new(404, "Requested file not found.")
-            else:
-                raise Exception(url)
-    except Exception as e:
-        Logger.log("CDN GETARTEFACT ERROR: Failed to generate signed URL for '{}': {}".format(artefactId, e)) # changed to artefactId
-        return JSONRes.ambiguousError()
-
-    # Attempt to redirect with no-cache headers
-    try:
-        res = make_response(redirect(url))
-        res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
-        res.headers["Pragma"] = "no-cache"
-        res.headers["Expires"] = "0"
-        return res
-    except Exception as e:
-        Logger.log("CDN GETARTEFACT ERROR: Failed to construct response for artefact '{}': {}".format(artefactId, e))
-        return JSONRes.ambiguousError()
+    # No-cache headers
+    res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+    res.headers["Pragma"] = "no-cache"
+    res.headers["Expires"] = "0"
+    return res
 
 @cdnBP.route('/people/<figureID>')
 @checkSession(strict=True)
@@ -448,7 +446,7 @@ def getCollectionMemberIDs(colID):
     except Exception as e:
         Logger.log("CDN GETCOLLECTIONMEMBERIDS ERROR: Failed to load collection members - {}".format(e))
         return JSONRes.ambiguousError()
-    
+
 @cdnBP.route('/collection/<colID>')
 @checkSession(strict=True)
 @cache(lsInvalidator="collectionDetails")

@@ -34,6 +34,7 @@ class EnvVariable:
             EnvVariable("API_KEY", False, True),
             EnvVariable("SECRET_KEY", False, True),
             EnvVariable("FRONTEND_URL", False, True),
+            EnvVariable("RAW_FILE_SERVICE", True, True),
             EnvVariable("MAX_FILE_UPLOADS", False, False),
             EnvVariable("MAX_ARTEFACT_SIZE", False, False),
             EnvVariable("MAX_PFP_SIZE", False, False),
