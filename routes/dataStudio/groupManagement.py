@@ -8,7 +8,7 @@ from schemas import User, Category, Book
 grpBP = Blueprint('group', __name__, url_prefix="/group")
 
 @grpBP.route('/create', methods=['POST'])
-# @checkAPIKey
+@checkAPIKey
 @jsonOnly
 @enforceSchema(
     ("title", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 25),
@@ -46,7 +46,7 @@ def createGroup(user: User):
         return JSONRes.ambiguousError()
     
 @grpBP.route('/updateDetails', methods=['POST'])
-# @checkAPIKey
+@checkAPIKey
 @jsonOnly
 @enforceSchema(
     ("collectionID", str),
@@ -105,7 +105,7 @@ def updateDetails(user: User):
         return JSONRes.ambiguousError()
 
 @grpBP.route('/delete', methods=['POST'])
-# @checkAPIKey
+@checkAPIKey
 @jsonOnly
 @enforceSchema(
     ("groupID", str),
