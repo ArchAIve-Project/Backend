@@ -1,13 +1,15 @@
 import os, sys, shutil, copy, re, json
 from services import FileOps, Universal, Logger
 from addons import ArchSmith, ASReport, ASTracer
+from firebase import FireConn
 from fm import File, FileManager
 from schemas import DI, Figure, Face
 from HFProcessor import HFProcessor
 
+FireConn.connect()
 DI.setup()
-FileManager.setup()
-HFProcessor.setup()
+print("FM", FileManager.setup())
+print("HFP", HFProcessor.setup())
 
 files = os.listdir('seedFaces')
 # try:
