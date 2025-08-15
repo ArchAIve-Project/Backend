@@ -238,18 +238,18 @@ def getAllBatches():
 
     return JSONRes.new(200, "All batches retrieved.", batches=formatted)
 
-@dataImportBP.route('/userBatches', methods=['GET'])
-@checkSession(strict=True, provideUser=True)
-def getUserBatches(user: User):
-    try:
-        batches = Batch.load(userID=user.id)
+# @dataImportBP.route('/userBatches', methods=['GET'])
+# @checkSession(strict=True, provideUser=True)
+# def getUserBatches(user: User):
+#     try:
+#         batches = Batch.load(userID=user.id)
         
-        formatted = {b.id: b.represent() for b in batches} if batches else {}
-        return JSONRes.new(200, "User batches retrieved.", batches=formatted)
+#         formatted = {b.id: b.represent() for b in batches} if batches else {}
+#         return JSONRes.new(200, "User batches retrieved.", batches=formatted)
 
-    except Exception as e:
-        Logger.log("DATAIMPORT GETUSERBATCHES ERROR: Failed to retrieve batches for user '{}'; error: {}".format(user.id, e))
-        return JSONRes.ambiguousError()
+#     except Exception as e:
+#         Logger.log("DATAIMPORT GETUSERBATCHES ERROR: Failed to retrieve batches for user '{}'; error: {}".format(user.id, e))
+#         return JSONRes.ambiguousError()
 
 @dataImportBP.route('/batches/cancel', methods=['POST'])
 @jsonOnly
