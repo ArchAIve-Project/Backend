@@ -46,14 +46,15 @@ def createGroup(user: User):
         return JSONRes.ambiguousError()
     
 @grpBP.route('/updateDetails', methods=['POST'])
+# @checkAPIKey
 @jsonOnly
 @enforceSchema(
-    ("collectionID", lambda x: isinstance(x, str) and len(x.strip()) > 0),
+    ("collectionID", str),
     ("name", lambda x: isinstance(x, str) and 1 <= len(x.strip()) <= 50),
     ("description", lambda x: isinstance(x, str) and len(x.strip()) <= 200)
 )
 @checkSession(strict=True, provideUser=True)
-def updateDetails(user):
+def updateDetails(user: User):
     collectionID = request.json.get("collectionID")
     newName = request.json.get("name")
     newDescription = request.json.get("description")
@@ -102,3 +103,34 @@ def updateDetails(user):
     except Exception as e:
         Logger.log("GROUPMANAGEMENT UPDATE ERROR: Failed to update collection {}: {}".format(collectionID, e))
         return JSONRes.ambiguousError()
+
+@grpBP.route('/delete', methods=['POST'])
+# @checkAPIKey
+@jsonOnly
+@enforceSchema(
+    ("groupID", str),
+)
+@checkSession(strict=True, provideUser=True)
+def deleteGroup(user: User):
+    groupID = request.json['groupID']
+    
+    try:
+        group = Book.load(id=groupID)
+        
+        if not isinstance(group, Book):
+            group = Category.load(id=groupID)
+            
+            if not isinstance(group, Category):
+                return JSONRes.new(404, "Group not found")
+            
+    except Exception as e:
+        Logger.log("GROUPMANAGEMENT DELETEGROUP ERROR: Failed to load group {}: {}".format(groupID, e))
+        return JSONRes.ambiguousError()
+    
+    try:
+        group.destroy()
+    except Exception as e:
+        Logger.log("GROUPMANAGEMENT DELETEGROUP ERROR: Failed to delete group {}: {}".format(groupID, e))
+        return JSONRes.ambiguousError
+    
+    return JSONRes.new(200, "Group deleted successfully")
