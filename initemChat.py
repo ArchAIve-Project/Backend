@@ -1,6 +1,5 @@
 from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant
 from schemas import Artefact
-import sys
 
 class InItemChatbot:
     """
@@ -26,23 +25,28 @@ class InItemChatbot:
                 - 'response': The generated chatbot response.
                 - 'history': Updated conversation history including the latest exchange.
         """
+        role = ""
+
         if not isinstance(artefact, Artefact):
            return "ERROR: Invalid artefact. Expected an instance of Artefact model."     
 
         if artefact.metadata.isHF():
-            role = ("""You are a cheerful museum guide helping a visitor learn about an event photo.\n
-                        This artefact is a photo of people(s) in a event.\n
-                        Avoid stereotypes or gender assumptions based on imagery. Be factual and respectful.\n
-                    """)
-                    
+            role = "You are Archivus — a friendly companion who provides interesting and factual information about this artefact."
+            role += "This artefact is a photo of people at an event."
+            role += "Avoid stereotypes or gender assumptions based on imagery."
+            role += "Be curious, welcoming, and engaging, but stay factual."
+            role += "If details aren’t available, say so kindly and share what is known."
+
         elif artefact.metadata.isMM():
-            role = ("""You are a knowledgeable calligraphy historian assisting a learner.\n
-                    This artefact is a photo of handwritten Chinese meeting minutes.\n
-                    Do not interpret handwritten text directly unless a transcription is explicitly provided.\n
-                    Avoid cultural, political, or gender-based assumptions. Be accurate and respectful.\n
-                    """)
+            role = "You are Archivus — a thoughtful and friendly assistant knowledgeable about calligraphy."
+            role += "This artefact is a photo of handwritten Chinese meeting minutes."
+            role += "Share interesting context about calligraphy and its history when relevant,"
+            role += "but don’t interpret or translate handwriting unless given a transcription."
+            role += "Be approachable, respectful, and focus on what is documented."
         else:
-            role = "You are an assistant providing factual information about a museum artefact.\n"
+            role += "You are Archivus — a friendly, knowledgeable museum companion."
+            role += "You help visitors learn about this artefact in a conversational way,"
+            role += "weaving facts into an engaging story without making things up."
 
         prompt = "{}\n\nArtefact Details\nName: {}\n".format(role, artefact.name)
 
@@ -51,28 +55,24 @@ class InItemChatbot:
             prompt += "\nThis artefact has no metadata.\n"
         else:
             prompt += "\nThis artefact has the following metadata:\n"
-            metadata_repr = artefact.metadata.represent()
-            filtered_metadata = InItemChatbot.filterMetadata(metadata_repr)
-            if filtered_metadata:
-                for key, value in filtered_metadata.items():
-                    prompt += "- {}: {}\n".format(key, value or '(Not provided)')
+            metadataRepr = artefact.metadata.represent()
+            filteredMetadata = InItemChatbot.filterMetadata(metadataRepr)
+            if filteredMetadata:
+                for value in filteredMetadata.items():
+                    prompt += "- {}\n".format(value or '(Not provided)')
             else:
                 prompt += "(No relevant metadata found)\n"
 
-        prompt += """
-        Please answer the user's questions by presenting artefact information in a natural, conversational tone. 
-        Avoid listing facts robotically; respond as a friendly museum guide would.
+        prompt += "Please answer the user's questions in a natural, friendly, and engaging tone."
+        prompt += "Weave the information into a conversational style—avoid listing facts robotically or using technical terms like 'metadata'."
+        prompt += "When answering:"
+        prompt += "- Speak as if talking to a curious visitor."
+        prompt += "- If something is missing, acknowledge it politely, e.g., 'Unfortunately, we don’t have that detail right now, but here’s what we do know.'"
+        prompt += "- Stay focused on this artefact and steer back if the question is unrelated."
+        prompt += "- If the user’s question repeats something already explained, briefly acknowledge it and then share the next interesting detail."
+        prompt += "- Where appropriate, ask a follow-up question to continue the discussion naturally."
+        prompt += "- Avoid speculation, assumptions, or interpretation, especially around calligraphy or imagery."
 
-        Important guidelines:
-        - Base responses strictly on the artefact details provided.
-        - Do NOT reference 'metadata' or database terms.
-        - If information is missing, explain it politely (e.g., "This information is not documented.").
-        - Avoid speculation, assumptions, or interpretation—especially around calligraphy or imagery.
-        - If asked unrelated or inappropriate questions, respond with: 
-        "I'm here to help with artefact information only. Let's focus on the artefact details."
-
-        Keep your tone clear, engaging, and respectful.
-        """
         contextHistory = [
             Interaction(role=Interaction.Role.SYSTEM, content=prompt)
         ]
@@ -98,6 +98,8 @@ class InItemChatbot:
             return "ERROR: {}".format(result)
         else:
             botResponse = result.content.strip()
+        
+        print(context)
 
         # Update history
         updatedHistory = (history or []) + [
@@ -136,10 +138,10 @@ class InItemChatbot:
                 "Summary": raw.get("summary")
             }
         
-        elif "faceFiles" in raw:  # HFData (event photos)
+        elif "figureIDs" in raw:  # HFData (event photos)
             return {
                 "Caption": raw.get("caption"),
-                "Number of Faces": len(raw.get("faceFiles", []))
+                "Additional Information": raw.get("addInfo")
             }
         
-        return {} 
+        return {}
