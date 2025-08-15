@@ -1,5 +1,6 @@
 import os
 from flask import Blueprint, request
+from appUtils import limiter
 from utils import JSONRes, ResType, Extensions
 from services import Logger, Universal, FileOps, LiteStore, ThreadManager
 from fm import FileManager, File
@@ -12,6 +13,7 @@ from catalogueIntegration import HFCatalogueIntegrator
 dataImportBP = Blueprint('dataImport', __name__, url_prefix="/dataImport")
 
 @dataImportBP.route('/upload', methods=['POST'])
+@limiter.limit("5 per minute")
 @checkAPIKey
 @checkSession(strict=True, provideUser=True)
 def upload(user : User):

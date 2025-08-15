@@ -1,17 +1,18 @@
 import os, datetime
-from fm import FileManager, File
-from utils import JSONRes
 from typing import Dict, List
 from flask import Blueprint, send_file, make_response, redirect, request
+from appUtils import limiter
+from utils import JSONRes
 from services import Logger
-from schemas import Category, Book, Artefact, Figure, User, Batch, BatchArtefact
 from fm import FileManager, File
 from decorators import cache, timeit
 from sessionManagement import checkSession
+from schemas import Category, Book, Artefact, Figure, User, Batch, BatchArtefact
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
 @cdnBP.route('/profileInfo/<userID>', methods=['GET'])
+@limiter.limit("150 per minute")
 @checkSession(strict=True, provideUser=True)
 def getProfileInfo(user: User, userID: str=None):
     # Carry out authorisation checks
@@ -100,7 +101,7 @@ def getProfilePicture(user: User, userID: str=None):
         res = make_response(send_file(file.path()))
     else:
         try:
-            url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
+            url = file.getSignedURL(expiration=datetime.timedelta(minutes=10))
             if url.startswith("ERROR"):
                 if url == "ERROR: File does not exist.":
                     user.pfp = None
@@ -207,7 +208,7 @@ def getFaceImage(figureID):
             return JSONRes.ambiguousError()
     
     try:
-        url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
+        url = file.getSignedURL(expiration=datetime.timedelta(minutes=10))
         
         if url.startswith("ERROR"):
             if url == "ERROR: File does not exist.":
@@ -252,7 +253,7 @@ def getAsset(filename):
             return JSONRes.ambiguousError()
     
     try:
-        url = file.getSignedURL(expiration=datetime.timedelta(seconds=60))
+        url = file.getSignedURL(expiration=datetime.timedelta(minutes=10))
         
         if url.startswith("ERROR"):
             return JSONRes.new(404, "Requested file not found.")
@@ -728,6 +729,7 @@ def getBatchFirstArtefact(batchID: str):
     return res
 
 @cdnBP.route('/figures', methods=['GET'])
+@limiter.limit("50 per minute")
 @checkSession(strict=True)
 def getFigures():
     try:

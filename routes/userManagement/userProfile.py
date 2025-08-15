@@ -1,5 +1,6 @@
 import re
 from flask import Blueprint, url_for, request, redirect
+from appUtils import limiter
 from utils import JSONRes, ResType
 from services import Universal, Logger, Encryption, FileOps, ThreadManager
 from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
@@ -167,6 +168,7 @@ def changePassword(user: User):
     return JSONRes.new(200, "Password changed successfully.")
 
 @profileBP.route('/uploadPicture', methods=['POST'])
+@limiter.limit("10 per minute")
 @checkAPIKey
 @checkSession(strict=True, provideUser=True)
 def uploadPicture(user: User):
