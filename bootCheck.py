@@ -68,7 +68,6 @@ class BootCheck:
         "flask-cors": "flask-cors",
         "openai": "openai",
         "basicsr": "basicsr",
-        "realesrgan": "realesrgan",
         "passlib": "passlib",
         "apscheduler": "APScheduler",
         "firebase-admin": "firebase-admin",

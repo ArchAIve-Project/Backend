@@ -1,8 +1,8 @@
-from flask import Blueprint, request, jsonify, render_template, redirect
-from utils import JSONRes, ResType
+from flask import Blueprint
+from utils import JSONRes
 
-apiBP = Blueprint('api', __name__, url_prefix='/api')
+apiBP = Blueprint('api', __name__, url_prefix='/')
 
-@apiBP.route('/health', methods=['GET'])
+@apiBP.route('/api/health', methods=['GET'])
 def health():
     return JSONRes.new(200, "API is healthy.")

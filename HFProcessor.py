@@ -1,10 +1,10 @@
 import os, threading
-from services import Universal, FileOps
+from services import Universal
 from addons import ASReport, ASTracer
 from captioner import ImageCaptioning
 from faceRecog import FaceRecognition, FaceDetection, FaceEmbedding
 from fm import FileManager, File
-from schemas import Figure, Face
+from schemas import Figure
 from dotenv import load_dotenv
 load_dotenv()
 

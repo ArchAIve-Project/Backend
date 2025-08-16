@@ -1,11 +1,10 @@
 from flask import Blueprint, request
-from initemChat import InItemChatbot
-from decorators import enforceSchema, jsonOnly, checkAPIKey, Param
-from sessionManagement import checkSession
-from flask  import session
-from schemas import Artefact, User
 from utils import JSONRes, ResType
 from services import Logger
+from decorators import enforceSchema, jsonOnly, checkAPIKey, Param
+from schemas import Artefact
+from sessionManagement import checkSession
+from initemChat import InItemChatbot
 
 chatbotBP = Blueprint('chatbot', __name__, url_prefix="/chatbot")
 

@@ -3,10 +3,10 @@ from flask import Blueprint, url_for, request, redirect
 from appUtils import limiter
 from utils import JSONRes, ResType
 from services import Universal, Logger, Encryption, FileOps, ThreadManager
-from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
-from sessionManagement import checkSession
 from fm import File, FileManager
-from schemas import User, AuditLog
+from decorators import jsonOnly, enforceSchema, checkAPIKey, Param
+from schemas import User
+from sessionManagement import checkSession
 from emailCentre import EmailCentre, PasswordChangedAlert
 
 profileBP = Blueprint('profile', __name__, url_prefix='/profile')

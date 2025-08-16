@@ -2,8 +2,8 @@ from flask import Blueprint, request, redirect, url_for, session
 from appUtils import limiter
 from utils import JSONRes, ResType
 from services import Logger, Encryption, Universal, ThreadManager
-from schemas import User
 from decorators import jsonOnly, enforceSchema
+from schemas import User
 from sessionManagement import checkSession
 from emailCentre import EmailCentre, LoginAlert
 

@@ -1,11 +1,11 @@
 from flask import Blueprint, request
 from utils import JSONRes, ResType
 from services import Logger, LiteStore
-from decorators import jsonOnly, enforceSchema, checkAPIKey
-from sessionManagement import checkSession
-from schemas import Artefact, User, Category, Book, Metadata, MMData, HFData
-from NERPipeline import NERPipeline
 from addons import ArchSmith, ASReport
+from decorators import jsonOnly, enforceSchema, checkAPIKey
+from schemas import Artefact, User, Category, Book, Metadata, MMData, HFData
+from sessionManagement import checkSession
+from NERPipeline import NERPipeline
 
 artBP = Blueprint('artefact', __name__, url_prefix="/studio/artefact")
 

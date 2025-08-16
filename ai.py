@@ -1,4 +1,4 @@
-import os, sys, openai, base64, json
+import os, base64, json
 from typing import List
 from enum import Enum
 from openai import OpenAI

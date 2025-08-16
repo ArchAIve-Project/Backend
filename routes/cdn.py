@@ -6,8 +6,8 @@ from utils import JSONRes
 from services import Logger
 from fm import FileManager, File
 from decorators import cache
-from sessionManagement import checkSession
 from schemas import Category, Book, Artefact, Figure, User, Batch, BatchArtefact
+from sessionManagement import checkSession
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 

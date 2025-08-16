@@ -2,8 +2,8 @@ from flask import Blueprint, request
 from utils import JSONRes
 from services import Logger, LiteStore
 from decorators import jsonOnly, enforceSchema, checkAPIKey
-from sessionManagement import checkSession
 from schemas import User, Category, Book
+from sessionManagement import checkSession
 
 grpBP = Blueprint('group', __name__, url_prefix="/studio/group")
 

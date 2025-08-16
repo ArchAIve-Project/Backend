@@ -1,7 +1,7 @@
 from typing import List
 from services import Logger
-from addons import ArchSmith, ASReport, ASTracer
-from schemas import Batch, Artefact, Category, BatchArtefact
+from addons import ArchSmith, ASReport
+from schemas import Batch, Category, BatchArtefact
 from autoCategorise import AutoCategoriser
 
 class HFCatalogueIntegrator:

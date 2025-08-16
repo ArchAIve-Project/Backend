@@ -1,6 +1,5 @@
-import traceback
 from addons import ASTracer, ASReport
-from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant, Tool
+from ai import LLMInterface, InteractionContext, Interaction, LMProvider, LMVariant
 
 class TranscriptionProcessor:
     """
