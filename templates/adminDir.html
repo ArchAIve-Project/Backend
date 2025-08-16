@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Panel</title>
+</head>
+<body>
+    <h1>ArchAIve Control Panel</h1>
+    <p>Welcome to ArchAIve's Control Panel. Options:</p>
+    <a href="./toggleSystemLock"><p>Toggle System Lock (Currently: {{ lockStatus }})</p></a>
+    <a href="./retrieveLogs"><p>Retrieve Logs</p></a>
+    <a href="./retrieveAS"><p>Retrieve ArchSmith Data</p></a>
+    <button onclick="resetRedirect()">Activate Clean Slate Protocol</button>
+    <script>
+        function resetRedirect() {
+            if (prompt("Warning, destructive action! Type 'reset' to confirm reset action.") === "reset") {
+                window.location.href = "./cleanSlateProtocol";
+            }
+        }
+    </script>
+</body>
+</html>

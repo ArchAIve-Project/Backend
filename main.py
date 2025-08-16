@@ -7,9 +7,8 @@ del BootCheck
 
 from dotenv import load_dotenv
 load_dotenv()
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
-from flask_limiter import Limiter
 import appUtils
 from emailer import Emailer
 from fm import FileManager
@@ -31,6 +30,11 @@ appUtils.limiter.init_app(app)
 
 app.secret_key = os.environ['SECRET_KEY']
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get("MAX_CONTENT_SIZE", 100)) * 1024 * 1024
+
+@app.before_request
+def beforeRequest():
+    if LiteStore.read("systemLock") == True and (not request.path.startswith("/api")):
+        return "ERROR: Service unavailable.", 503
 
 @app.route('/')
 def home():
