@@ -1,4 +1,5 @@
 from flask import Blueprint, request, redirect, url_for, session
+from appUtils import limiter
 from utils import JSONRes, ResType
 from services import Logger, Encryption, Universal, ThreadManager
 from schemas import User
@@ -9,6 +10,7 @@ from emailCentre import EmailCentre, LoginAlert
 authBP = Blueprint('identity', __name__, url_prefix="/auth")
 
 @authBP.route('/login', methods=['POST'])
+@limiter.limit("10 per minute")
 @jsonOnly
 @enforceSchema(
     ("usernameOrEmail", str),

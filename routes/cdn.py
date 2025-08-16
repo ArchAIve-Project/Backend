@@ -5,14 +5,14 @@ from appUtils import limiter
 from utils import JSONRes
 from services import Logger
 from fm import FileManager, File
-from decorators import cache, timeit
+from decorators import cache
 from sessionManagement import checkSession
 from schemas import Category, Book, Artefact, Figure, User, Batch, BatchArtefact
 
 cdnBP = Blueprint('cdn', __name__, url_prefix='/cdn')
 
 @cdnBP.route('/profileInfo/<userID>', methods=['GET'])
-@limiter.limit("150 per minute")
+@limiter.limit("80 per minute")
 @checkSession(strict=True, provideUser=True)
 def getProfileInfo(user: User, userID: str=None):
     # Carry out authorisation checks
@@ -86,7 +86,7 @@ def getProfilePicture(user: User, userID: str=None):
         return JSONRes.new(404, "No profile picture found for this user.")
     
     file = File(user.pfp, "FileStore")
-    res = None
+    
     if os.environ.get("RAW_FILE_SERVICE", "False") == "True" or request.args.get('raw', 'false').lower() == 'true':
         res = FileManager.prepFile(file=file)
         if isinstance(res, str):
@@ -98,7 +98,11 @@ def getProfilePicture(user: User, userID: str=None):
                 Logger.log("CDN GETPFP ERROR: Failed to prepare file for user '{}': {}".format(user.id, res))
                 return JSONRes.ambiguousError()
         
-        res = make_response(send_file(file.path()))
+        try:
+            return send_file(file.path())
+        except Exception as e:
+            Logger.log("CDN GETPFP ERROR: Failed to send raw profile picture for user '{}': {}".format(user.id, e))
+            return JSONRes.ambiguousError()
     else:
         try:
             url = file.getSignedURL(expiration=datetime.timedelta(minutes=10))
@@ -111,14 +115,13 @@ def getProfilePicture(user: User, userID: str=None):
                     raise Exception(url)
             
             res = make_response(redirect(url))
+            res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+            res.headers["Pragma"] = "no-cache"
+            res.headers["Expires"] = "0"
+            return res
         except Exception as e:
             Logger.log("CDN GETPFP ERROR: Failed to generate signed URL for user '{}': {}".format(user.id, e))
             return JSONRes.ambiguousError()
-    
-    res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
-    res.headers["Pragma"] = "no-cache"
-    res.headers["Expires"] = "0"
-    return res
 
 @cdnBP.route('/artefacts/<artefactId>')
 @checkSession(strict=True)
@@ -146,7 +149,6 @@ def getArtefactImage(artefactId):
     res = None
     
     if os.environ.get("RAW_FILE_SERVICE", "False") == "True" or request.args.get('raw', 'false').lower() == 'true':
-        # In debug mode, serve the file directly from the filesystem
         prep = FileManager.prepFile(file=file)
         if isinstance(prep, str):
             if prep == "ERROR: File does not exist.":
@@ -156,7 +158,7 @@ def getArtefactImage(artefactId):
                 return JSONRes.ambiguousError()
         
         try:
-            res = make_response(send_file(file.path()))
+            return send_file(file.path())
         except Exception as e:
             Logger.log("CDN GETARTEFACTIMAGE ERROR: Failed to send artefact image for artefact '{}': {}".format(artefactId, e))
             return JSONRes.ambiguousError()
@@ -171,15 +173,14 @@ def getArtefactImage(artefactId):
                     raise Exception(url)
             
             res = make_response(redirect(url))
+            # No-cache headers
+            res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+            res.headers["Pragma"] = "no-cache"
+            res.headers["Expires"] = "0"
+            return res
         except Exception as e:
-            Logger.log("CDN GETARTEFACT ERROR: Failed to generate signed URL for '{}': {}".format(artefactId, e)) # changed to artefactId
+            Logger.log("CDN GETARTEFACT ERROR: Failed to generate signed URL for '{}': {}".format(artefactId, e))
             return JSONRes.ambiguousError()
-    
-    # No-cache headers
-    res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
-    res.headers["Pragma"] = "no-cache"
-    res.headers["Expires"] = "0"
-    return res
 
 @cdnBP.route('/people/<figureID>')
 @checkSession(strict=True)
@@ -189,8 +190,7 @@ def getFaceImage(figureID):
     """
     file = File('{}.jpg'.format(figureID), "people")
     
-    if os.environ.get("DEBUG_MODE", "False") == "True":
-        # In debug mode, serve the file directly from the filesystem
+    if os.environ.get("RAW_FILE_SERVICE", "False") == "True" or request.args.get('raw', 'false').lower() == 'true':
         res = FileManager.prepFile(file=file)
         if isinstance(res, str):
             if res == "ERROR: File does not exist.":
@@ -234,8 +234,7 @@ def getAsset(filename):
     """    
     file = File(filename, "FileStore")
     
-    if os.environ.get("DEBUG_MODE", "False") == "True":
-        # In debug mode, serve the file directly from the filesystem
+    if os.environ.get("RAW_FILE_SERVICE", "False") == "True" or request.args.get('raw', 'false').lower() == 'true':
         res = FileManager.prepFile(file=file)
         if isinstance(res, str):
             if res == "ERROR: File does not exist.":
@@ -269,6 +268,7 @@ def getAsset(filename):
         return JSONRes.ambiguousError()
 
 @cdnBP.route('/catalogue')
+@limiter.limit("80 per minute")
 @checkSession(strict=True)
 @cache(lsInvalidator="catalogue")
 def getAllCategoriesWithArtefacts():
@@ -391,6 +391,7 @@ def getAllCategoriesWithArtefacts():
     })
     
 @cdnBP.route('/collectionMemberIDs/<colID>')
+@limiter.limit("80 per minute")
 @checkSession(strict=True)
 @cache(lsInvalidator="collectionMemberIDs")
 def getCollectionMemberIDs(colID):
@@ -448,6 +449,7 @@ def getCollectionMemberIDs(colID):
         return JSONRes.ambiguousError()
 
 @cdnBP.route('/collection/<colID>')
+@limiter.limit("80 per minute")
 @checkSession(strict=True)
 @cache(lsInvalidator="collectionDetails")
 def getCollectionDetails(colID):
@@ -584,6 +586,7 @@ def getCollectionDetails(colID):
         return JSONRes.ambiguousError()
     
 @cdnBP.route('/retrieveAssociationInfo/<artID>')
+@limiter.limit("80 per minute")
 @checkSession(strict=True)
 @cache(lsInvalidator="associationInfo")
 def getAssociationInfo(artID):
@@ -624,6 +627,7 @@ def getAssociationInfo(artID):
 
 
 @cdnBP.route('/artefactMetadata/<artID>')
+@limiter.limit("100 per minute")
 @checkSession(strict=True)
 @cache(lsInvalidator='artefactMetadata')
 def getArtefactMetedata(artID):
@@ -673,7 +677,7 @@ def getBatchFirstArtefact(batchID: str):
     Serve the first artefact image of a batch.
     """
     try:
-        batch = Batch.load(batchID, withArtefacts=True)
+        batch = Batch.load(batchID)
         if not batch:
             return JSONRes.new(404, "Batch not found.")
     except Exception as e:
@@ -681,30 +685,38 @@ def getBatchFirstArtefact(batchID: str):
         return JSONRes.ambiguousError()
 
     # Get first artefact
-    artefacts = list(batch.artefacts.values())
-    if not artefacts:
+    batchArts = list(batch.artefacts.values())
+    if not batchArts:
         return JSONRes.new(404, "Batch has no artefacts.")
     
-    firstArtefact = artefacts[0].artefact
+    firstBatchArt = batchArts[0]
+    firstArtefact = None
+    try:
+        firstBatchArt.getArtefact()
+        firstArtefact = firstBatchArt.artefact
+    except Exception as e:
+        Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to get first artefact for batch '{}'; error: {}".format(batchID, e))
+        return JSONRes.ambiguousError()
+    
     if not firstArtefact or not firstArtefact.image:
         return JSONRes.new(404, "No image found for the first artefact.")
 
     file = File(firstArtefact.image, "artefacts")
     res = None
-
+    
     # Serve raw file if requested
-    if request.args.get('raw', 'false').lower() == 'true':
+    if os.environ.get("RAW_FILE_SERVICE", "False") == "True" or request.args.get('raw', 'false').lower() == 'true':
         prep = FileManager.prepFile(file=file)
         if isinstance(prep, str):
             if prep == "ERROR: File does not exist.":
                 return JSONRes.new(404, "Artefact image not found.")
             else:
-                Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to prepare file for batch '{}': {}".format(batchID, prep))
+                Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to prepare batch preview image '{}' of artefact '{}' for batch '{}': {}".format(firstArtefact.image, firstArtefact.id, batchID, prep))
                 return JSONRes.ambiguousError()
         try:
-            res = make_response(send_file(file.path()))
+            return send_file(file.path())
         except Exception as e:
-            Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to send file for batch '{}': {}".format(batchID, e))
+            Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to send batch preview image '{}' for artefact '{}' in batch '{}': {}".format(firstArtefact.image, firstArtefact.id, batchID, e))
             return JSONRes.ambiguousError()
     else:
         # Generate signed URL
@@ -712,19 +724,19 @@ def getBatchFirstArtefact(batchID: str):
             url = file.getSignedURL(expiration=datetime.timedelta(minutes=10))
             if url.startswith("ERROR"):
                 if url == "ERROR: File does not exist.":
-                    return JSONRes.new(404, "Artefact image not found.")
+                    return JSONRes.new(404, "First batch artefact preview image not found.")
                 else:
                     raise Exception(url)
+            
             res = make_response(redirect(url))
+            # No-cache headers
+            res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+            res.headers["Pragma"] = "no-cache"
+            res.headers["Expires"] = "0"
+            return res
         except Exception as e:
-            Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to generate signed URL for batch '{}': {}".format(batchID, e))
+            Logger.log("CDN GETBATCHFIRSTARTEFACT ERROR: Failed to generate signed URL for batch preview image '{}' in batch '{}': {}".format(firstArtefact.image, batchID, e))
             return JSONRes.ambiguousError()
-
-    # No-cache headers
-    res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
-    res.headers["Pragma"] = "no-cache"
-    res.headers["Expires"] = "0"
-    return res
 
 @cdnBP.route('/figures', methods=['GET'])
 @limiter.limit("50 per minute")
