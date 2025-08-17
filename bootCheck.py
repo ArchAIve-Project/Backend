@@ -67,7 +67,6 @@ class BootCheck:
         "flask-limiter": "Flask-Limiter",
         "flask-cors": "flask-cors",
         "openai": "openai",
-        "basicsr": "basicsr",
         "passlib": "passlib",
         "apscheduler": "APScheduler",
         "firebase-admin": "firebase-admin",
@@ -75,7 +74,6 @@ class BootCheck:
         "numpy": "numpy",
         "facenet-pytorch": "facenet-pytorch",
         "uuid": "uuid",
-        "transformers": "transformers",
         "nltk": "nltk",
         "Pympler": "Pympler"
     }
