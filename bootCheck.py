@@ -69,7 +69,7 @@ class BootCheck:
         "openai": "openai",
         "passlib": "passlib",
         "apscheduler": "APScheduler",
-        "firebase-admin": "firebase-admin",
+        "firebase-admin": "firebase_admin",
         "pillow": "pillow",
         "numpy": "numpy",
         "facenet-pytorch": "facenet-pytorch",
