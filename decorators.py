@@ -71,12 +71,14 @@ def cache(_func=None, *, ttl=60, lsInvalidator=None):
             if cache_key in wrapper_cache.cache:
                 _, timestamp = wrapper_cache.cache[cache_key]
                 if (lsInvalidator and LiteStore.read(lsInvalidator) == True):
+                    wrapper_cache.cache = {}
                     wrapper_cache.cache[cache_key] = (func(*args, **kwargs), time.time())
                     LiteStore.set(lsInvalidator, False)
                     
                     if os.environ.get("DECORATOR_DEBUG_MODE", "False") == "True":
                         print("CACHE DEBUG {}: Cache expired due to LS Invalidation for key: {}".format(func.__name__, cache_key))
                 elif ttl and (time.time() - timestamp) > ttl:
+                    wrapper_cache.cache = {}
                     wrapper_cache.cache[cache_key] = (func(*args, **kwargs), time.time())
                     
                     if os.environ.get("DECORATOR_DEBUG_MODE", "False") == "True":
