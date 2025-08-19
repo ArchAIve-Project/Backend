@@ -282,7 +282,7 @@ class DI:
                 
                 if dumpRequired:
                     with open(DI.localFile, "w") as f:
-                        json.dump(localData, f, indent=4)
+                        json.dump(localData, f, indent=4 if os.environ.get("DEBUG_MODE", "False") == "True" else None)
                     
                     # print("Dumped data '{}' to '{}'".format(payload, ref))
         except Exception as e:
