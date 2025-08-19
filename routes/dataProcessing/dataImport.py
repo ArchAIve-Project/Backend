@@ -383,6 +383,12 @@ def deleteBatch(user: User):
     except Exception as e:
         Logger.log("DATAIMPORT DELETEBATCH WARNING: Failed to log batch '{}' deletion for user '{}'; error: {}".format(batchID, user.id, e))
     
+    LiteStore.set("catalogue", True)
+    LiteStore.set("collectionMemberIDs", True)
+    LiteStore.set("collectionDetails", True)
+    LiteStore.set("associationInfo", True)
+    LiteStore.set("artefactMetadata", True)
+    
     # Determine overall response
     if hasErrors:
         return JSONRes.new(207, "Batch '{}' deletion partially failed.".format(batchID), updates=deletionResults, batchID=batchID)
