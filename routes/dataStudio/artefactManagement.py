@@ -3,7 +3,7 @@ from utils import JSONRes, ResType
 from services import Logger, LiteStore
 from addons import ArchSmith, ASReport
 from decorators import jsonOnly, enforceSchema, checkAPIKey
-from schemas import Artefact, User, Category, Book, Metadata, MMData, HFData
+from schemas import Artefact, User, Category, Book, Metadata, MMData, HFData, Batch, BatchProcessingJob
 from sessionManagement import checkSession
 from NERPipeline import NERPipeline
 
@@ -346,3 +346,83 @@ def updateAssociation(user: User):
     LiteStore.set("associationInfo", True)
     LiteStore.set("artefactMetadata", True)
     return JSONRes.new(200, "Associations Updated.")
+
+@artBP.route('/delete', methods=['POST'])
+@checkAPIKey
+@jsonOnly
+@enforceSchema(
+    ("artefactID", str)
+)
+@checkSession(strict=True, provideUser=True)
+def deleteArtefact(user: User):
+    artefactID: str = request.json.get("artefactID")
+    
+    artefact = None
+    try:
+        artefact = Artefact.load(artefactID)
+        
+        if not isinstance(artefact, Artefact):
+            return JSONRes.new(404, "Artefact not found.")
+    except Exception as e:
+        Logger.log("ARTEFACTMANAGEMENT DELETEARTEFACT ERROR: Failed to load artefact {}: {}".format(artefactID, e))
+        return JSONRes.ambiguousError()
+    
+    categories: list[Category] = []
+    books: list[Book] = []
+    batches: list[Batch] = []
+    try:
+        categories = Category.load()
+        books = Book.load()
+        batches = Batch.load()
+    except Exception as e:
+        Logger.log("ARTEFACTMANAGEMENT DELETEARTEFACT ERROR: Failed to load categories or books: {}".format(e))
+        return JSONRes.ambiguousError()
+    
+    try:
+        for batch in batches:
+            if artefact.id in batch.artefacts:
+                if batch.job and batch.job.status == BatchProcessingJob.Status.PROCESSING:
+                    return JSONRes.new(400, "Artefact is currently being processed in a batch job; cannot delete.")
+                
+                batch.artefacts[artefact.id].destroy()
+                del batch.artefacts[artefact.id]
+            
+            if len(batch.artefacts) == 0:
+                batch.destroy()
+                user.newLog("Batch Deletion", "Batch with name '{}' and ID '{}' deleted due to no artefacts remaining.".format(batch.name, batch.id))
+        
+        for cat in categories:
+            if cat.has(artefact):
+                cat.remove(artefact)
+                cat.save()
+        
+        for book in books:
+            if artefact.id in book.mmIDs:
+                book.mmIDs.remove(artefact.id)
+                book.save()
+    except Exception as e:
+        Logger.log("ARTEFACTMANAGEMENT DELETEARTEFACT ERROR: Failed to remove associations for artefact {}: {}".format(artefactID, e))
+        return JSONRes.ambiguousError()
+    
+    try:
+        res = artefact.fmDelete()
+        if isinstance(res, str):
+            raise Exception("Failed to delete FM file; response: {}".format(res))
+        
+        artefact.destroy()
+    except Exception as e:
+        Logger.log("ARTEFACTMANAGEMENT DELETEARTEFACT ERROR: Failed to destroy artefact {}: {}".format(artefactID, e))
+        return JSONRes.ambiguousError()
+    
+    try:
+        user.newLog("Artefact Deletion", "Artefact with name '{}' and ID '{}' deleted.".format(artefact.name, artefact.id))
+    except Exception as e:
+        Logger.log("ARTEFACTMANAGEMENT DELETEARTEFACT WARNING: Failed to audit log deletion for artefact {}: {}".format(artefactID, e))
+    
+    LiteStore.set("catalogue", True)
+    LiteStore.set("collectionMemberIDs", True)
+    LiteStore.set("collectionDetails", True)
+    LiteStore.set("associationInfo", True)
+    LiteStore.set("artefactMetadata", True)
+    
+    return JSONRes.new(200, "Artefact deleted successfully.")

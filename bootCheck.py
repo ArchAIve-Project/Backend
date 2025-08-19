@@ -69,7 +69,7 @@ class BootCheck:
         "openai": "openai",
         "passlib": "passlib",
         "apscheduler": "APScheduler",
-        "firebase-admin": "firebase_admin",
+        "firebase-admin": "firebase-admin",
         "pillow": "pillow",
         "numpy": "numpy",
         "facenet-pytorch": "facenet-pytorch",
@@ -92,6 +92,9 @@ class BootCheck:
         deps = BootCheck.getInstallations()
         for req in requiredDependencies:
             if req not in deps:
+                if req == "firebase-admin":
+                    if "firebase_admin" in deps:
+                        continue
                 raise Exception("BOOTCHECK ERROR: Required package '{}' not found.".format(req))
         
         return True
