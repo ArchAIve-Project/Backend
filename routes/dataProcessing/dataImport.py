@@ -145,6 +145,11 @@ def upload(user : User):
     except Exception as e:
         Logger.log("DATAIMPORT UPLOAD ERROR: Failed to create batch for user '{}' with '{}' artefacts; error: {}".format(user.id, len(successfulFiles), e))
         return JSONRes.ambiguousError()
+    
+    try:
+        user.newLog("Batch Upload", "Uploaded {} artefacts to batch '{}'.".format(len(successfulFiles), batch.name))
+    except Exception as e:
+        Logger.log("DATAIMPORT UPLOAD WARNING: Failed to log upload for user '{}'; error: {}".format(user.id, e))
 
     return JSONRes.new(200, "Upload results.", updates=fileSaveUpdates, batchID=batch.id)
 
