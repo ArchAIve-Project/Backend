@@ -63,6 +63,7 @@ def getProfileInfo(user: User, userID: str=None):
     )
 
 @cdnBP.route('/pfp/<userID>')
+@limiter.limit("100 per minute")
 @checkSession(strict=True, provideUser=True)
 def getProfilePicture(user: User, userID: str=None):
     # Carry out authorisation checks
@@ -124,6 +125,7 @@ def getProfilePicture(user: User, userID: str=None):
             return JSONRes.ambiguousError()
 
 @cdnBP.route('/artefacts/<artefactId>')
+@limiter.limit("100 per minute")
 @checkSession(strict=True)
 def getArtefactImage(artefactId):
     """
@@ -183,6 +185,7 @@ def getArtefactImage(artefactId):
             return JSONRes.ambiguousError()
 
 @cdnBP.route('/people/<figureID>')
+@limiter.limit("100 per minute")
 @checkSession(strict=True)
 def getFaceImage(figureID):
     """
