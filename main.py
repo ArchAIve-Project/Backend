@@ -38,7 +38,7 @@ def beforeRequest():
 
 @app.route('/')
 def home():
-    return "<h1>Welcome to the ArchAIve Backend System!</h1><br><p>Current time: {}</p>".format(Universal.utcNowString(localisedTo=Universal.localisationOffset))
+    return "<h1>Welcome to the ArchAIve Backend System.</h1><p>Current version: {}</p><p>Current time: {}</p>".format(Universal.getVersion(), Universal.utcNowString(localisedTo=Universal.localisationOffset))
 
 @app.errorhandler(413)
 def requestEntityTooLarge(e):
