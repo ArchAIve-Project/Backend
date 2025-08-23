@@ -17,13 +17,13 @@ class HFProcessor:
     
     # Image Captioning
     @staticmethod
-    def captioningProcess(imagePath: str, tracer: ASTracer, useLLMCaptionImprovement: bool=True) -> str:
+    def captioningProcess(imagePath: str, tracer: ASTracer, useLLMCaptionImprovement: bool=True, encoder: str='vit') -> str:
         """
         Generates a caption for the given image.
         Returns a string caption or an error message.
         """
         try:
-            caption = ImageCaptioning.generateCaption(imagePath, tracer=tracer, useLLMImprovement=useLLMCaptionImprovement)
+            caption = ImageCaptioning.generateCaption(imagePath, tracer=tracer, useLLMImprovement=useLLMCaptionImprovement, encoder=encoder)
             if caption.startswith("ERROR"):
                 raise Exception(caption)
             
@@ -286,13 +286,13 @@ class HFProcessor:
         return matchedFigureIDs
     
     @staticmethod
-    def process(imagePath: str, tracer: ASTracer, useLLMCaptionImprovement: bool=True) -> dict | str:
+    def process(imagePath: str, tracer: ASTracer, useLLMCaptionImprovement: bool=True, captioningEncoder: str='vit') -> dict | str:
         if not FaceRecognition.initialised:
             HFProcessor.setup()
         
         figureIDs = HFProcessor.identifyFaces(imagePath, tracer)
         
-        caption = HFProcessor.captioningProcess(imagePath, tracer, useLLMCaptionImprovement)
+        caption = HFProcessor.captioningProcess(imagePath, tracer, useLLMCaptionImprovement, captioningEncoder)
         if caption.startswith("ERROR"):
             tracer.addReport(
                 ASReport(

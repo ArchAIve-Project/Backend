@@ -1,4 +1,4 @@
-import time
+import time, os
 from schemas import Batch, BatchProcessingJob, BatchArtefact, Artefact, Metadata
 from services import ThreadManager, Universal
 from fm import FileManager, File
@@ -130,7 +130,7 @@ class DataImportProcessor:
         
         out = None
         try:
-            out = MetadataGenerator.generate(fmFile.path())
+            out = MetadataGenerator.generate(fmFile.path(), captioningEncoder='vit' if os.environ.get("LATEST_CAPTIONING_MODEL", "True") == "True" else 'resnet')
             if isinstance(out, str):
                 raise Exception(out)
         except Exception as e:

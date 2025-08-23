@@ -7,7 +7,7 @@ from HFProcessor import HFProcessor
 
 class MetadataGenerator:
     @staticmethod
-    def generate(relativeImagePath: str, allowLLMForCorrection: bool=True, allowLLMForCaptionImprovement: bool=True) -> dict | str:
+    def generate(relativeImagePath: str, allowLLMForCorrection: bool=True, allowLLMForCaptionImprovement: bool=True, captioningEncoder: str='vit') -> dict | str:
         fullPath = os.path.join(os.getcwd(), relativeImagePath)
         
         if not FileOps.exists(fullPath, type="file"):
@@ -64,7 +64,7 @@ class MetadataGenerator:
                     )
                 )
             else:
-                output = HFProcessor.process(fullPath, tracer, useLLMCaptionImprovement=allowLLMForCaptionImprovement)
+                output = HFProcessor.process(fullPath, tracer, useLLMCaptionImprovement=allowLLMForCaptionImprovement, captioningEncoder=captioningEncoder)
                 
                 tracer.addReport(
                     ASReport(

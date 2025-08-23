@@ -120,7 +120,8 @@ if __name__ == "__main__":
         ccr=CCRPipeline.loadChineseClassifier,
         ccrCharFilter=CCRPipeline.loadBinaryClassifier,
         cnn=ImageClassifier.load_model,
-        imageCaptioner=ImageCaptioning.loadModel
+        imageCaptionerResNet=ImageCaptioning.loadModel(weights='resnet'),
+        imageCaptionerViT=ImageCaptioning.loadModel(weights='vit')
     )
     
     # Load NERP model

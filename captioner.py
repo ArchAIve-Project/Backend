@@ -69,6 +69,32 @@ class ResNetEncoderInfer(nn.Module):
         features = self.batch_norm(features)
         return features
 
+class ViTEncoderInfer(nn.Module):
+    def __init__(self, embed_dim):
+        super().__init__()
+        # Load pretrained ViT
+        weights = models.ViT_B_16_Weights.IMAGENET1K_SWAG_E2E_V1  # High-quality pretrained weights
+        vit = models.vit_b_16(weights=weights)
+
+        # Remove classification head
+        self.vit = vit
+        self.vit.heads = nn.Identity()
+
+        # Optional: fine-tune ViT
+        for param in self.vit.parameters():
+            param.requires_grad = False  # Set to False if you want to freeze the encoder
+
+        # Projection to embedding dim for decoder
+        self.fc = nn.Linear(self.vit.hidden_dim, embed_dim)
+        self.batch_norm = nn.BatchNorm1d(embed_dim, momentum=0.01)
+
+    def forward(self, images):
+        # images: (B, 3, H, W)
+        features = self.vit(images)  # (B, vit.hidden_dim)
+        features = self.fc(features)  # (B, embed_dim)
+        features = self.batch_norm(features)
+        return features
+
 class DecoderLSTMInfer(nn.Module):
     def __init__(self, embed_dim, hidden_dim, vocab_size, num_layers=1):
         super().__init__()
@@ -138,33 +164,49 @@ class ImageCaptioning:
     MIN_WORD_FREQ = 1
     EMBED_DIM = 256
     HIDDEN_DIM = 512
-    transform_inference = transforms.Compose(
+    transform_ResNet_inference = transforms.Compose(
         [
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )
+    transform_ViT_inference = transforms.Compose([
+        transforms.Resize((384, 384)),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.5, 0.5, 0.5],
+            std=[0.5, 0.5, 0.5]
+        )
+    ])
+    
     VOCAB = None
     
     @staticmethod
-    def loadModel(modelPath: str):
-        with open(ImageCaptioning.VOCAB_PATH, "rb") as f:
-            ImageCaptioning.vocab = pickle.load(f)
-        vocab_size = len(ImageCaptioning.vocab)
+    def loadModel(weights='resnet'):
+        def callback_loadModel(modelPath: str):
+            with open(ImageCaptioning.VOCAB_PATH, "rb") as f:
+                ImageCaptioning.VOCAB = pickle.load(f)
+            vocab_size = len(ImageCaptioning.VOCAB)
+            
+            if weights != 'vit':
+                encoder = ResNetEncoderInfer(embed_dim=ImageCaptioning.EMBED_DIM)
+            else:
+                encoder = ViTEncoderInfer(embed_dim=ImageCaptioning.EMBED_DIM)
+            
+            decoder = DecoderLSTMInfer(ImageCaptioning.EMBED_DIM, ImageCaptioning.HIDDEN_DIM, vocab_size)
+            model = ImageCaptioningModelInference(encoder, decoder).to(ImageCaptioning.DEVICE)
 
-        encoder = ResNetEncoderInfer(embed_dim=ImageCaptioning.EMBED_DIM)
-        decoder = DecoderLSTMInfer(ImageCaptioning.EMBED_DIM, ImageCaptioning.HIDDEN_DIM, vocab_size)
-        model = ImageCaptioningModelInference(encoder, decoder).to(ImageCaptioning.DEVICE)
-
-        state_dict = torch.load(modelPath, map_location=ImageCaptioning.DEVICE)
-        model.load_state_dict(state_dict['model_state_dict'])
-        model.eval()
+            state_dict = torch.load(modelPath, map_location=ImageCaptioning.DEVICE)
+            model.load_state_dict(state_dict['model_state_dict'])
+            model.eval()
+            
+            return model
         
-        return model
+        return callback_loadModel
     
     @staticmethod
-    def generateCaption(imagePath: str, tracer: ASTracer, useLLMImprovement: bool=True):
+    def generateCaption(imagePath: str, tracer: ASTracer, useLLMImprovement: bool=True, encoder: str='resnet'):
         """Generate a caption for an image.
 
         Args:
@@ -225,9 +267,18 @@ class ImageCaptioning:
                 )
                 return "ERROR: Failed to generate caption; error: {}".format(e)
         
-        ctx = ModelStore.getModel("imageCaptioner")
+        targetModelName = "imageCaptionerResNet" if encoder != 'vit' else "imageCaptionerViT"
+        resolvedTransform = ImageCaptioning.transform_ResNet_inference if encoder != 'vit' else ImageCaptioning.transform_ViT_inference
+        ctx = ModelStore.getModel(targetModelName)
         if not ctx or not ctx.model:
             raise Exception("Model not found or not loaded in ModelStore.")
+        
+        tracer.addReport(
+            ASReport(
+                "IMAGECAPTIONING GENERATECAPTION",
+                "Using model: {}".format(targetModelName)
+            )
+        )
         
         originalCaption = None
         improvedCaption = None
@@ -236,19 +287,19 @@ class ImageCaptioning:
         try:
             ctxModel: ImageCaptioningModelInference = ctx.model
             pil_img = Image.open(imagePath).convert("RGB")
-            img_tensor = ImageCaptioning.transform_inference(pil_img).unsqueeze(0).to(ImageCaptioning.DEVICE)
+            img_tensor = resolvedTransform(pil_img).unsqueeze(0).to(ImageCaptioning.DEVICE)
 
             startTime = time.time()
             with torch.no_grad():
-                output_indices = ctxModel.generate(img_tensor, len(ImageCaptioning.vocab), max_len=ImageCaptioning.MAX_SEQ_LENGTH)
+                output_indices = ctxModel.generate(img_tensor, len(ImageCaptioning.VOCAB), max_len=ImageCaptioning.MAX_SEQ_LENGTH)
             inferenceTime = time.time() - startTime
         
             result_words = []
-            end_token_idx = ImageCaptioning.vocab.stoi["endofseq"]
+            end_token_idx = ImageCaptioning.VOCAB.stoi["endofseq"]
             for idx in output_indices:
                 if idx == end_token_idx:
                     break
-                word = ImageCaptioning.vocab.itos.get(idx, "unk")
+                word = ImageCaptioning.VOCAB.itos.get(idx, "unk")
                 if word not in ["startofseq", "pad", "endofseq"]:
                     result_words.append(word)
             originalCaption = " ".join(result_words)
@@ -323,14 +374,17 @@ class ImageCaptioning:
         return improvedCaption
 
 # if __name__ == "__main__":
-#     # ModelStore.setup(imageCaptioner=ImageCaptioning.loadModel)
-#     LLMInterface.initDefaultClients()
+#     ModelStore.setup(
+#         imageCaptionerResNet=ImageCaptioning.loadModel(weights='resnet'),
+#         imageCaptionerViT=ImageCaptioning.loadModel(weights='vit')
+#     )
+#     # LLMInterface.initDefaultClients()
     
 #     # print(ModelStore.getModel("imageCaptioner").model)
 
 #     tracer = ArchSmith.newTracer("Test run of ImageCaptioning")
     
-#     print(ImageCaptioning.generateCaption("Companydata/16.8.92_2.jpg", tracer))
+#     print(ImageCaptioning.generateCaption("Companydata/f40b1971-59_19931209_Chamber_of_Commerce__Industry_of_Vietnam.jpg", tracer, useLLMImprovement=False, encoder='vit'))
     
 #     tracer.end()
 #     ArchSmith.persist()

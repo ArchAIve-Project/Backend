@@ -39,6 +39,7 @@ class EnvVariable:
             EnvVariable("MAX_ARTEFACT_SIZE", False, False),
             EnvVariable("MAX_PFP_SIZE", False, False),
             EnvVariable("MAX_CONTENT_SIZE", False, False),
+            EnvVariable("LATEST_CAPTIONING_MODEL", True, False),
             EnvVariable("EMAILING_ENABLED", True, True, [
                 EnvVariable("SENDER_EMAIL", False, True),
                 EnvVariable("SENDER_EMAIL_APP_PASSWORD", False, True)
