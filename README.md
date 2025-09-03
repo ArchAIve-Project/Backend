@@ -13,7 +13,9 @@
 
 <img height="500px" alt="Screenshot of ArchAIve Website Homepage" src="https://github.com/user-attachments/assets/889fedc3-d0ec-4388-b6da-e6212d24d7ac" />
 
-ArchAIve is a novel solution that aims to make artefact digitisation and management easier than ever before. With custom-built and highly specialised AI models and ML pipelines, the platform enables the use of AI to automate interpretation and documentation of historical artefacts through a streamlined experience.
+**ArchAIve is an AI-powered artefact digitisation platform for the preservation and proliferation of heritage and culture.**
+
+With custom-built and highly specialised AI models and ML pipelines, the platform enables the use of AI to automate interpretation and documentation of historical artefacts through a streamlined experience.
 
 Since it was the team's first time developing a solution for a real-world client, we poured in much effort into making a robust, powerful, and efficient system design. The result is truly remarkable - ArchAIve is a project bigger than any we've done before.
 
@@ -26,7 +28,7 @@ For a more general overview of ArchAIve, see [the organisation README](https://g
 
 # Problem & Solution
 
-Thousands of scanned Chinese historical artefacts—such as handwritten meeting minutes in Traditional Chinese calligraphy and photographs from key historical eras—remain difficult to interpret, catalogue, and search. Manual transcription and face recognition are tedious, slow, and error-prone, while no unified system exists to manage these artefacts digitally.
+Thousands of scanned Chinese historical artefacts — such as handwritten **meeting minutes in Traditional Chinese calligraphy** and **photographs from key historical eras** — remain difficult to interpret, catalogue, and search. Manual transcription and face recognition is tedious, slow, and error-prone, while no unified system exists to manage these artefacts digitally.
 
-ArchAIve is an AI-powered artefact digitisation platform that addresses these challenges by combining advanced text recognition, face recognition, and digital cataloguing in a unified system. It streamlines complex AI pipelines into an accessible platform, enabling efficient preservation, understanding, and management of historical artefacts without compromising performance.
+ArchAIve is a platform that addresses these challenges by combining advanced text recognition, face recognition, and digital cataloguing in a unified system. It streamlines complex AI pipelines into an accessible platform, enabling efficient preservation, understanding, and management of historical artefacts without compromising performance.
 
