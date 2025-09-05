@@ -77,6 +77,12 @@ ArchAIve features several ML models (as you saw earlier) that have been trained 
 
 ### Background Workflows
 
+There are 2 main background workflows: AI pipeline processing and catalogue integration.
+
+As for the former, `DataImportProcessor` was designed to robustly and efficiently handle the simultaneous processing of artefacts. The service, which is in itself a background thread, spins up a given number of sub-threads, each running `MetadataGenerator` on a sequence of artefacts. Through the use of memory references, it neatly keeps track of progress. The service also closely listens to DB updates, including batch cancellations, effectively halting processing at any time. Artefacts are distributed across "processing sequences" (threads) as evenly as possible as well. In the event of any errors, the service tries to handle them as gracefully as possible, with log messages being made wherever possible.
+
+As for the latter, `HFCatalogueIntegrator` was designed to effectively categorise event photo artefacts with an LLM. Making use of `LLMInterface`, the service instructs an LLM to associate a given artefact with an existing category, revise an existing catagory's name or description, or propose a new category entirely should it be deemed that there is potential for more artefacts to be added in the future. LLM outputs are interpreted through regex; in the event a regex validation fails, the service also has a retry mechanism (up to a given limit). Processing is done sequentially in a background thread, due to the nature of the workflow.
+
 ### Tracing
 
 Since there's quite a bit of processing going on, it's quite difficult to determine what's happening at each stage. The complexity of code paths also makes it challenging to debug when errors in processing occur.
