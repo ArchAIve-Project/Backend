@@ -52,8 +52,8 @@ We'd like to share some deeper, more technical insights about the great deal of 
 
 To maintain consistency and system integrity, some critical services have been designed to abstract complexity that would otherwise be ubiquitous. These fundamentally core services are integral to operations. Here, we highlight just three of them that we are most proud of.
 
-- **DatabaseInterface**:
-- **LLMInterface**:
+- **DatabaseInterface**: A custom NoSQL database management system (DBMS) for fast, reliable, cloud-backed database operations. Pythonic OOP-like data handling is achieved by a `DIRepresentable` abstract class, which defines how a model class can be converted from raw JSON to a class object and vice versa. Robustly handles sync with Firebase Realtime Database, including dynamic desync handling and local failover.
+- **LLMInterface**: A static interface to simplify LLM calls with the `openai` SDK. This service makes it extremely easy to setup LLM interactions with a structured `InteractionContext` format. The interface supports multiple client initialisations, image attachments, tool calling and much more.
 - **ThreadManager** is an internal static interface that taps on the [`APScheduler`](https://apscheduler.readthedocs.io/en/3.x/) library to facilitate asynchronous job-based processing. `AsyncProcessor` is a wrapper on the library, and simplifies the lifecycle of a single async scheduler. ThreadManager maintains one such `AsyncProcessor` instance as the default. The default processor is used in regular operations to schedule async jobs. However, ThreadManager is powerful enough to support multiple processors, each of which can spin up multiple background threads for multiple processing. Each job is assigned as a function reference; invocation can be immediate, interval-based, datetime-based or custom. As you can tell, it is a powerful piece of infrastructure in making background processing very convenient.
 - **ArchSmith** is a powerful internal tracing framework custom designed to introduce much-needed transparency into the large, complex metadata generation AI pipeline. With the novel concept of loosely-linked tracers that are passed by reference along each artefact processing run, `ArchSmith` accumulates and saves "reports" across threads and simultaneous processes in a robust manner. Additionally, the **ArchSmith Visualiser** script facilitates the intuitive browsing of all `ArchSmith` tracers and reports data (that is normally in tedious JSON) with a minimalistic Flask server. Reports can be viewed in a chronological order, offering ground-breaking transparency into how each step of the AI pipeline contributed to the processing of a given artefact. This provided great aid in debugging efforts.
 
@@ -74,6 +74,8 @@ ArchAIve features several ML models (as you saw earlier) that have been trained 
 `ModelStore`'s main role is to ensure that models defined in a context file truly exist. Boot up is terminated if errors occur in `ModelStore` setting up. `ModelStore.defaultModels` also contains a static list of model context definitions, particularly useful when booting up a blank slate system.
 
 `ModelStore` also makes loaded model states accessible across the system (though this is not actually done). After calling load callbacks, any piece of code can very easily retrieve a model state, which is inside its corresponding in-memory `ModelContext`. This is how all AI pipelines in the system retrieve PyTorch model states and run inference.
+
+### Background Workflows
 
 ### Tracing
 
@@ -101,11 +103,16 @@ There's a significant amount of data involved in ArchAIve. This is especially so
 
 The decorator stored input-output mappings - if it has seen the set of inputs before, it'll return the in-memory cached output. The cache can be invalidated in 2 ways: a Time-To-Live setting (default is 60 seconds) and a `LiteStore` attribute listener. `LiteStore` is a lightweight JSON-based persistent store that is thread-safe. If `LiteStore` validation is applied, an endpoint's `cache` decorator invalidates when the value of a specific attribute in `LiteStore` is `True`.
 
+# Reflections
 
+Designing ArchAIve's Backend system felt like an insurmountable ordeal. Implementing structured safeguards around stochastic AI processes, streamlining AI inference and data consolidation while not compromising efficiency was unbelievably challenging.
 
+After much iteration and design, we are proud of how effective, efficient, consistent, and reliable the final system is. It beautifully blends no-rules ML techniques with nuanced rules-based processing, resulting in a highly-effective API.
 
+---
 
+Check out the fantastic visuals that bring the business logic to life [here](https://github.com/ArchAIve-Project/Frontend)! 🎨
 
+We hope you feel inspired about enabling heritage and culture with technology. Thank you for reading! ✨
 
-
-
+©️ 2025 The ArchAIve Team. All rights reserved.
