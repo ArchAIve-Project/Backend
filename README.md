@@ -26,6 +26,21 @@ The ArchAIve team comprises of:
 
 For a more general overview of ArchAIve, see [the organisation README](https://github.com/ArchAIve-Project/.github/blob/main/profile/README.md).
 
+Skip to a section:
+- [Problem & Solution](#problem-solution)
+- [Backend Introduction](#backend-introduction)
+- [Technical Overview](#technical-overview)
+  - [Foundational & Auxiliary Systems](#foundational-auxiliary-systems)
+  - [AI Infrastructure](#ai-infrastructure)
+    - [Pipeline Chaining](#pipeline-chaining)
+    - [ModelStore](#modelstore)
+    - [Background Workflows](#background-workflows)
+    - [Tracing](#tracing)
+  - [API Routing](#api-routing)
+    - [Identity & Access Management](#identity-access-management)
+    - [Caching](#caching)
+- [Reflections](#reflections)
+
 # Problem & Solution
 
 Thousands of scanned Chinese historical artefacts — such as handwritten **meeting minutes in Traditional Chinese calligraphy** and **photographs from key historical eras** — remain difficult to interpret, catalogue, and search. Manual transcription and face recognition is tedious, slow, and error-prone, while no unified system exists to manage these artefacts digitally.
