@@ -37,7 +37,7 @@ Skip to a section:
     - [Background Workflows](#background-workflows)
     - [Tracing](#tracing)
   - [API Routing](#api-routing)
-    - [Identity & Access Management](#identity--access-management)
+    - [Identity & Access Management](#identity-and-access-management)
     - [Caching](#caching)
 - [Reflections](#reflections)
 
