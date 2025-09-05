@@ -27,17 +27,17 @@ The ArchAIve team comprises of:
 For a more general overview of ArchAIve, see [the organisation README](https://github.com/ArchAIve-Project/.github/blob/main/profile/README.md).
 
 Skip to a section:
-- [Problem & Solution](#problem-solution)
+- [Problem & Solution](#problem--solution)
 - [Backend Introduction](#backend-introduction)
 - [Technical Overview](#technical-overview)
-  - [Foundational & Auxiliary Systems](#foundational-auxiliary-systems)
+  - [Foundational & Auxiliary Systems](#foundational--auxiliary-systems)
   - [AI Infrastructure](#ai-infrastructure)
     - [Pipeline Chaining](#pipeline-chaining)
     - [ModelStore](#modelstore)
     - [Background Workflows](#background-workflows)
     - [Tracing](#tracing)
   - [API Routing](#api-routing)
-    - [Identity & Access Management](#identity-access-management)
+    - [Identity & Access Management](#identity--access-management)
     - [Caching](#caching)
 - [Reflections](#reflections)
 
