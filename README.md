@@ -17,7 +17,7 @@
 
 With custom-built and highly specialised AI models and ML pipelines, the platform enables the use of AI to automate interpretation and documentation of historical artefacts through a streamlined experience.
 
-Since it was the team's first time developing a solution for a real-world client, we poured in much effort into making a robust, powerful, and efficient system design. The result is truly remarkable - ArchAIve is a project bigger than any we've done before.
+Since it was the team's first time developing a solution for a real-world client (SCCCI), we poured in much effort into making a robust, powerful, and efficient system design. The result is truly remarkable - ArchAIve is a project bigger than any we've done before.
 
 The ArchAIve team comprises of:
 - [Prakhar Trivedi](https://github.com/Prakhar896) (Team Lead, Image Captioning, Automatic Categorisation, User Management)
