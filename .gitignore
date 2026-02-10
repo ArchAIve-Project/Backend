@@ -26,3 +26,6 @@ test2.py
 liteStore.json
 test.ipynb
 seedFaces/
+prePTCache.json
+ptSeed/
+ptSeed2/

@@ -527,18 +527,26 @@ class FileManager:
         return True
     
     @staticmethod
-    def deleteAll() -> bool | str:
+    def deleteAll(stores: list=None) -> bool | str:
         """Deletes all files on cloud and removes them from the local filesystem and context.
+        
+        Args:
+            stores (list, optional): List of stores to delete from. If None, deletes from all known stores.
 
         Returns:
             bool | str: True if successful, else error.
         """
+        if stores is None:
+            stores = FileManager.stores
         
         cloudFiles = FireStorage.listFiles(ignoreFolders=True)
         if isinstance(cloudFiles, str):
             return cloudFiles
         
         for file in cloudFiles:
+            if file.name.split("/")[0] not in stores:
+                continue
+            
             try:
                 file.delete()
                 FileManager.removeLocally(File(file.name.split("/")[1], file.name.split("/")[0]))
